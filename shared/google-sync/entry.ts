@@ -18,7 +18,9 @@ export const driveHeaderID = (json: string) => JSON.stringify(encryptedSyncHeade
 import { EncryptedDriveSync } from './source/sync';
 import { FileSystemTransport } from '../../src/store/storage/filesystem/transport';
 import { nativeFileSystemDirectory, savedNativeFileSystemTarget, setFileSystemHost } from './adapters/filesystem';
-import { DriveNotFoundError } from './adapters/transport';
+import { DriveNotFoundError, InvalidSyncFileIdError } from './adapters/transport';
+import { isInvalidSyncFileId } from '../../src/store/storage/google/driveErrors';
+export const driveErrorKind = (json: string) => { const input = JSON.parse(json); return JSON.stringify(isInvalidSyncFileId(input.status, input.body)); };
 import { host } from './adapters/host';
 import { toRecords, fromRecords, canonical, resolveStrict } from './source/records';
 import { resolveContent } from '@utils/contentStore';
@@ -130,7 +132,7 @@ export const settle = (id: number, json: string) => {
   const reply = replies.get(id)!; replies.delete(id);
   const result = JSON.parse(json);
   if (result.ok) reply.resolve(result.value);
-  else reply.reject(result.notFound ? new DriveNotFoundError(result.error) : new Error(result.error));
+  else reply.reject(result.invalidFileId ? new InvalidSyncFileIdError(result.error) : result.notFound ? new DriveNotFoundError(result.error) : new Error(result.error));
 };
 export const result = () => JSON.stringify({ ...outcome, value: undefined, valueJSON: outcome.value === undefined ? null : JSON.stringify(outcome.value) });
 

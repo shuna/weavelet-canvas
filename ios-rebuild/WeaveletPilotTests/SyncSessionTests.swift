@@ -56,6 +56,60 @@ final class SyncSessionTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: fileURL), corruptedBytes)
     }
 
+    func testActualWebDeltaManifestAndPackReadNativePublicationAndRestart() async throws {
+        let data = try OrderedJSON.decode(Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/google-wire-delta.json")))
+        let dataset = try data.required("dataset").string("dataset"), password = try data.required("password").string("password")
+        var outputs: [OrderedJSON] = []
+        for kind in ["multipart", "packed"] {
+            let drive = try FakeSyncDrive(capture: data.required(kind)), store = store(), keys = TestSyncKeys()
+            let session = try SyncSession(drive: drive, store: store, keyStore: keys)
+            try await session.open(dataset: dataset); try await session.unlock(password: password)
+            let received = try await session.receiveAndSave()
+            try sameRecords(SyncRecords.toRecords(received), syncRecordsProjection(data.required(kind + "Records")))
+            let changed = try edit(received, systemMessage: "FAKE native delta boundary " + kind)
+            try await session.push(changed)
+            try await session.close()
+            let resumed = try SyncSession(drive: drive, store: SyncStateStore(fileURL: store.fileURL), keyStore: keys)
+            try await resumed.open(dataset: dataset)
+            let key = try await resumed.restoreKey(); XCTAssertTrue(key)
+            let restored = try await resumed.receiveAndSave()
+            try sameRecords(SyncRecords.toRecords(restored), SyncRecords.toRecords(changed))
+            outputs.append(.object([.init(key: "capture", value: await drive.capture()), .init(key: "expectedRecords", value: try SyncRecords.toRecords(restored))]))
+        }
+        let result = OrderedJSON.object([.init(key: "dataset", value: .string(dataset)), .init(key: "password", value: .string(password)), .init(key: "outputs", value: .array(outputs))])
+        try result.encoded().write(to: URL(fileURLWithPath: "/private/tmp/weavelet-native-wire-delta-output.json"), options: .atomic)
+    }
+    func testAuthenticatedMalformedWireDeltaCannotPublishAcceptedSnapshot() async throws {
+        let data = try OrderedJSON.decode(Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/google-wire-delta.json")))
+        let drive = try FakeSyncDrive(capture: data.required("damaged")), store = store()
+        let dataset = try data.required("dataset").string("dataset")
+        let session = try SyncSession(drive: drive, store: store, keyStore: TestSyncKeys())
+        try await session.open(dataset: dataset); try await session.unlock(password: data.required("password").string("password"))
+        XCTAssertNil(try store.acceptedSnapshot(dataset: dataset))
+        do { _ = try await session.receiveAndSave(); XCTFail("malformed delta accepted") }
+        catch let error as SyncSessionError { XCTAssertEqual(error.message, "Invalid sync content delta.") }
+        XCTAssertNil(try store.acceptedSnapshot(dataset: dataset))
+    }
+
+    func testNativeInvalidIDReachesSharedRecoveryAndPublishesCompleteHistory() async throws {
+        let fixture = try fixture(), drive = FakeSyncDrive(), store = store(), keys = TestSyncKeys()
+        let session = try SyncSession(drive: drive, store: store, keyStore: keys)
+        let folder = try await session.create(password: fixture.required("password").string("password"), partBytes: 128)
+        let dataset = try folder.required("id").string("dataset")
+        await drive.rejectUpload(kind: "part")
+        try await session.push(fixture.required("snapshot"), replace: true)
+        let rejected = await drive.rejectedUploadID()
+        XCTAssertNotNil(rejected)
+        let capture = await drive.capture()
+        XCTAssertFalse(try capture.required("files").array("files").contains { $0["id"] == rejected.map(OrderedJSON.string) })
+        try await session.close()
+        let reader = try SyncSession(drive: drive, store: SyncStateStore(fileURL: store.fileURL), keyStore: keys)
+        try await reader.open(dataset: dataset)
+        let restoredKey = try await reader.restoreKey(); XCTAssertTrue(restoredKey)
+        let restored = try await reader.receiveAndSave()
+        try sameRecords(SyncRecords.toRecords(restored), SyncRecords.toRecords(fixture.required("snapshot")))
+    }
+
     func testWebMultipartInlineHistoryNativePackPublicationAndRestart() async throws {
         let fixture = try fixture(), keys = TestSyncKeys(), drive = try FakeSyncDrive(capture: fixture.required("history")), store = store()
         let dataset = try fixture.required("dataset").string("dataset")
@@ -276,6 +330,8 @@ actor FakeSyncDrive: SyncDrive {
     private var next = 0
     private var files = OrderedJSON.object([])
     private var events: [OrderedJSON] = []
+    private var rejectedKind: String?
+    private var rejectedID: String?
     private var lostKind: String?
     private var attempts: [String] = []
     private var identicalRetry = false
@@ -288,6 +344,8 @@ actor FakeSyncDrive: SyncDrive {
         for file in try capture.required("files").array("files") { files = try files.replacing(file.required("id").string("id"), with: file) }
         events = try capture.required("events").array("events")
     }
+    func rejectUpload(kind: String) { rejectedKind = kind }
+    func rejectedUploadID() -> String? { rejectedID }
     func loseResponse(kind: String) { lostKind = kind }
     func pauseUpload(kind: String) { pauseKind = kind; hasPaused = false }
     func waitUntilPaused() async {
@@ -311,6 +369,7 @@ actor FakeSyncDrive: SyncDrive {
         case "put":
             let id = try args[0].string("id"), kind = try args[2].string("kind")
             attempts.append(id)
+            if rejectedKind == kind { rejectedKind = nil; rejectedID = id; throw DriveTransportError.invalidFileId }
             if pauseKind == kind {
                 pauseKind = nil; hasPaused = true; paused?.resume(); paused = nil
                 try await Task.sleep(nanoseconds: 30_000_000_000)

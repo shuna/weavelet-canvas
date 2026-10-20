@@ -1,5 +1,11 @@
+export { SessionRegistry } from './sessionRegistry';
+import { RecoveryStore, type RecoveryCache } from './recoveryStore';
+import { forgetDiagnostic, getInstanceId, sessionDiagnostics, startDiagnostic, type ProxyStatus } from './diagnostics';
 export interface Env {
   PROXY_AUTH_TOKEN: string;
+  SESSIONS?: DurableObjectNamespace;
+  REGISTRY?: DurableObjectNamespace;
+  recoveryStore?: RecoveryStore;
 }
 interface StreamRequest {
   endpoint: string;
@@ -15,9 +21,14 @@ interface ModerationProxyRequest {
 interface CachedChunk {
   id: number;
   data: string;
+  byteLength?: number;
 }
 interface CachedSession {
   version: 1;
+  expiresAt?: number;
+  updatedAt?: number;
+  reason?: string;
+  lastEventId?: number;
   firstEventId: number;
   chunks: CachedChunk[];
   generationTerminal: 'streaming' | 'complete' | 'interrupted' | 'failed';
@@ -32,7 +43,20 @@ interface ActiveStream {
 interface CancelRequest {
   providerCancel?: { generationId: string; apiKey: string };
 }
+const recoveryCache = (env: Env): RecoveryCache => env.recoveryStore ?? caches.default;
+const registry = (env: Env) => env.REGISTRY?.get(env.REGISTRY.idFromName('sessions'));
+const persistDiagnostic = async (env: Env, diagnostic: ReturnType<typeof startDiagnostic>) => {
+  if (!env.recoveryStore) return;
+  if (env.recoveryStore.wasPurged) throw new Error('Session storage was deleted');
+  const index = registry(env);
+  if (index && env.SESSIONS) {
+    const response = await index.fetch('https://registry.internal/session', { method: 'PUT', body: JSON.stringify({ objectId: env.SESSIONS.idFromName(diagnostic.sessionId).toString() }) });
+    if (!response.ok) throw new Error('Failed to register session storage');
+  }
+  await env.recoveryStore.saveDiagnostic(diagnostic);
+};
 const activeStreams = new Map<string, ActiveStream>();
+const RECOVERY_TTL_MS = 300_000;
 const MAX_RECOVERY_CACHE_BYTES = 1_048_576,
   HEADER_TIMEOUT_MS = 45_000,
   DISCONNECT_READ_LIMIT_MS = 20_000,
@@ -41,6 +65,7 @@ const MAX_RECOVERY_CACHE_BYTES = 1_048_576,
   RECOVERY_POLL_INTERVAL_MS = 2_000,
   RECOVERY_POLL_TIMEOUT_MS = 25_000,
   BODY_IDLE_TIMEOUT_MS = 45_000,
+  CLIENT_WRITE_TIMEOUT_MS = 15_000,
   ERROR_BODY_LIMIT = 8 * 1024;
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -120,11 +145,17 @@ async function cacheKey(
     `${new URL(requestUrl).origin}/_weavelet_stream_cache/v1/${hash}`
   );
 }
+const cacheSummary = (s: CachedSession) => ({
+  firstEventId: s.firstEventId, lastEventId: s.lastEventId ?? s.chunks[s.chunks.length - 1]?.id ?? 0,
+  terminal: s.generationTerminal, expiresAt: s.expiresAt, updatedAt: s.updatedAt,
+  capability: s.cacheCapability, reason: s.reason,
+});
 const cacheResponse = (s: CachedSession) =>
   new Response(JSON.stringify(s), {
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'max-age=300',
+      'X-Weavelet-Status': JSON.stringify(cacheSummary(s)),
     },
   });
 async function boundedBody(response: Response): Promise<string> {
@@ -225,12 +256,12 @@ async function handleStream(
   } catch {
     return jsonResponse({ error: 'Invalid JSON body' }, 400);
   }
-  const { endpoint, headers, body, sessionId } = parsed;
+  const { endpoint, headers, body, sessionId } = parsed ?? {};
   if (
     !endpoint ||
     !sessionId ||
     typeof endpoint !== 'string' ||
-    typeof sessionId !== 'string'
+    typeof sessionId !== 'string' || sessionId.length > 512
   )
     return jsonResponse({ error: 'endpoint and sessionId are required' }, 400);
   if (!isStringRecord(headers))
@@ -238,12 +269,19 @@ async function handleStream(
       { error: 'headers must be an object of string values' },
       400
     );
+  if (await env.recoveryStore?.diagnostic())
+    return jsonResponse({ error: 'sessionId has already been used' }, 409);
+  if (activeStreams.has(sessionId))
+    return jsonResponse({ error: 'sessionId is already active' }, 409);
+  const diagnostic = startDiagnostic(sessionId);
   const abort = new AbortController(),
     headerTimer = setTimeout(() => abort.abort(), HEADER_TIMEOUT_MS),
     apiKey =
       headers.Authorization?.replace(/^Bearer\s+/i, '') ??
       headers.authorization?.replace(/^Bearer\s+/i, '');
   activeStreams.set(sessionId, { abortController: abort, apiKey });
+  try { await persistDiagnostic(env, diagnostic); }
+  catch { clearTimeout(headerTimer); activeStreams.delete(sessionId); return jsonResponse({ error: 'Failed to persist session receipt' }, 503); }
   let upstream: Response;
   try {
     upstream = await fetch(endpoint, {
@@ -255,6 +293,8 @@ async function handleStream(
   } catch (e) {
     clearTimeout(headerTimer);
     activeStreams.delete(sessionId);
+    Object.assign(diagnostic, { phase: 'failed', updatedAt: Date.now(), reason: abort.signal.aborted ? 'header-timeout' : 'upstream-connection-error' });
+    await persistDiagnostic(env, diagnostic);
     return jsonResponse(
       { error: `Failed to reach LLM API: ${(e as Error).message}` },
       502
@@ -262,7 +302,9 @@ async function handleStream(
   }
   clearTimeout(headerTimer);
   if (!upstream.ok) {
+    Object.assign(diagnostic, { phase: 'failed', updatedAt: Date.now(), reason: `upstream-http-${upstream.status}` });
     activeStreams.delete(sessionId);
+    await persistDiagnostic(env, diagnostic);
     const text = await boundedBody(upstream);
     return withCORS(
       new Response(text, {
@@ -272,9 +314,12 @@ async function handleStream(
     );
   }
   if (!upstream.body) {
+    Object.assign(diagnostic, { phase: 'failed', updatedAt: Date.now(), reason: 'upstream-no-body' });
     activeStreams.delete(sessionId);
+    await persistDiagnostic(env, diagnostic);
     return jsonResponse({ error: 'LLM API returned no body' }, 502);
   }
+  diagnostic.phase = 'streaming';
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const process = async () => {
     const reader = upstream.body!.getReader(),
@@ -285,6 +330,8 @@ async function handleStream(
       observation = observations(upstream.headers),
       chunks: CachedChunk[] = [],
       scanner = { pending: '', done: false };
+    let firstChunkIndex = 0;
+    let lastSnapshotEventId = -1;
     let bytes = 0,
       eventId = 0,
       overflow = false,
@@ -292,43 +339,57 @@ async function handleStream(
       terminalDelivered = false,
       snapshotInflight = false,
       readAt = 0;
+    const disconnectedSignal = new AbortController();
     let readTimer: ReturnType<typeof setTimeout> | undefined,
       heartbeat: ReturnType<typeof setInterval> | undefined,
       snapshotTimer: ReturnType<typeof setInterval> | undefined,
       snapshotChain: Promise<void> = Promise.resolve(),
       writeChain: Promise<void> = Promise.resolve();
-    const startDisconnected = () => {
+    const startDisconnected = (reason = 'client-disconnected') => {
       if (disconnected || terminalDelivered) return;
       disconnected = true;
+      disconnectedSignal.abort();
+      Object.assign(diagnostic, { phase: 'disconnected', reason, disconnectReason: reason, disconnectedAt: Date.now(), updatedAt: Date.now() });
       readAt = Date.now();
       void snapshot('streaming', true);
       readTimer = setTimeout(() => abort.abort(), DISCONNECT_READ_LIMIT_MS);
-      snapshotTimer = setInterval(() => {
-        void snapshot('streaming');
-      }, SNAPSHOT_INTERVAL_MS);
     };
     const write = async (text: string): Promise<boolean> => {
       const writeAttempt = writeChain.then(() =>
         writer.write(encoder.encode(text))
       );
       writeChain = writeAttempt.catch(() => undefined);
-      try {
-        await writeAttempt;
-        return true;
-      } catch {
-        startDisconnected();
-        return false;
-      }
+      // Remove each listener after its write; a shared never-resolving Promise
+      // retained one race reaction for every chunk on long desktop streams.
+      return new Promise<boolean>((resolve) => {
+        let timer: ReturnType<typeof setTimeout>;
+        const finish = (ok: boolean) => {
+          clearTimeout(timer);
+          disconnectedSignal.signal.removeEventListener('abort', onDisconnect);
+          if (ok) diagnostic.lastClientWriteAt = Date.now();
+          resolve(ok);
+        };
+        const onDisconnect = () => finish(false);
+        timer = setTimeout(() => { startDisconnected('client-write-timeout'); finish(false); }, CLIENT_WRITE_TIMEOUT_MS);
+        disconnectedSignal.signal.addEventListener('abort', onDisconnect, { once: true });
+        if (disconnected) finish(false);
+        void writeAttempt.then(() => finish(true), () => { startDisconnected(); finish(false); });
+      });
     };
     const snapshot = (
       terminal: CachedSession['generationTerminal'],
       force = false
     ): Promise<void> => {
-      if (!disconnected || (!force && snapshotInflight)) return snapshotChain;
+      if (!force && (snapshotInflight || eventId === lastSnapshotEventId)) return snapshotChain;
+      lastSnapshotEventId = eventId;
       const copy: CachedSession = {
         version: 1,
-        firstEventId: chunks[0]?.id ?? eventId + 1,
-        chunks: chunks.map((c) => ({ ...c })),
+        expiresAt: Date.now() + RECOVERY_TTL_MS,
+        updatedAt: Date.now(),
+        reason: diagnostic.reason,
+        lastEventId: eventId,
+        firstEventId: chunks[firstChunkIndex]?.id ?? eventId + 1,
+        chunks: chunks.slice(firstChunkIndex).map(({ id, data }) => ({ id, data })),
         generationTerminal: terminal,
         cacheCapability: overflow ? 'overflow' : 'available',
         openRouterObservation: { ...observation },
@@ -337,10 +398,14 @@ async function handleStream(
       snapshotInflight = true;
       snapshotChain = snapshotChain.then(async () => {
         try {
-          await caches.default.put(key, cacheResponse(copy));
+          await recoveryCache(env).put(key, cacheResponse(copy));
+          diagnostic.cacheWrites++;
+          diagnostic.lastCacheWriteAt = Date.now();
         } catch (e) {
-          console.error('stream cache write failed:', (e as Error).message);
+          diagnostic.cacheFailures++;
+          console.error('stream cache write failed');
         } finally {
+          await persistDiagnostic(env, diagnostic).catch(() => { console.error('diagnostic write failed'); });
           snapshotInflight = false;
         }
       });
@@ -354,11 +419,19 @@ async function handleStream(
     };
     request.signal.addEventListener('abort', onRequestAbort, { once: true });
     void writer.closed.catch(() => startDisconnected());
+    let heartbeatPending = false;
     heartbeat = setInterval(() => {
-      if (!disconnected && !terminalDelivered) void write(': ping\n\n');
+      if (!disconnected && !terminalDelivered && !heartbeatPending) {
+        heartbeatPending = true;
+        void write(': ping\n\n').finally(() => { heartbeatPending = false; });
+      }
     }, 5_000);
     let terminal: CachedSession['generationTerminal'] = 'interrupted',
       error: string | undefined;
+    // A lost terminal response must remain recoverable even if disconnect is never signalled.
+    void snapshot('streaming', true);
+    snapshotTimer = setInterval(() => { void snapshot('streaming'); }, SNAPSHOT_INTERVAL_MS);
+    if (request.signal.aborted) startDisconnected();
     try {
       while (true) {
         const read = await readWithIdleTimeout(reader);
@@ -367,6 +440,7 @@ async function handleStream(
           try {
             await reader.cancel('Upstream stream idle timeout');
           } catch {}
+          diagnostic.reason = 'upstream-idle-timeout';
           throw new Error('Upstream stream idle timeout');
         }
         const { done, value } = read;
@@ -374,26 +448,47 @@ async function handleStream(
         const data = decoder.decode(value, { stream: true });
         scanDone(scanner, data);
         eventId++;
-        const size = new TextEncoder().encode(data).byteLength;
-        if (!overflow && bytes + size <= MAX_RECOVERY_CACHE_BYTES) {
-          chunks.push({ id: eventId, data });
+        const size = encoder.encode(data).byteLength;
+        // Keep the newest contiguous window so large replies can resume near
+        // their last received event instead of permanently losing their tail.
+        if (size <= MAX_RECOVERY_CACHE_BYTES) {
+          chunks.push({ id: eventId, data, byteLength: size });
           bytes += size;
-        } else overflow = true;
+          while (bytes > MAX_RECOVERY_CACHE_BYTES) {
+            bytes -= chunks[firstChunkIndex++].byteLength!;
+            overflow = true;
+          }
+          if (firstChunkIndex >= 512 && firstChunkIndex >= chunks.length / 2) {
+            chunks.splice(0, firstChunkIndex);
+            firstChunkIndex = 0;
+          }
+        } else {
+          chunks.length = 0;
+          firstChunkIndex = 0;
+          bytes = 0;
+          overflow = true;
+        }
+        Object.assign(diagnostic, { updatedAt: Date.now(), lastChunkAt: Date.now(), lastEventId: eventId,
+          firstEventId: chunks[firstChunkIndex]?.id ?? eventId + 1, receivedBytes: diagnostic.receivedBytes + size, bufferedBytes: bytes });
         if (!disconnected)
           await write(`id: ${eventId}\ndata: ${JSON.stringify(data)}\n\n`);
+        if (scanner.done) break;
       }
       scanDone(scanner, decoder.decode());
       if (/^data:\s*\[DONE\]\s*$/.test(scanner.pending)) scanner.done = true;
       terminal = scanner.done ? 'complete' : 'interrupted';
-      if (!scanner.done) error = 'Upstream stream ended before [DONE]';
+      if (!scanner.done) { error = 'Upstream stream ended before [DONE]'; diagnostic.reason = 'upstream-eof-before-done'; }
     } catch (e) {
       terminal = abort.signal.aborted ? 'interrupted' : 'failed';
       error = errorMessage(e);
+      diagnostic.reason ??= abort.signal.aborted ? 'aborted' : 'upstream-read-error';
     } finally {
+      Object.assign(diagnostic, { phase: terminal, updatedAt: Date.now(), ...(terminal === 'complete' ? { reason: 'complete' } : {}) });
       if (heartbeat) clearInterval(heartbeat);
       if (snapshotTimer) clearInterval(snapshotTimer);
       if (readTimer) clearTimeout(readTimer);
       if (!disconnected) {
+        await timeout(snapshot(terminal, true), 5_000);
         const event =
           terminal === 'complete'
             ? 'done'
@@ -407,6 +502,7 @@ async function handleStream(
         )
           terminalDelivered = true;
       }
+      diagnostic.phase = terminal;
       if (disconnected)
         await timeout(
           snapshot(terminal, true),
@@ -417,14 +513,17 @@ async function handleStream(
       if (snapshotTimer) clearInterval(snapshotTimer);
       if (readTimer) clearTimeout(readTimer);
       request.signal.removeEventListener('abort', onRequestAbort);
+      console.info('proxy-stream-end', { session: key.url.slice(-12), phase: terminal, reason: diagnostic.reason, events: eventId, bytes: diagnostic.receivedBytes, cacheWrites: diagnostic.cacheWrites, cacheFailures: diagnostic.cacheFailures });
       activeStreams.delete(sessionId);
       try {
         await reader.cancel();
       } catch {}
       reader.releaseLock();
-      try {
-        await writer.close();
-      } catch {}
+      if (disconnected) {
+        void writer.abort().catch(() => {});
+      } else {
+        try { await writer.close(); } catch {}
+      }
     }
   };
   ctx.waitUntil(process());
@@ -438,7 +537,8 @@ async function handleRecover(
   sessionId: string,
   lastEventId: number,
   request: Request,
-  ctx: ExecutionContext
+  ctx: ExecutionContext,
+  env: Env
 ): Promise<Response> {
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>(),
     writer = writable.getWriter(),
@@ -448,10 +548,15 @@ async function handleRecover(
     let sent = lastEventId;
     try {
       while (true) {
-        const response = await caches.default.match(
+        const response = await recoveryCache(env).match(
           await cacheKey(sessionId, request.url)
         );
         if (!response) {
+          if (activeStreams.has(sessionId) && Date.now() - started < RECOVERY_POLL_TIMEOUT_MS) {
+            await writer.write(enc.encode(': waiting\n\n'));
+            await sleep(RECOVERY_POLL_INTERVAL_MS);
+            continue;
+          }
           await writer.write(
             enc.encode('event: cache-miss\ndata: {"complete":false}\n\n')
           );
@@ -468,7 +573,17 @@ async function handleRecover(
           );
           break;
         }
-        for (const chunk of cached.chunks)
+        if (cached.expiresAt !== undefined && cached.expiresAt <= Date.now()) {
+          await writer.write(enc.encode('event: cache-miss\ndata: {"complete":false}\n\n'));
+          break;
+        }
+        const latest = cached.lastEventId ?? cached.chunks[cached.chunks.length - 1]?.id ?? cached.firstEventId - 1;
+        const pending = cached.chunks.filter(chunk => chunk.id > sent);
+        if (sent < cached.firstEventId - 1 || (sent > latest && cached.generationTerminal !== 'streaming') || pending.some((chunk, index) => chunk.id !== sent + index + 1)) {
+          await writer.write(enc.encode('event: interrupted\ndata: {"complete":false,"reason":"event-id-mismatch"}\n\n'));
+          break;
+        }
+        for (const chunk of pending)
           if (chunk.id > sent) {
             sent = chunk.id;
             await writer.write(
@@ -477,7 +592,7 @@ async function handleRecover(
               )
             );
           }
-        if (cached.cacheCapability === 'overflow') {
+        if (cached.cacheCapability === 'overflow' && cached.lastEventId === undefined) {
           await writer.write(
             enc.encode(
               `event: interrupted\ndata: ${JSON.stringify({ totalChunks: sent, complete: false, reason: 'capacity', openRouterObservation: cached.openRouterObservation })}\n\n`
@@ -499,6 +614,10 @@ async function handleRecover(
           );
           break;
         }
+        if (env.recoveryStore && !activeStreams.has(sessionId)) {
+          await writer.write(enc.encode(`event: interrupted\ndata: ${JSON.stringify({ totalChunks: sent, complete: false, reason: 'runtime-ended' })}\n\n`));
+          break;
+        }
         if (Date.now() - started >= RECOVERY_POLL_TIMEOUT_MS) {
           await writer.write(
             enc.encode(
@@ -518,6 +637,48 @@ async function handleRecover(
   };
   ctx.waitUntil(run());
   return sseResponse(readable);
+}
+async function handleStatus(request: Request, env: Env): Promise<Response> {
+  const requested = new URL(request.url).searchParams.getAll('sessionId');
+  if (requested.length > 20 || requested.some(id => !id || id.length > 512))
+    return jsonResponse({ error: 'At most 20 session IDs of 1–512 characters are allowed' }, 400);
+  const recent = sessionDiagnostics();
+  // In open-proxy mode, session IDs are capability tokens: never enumerate them.
+  const visible = env.PROXY_AUTH_TOKEN && !env.recoveryStore ? recent.slice(0, Math.max(0, 20 - requested.length)) : [];
+  const ids = [...new Set([...requested, ...visible.map(s => s.sessionId)])];
+  const sessions: ProxyStatus['sessions'] = [];
+  for (const sessionId of ids) {
+    let cache: ProxyStatus['sessions'][number]['cache'] = { state: 'missing' };
+    let diagnostic = recent.find(s => s.sessionId === sessionId) ?? null;
+    if (env.recoveryStore) {
+      try {
+        cache = await env.recoveryStore.summary();
+        diagnostic = activeStreams.has(sessionId) ? diagnostic : await env.recoveryStore.diagnostic() ?? null;
+        if (diagnostic && cache.state === 'acknowledged') diagnostic = { ...diagnostic, phase: 'acknowledged' };
+        if (diagnostic && !activeStreams.has(sessionId) && ['headers', 'streaming', 'disconnected'].includes(diagnostic.phase))
+          diagnostic = { ...diagnostic, phase: 'interrupted', reason: 'runtime-ended' };
+      } catch { cache = { state: 'error' }; }
+      sessions.push({ sessionId, local: diagnostic, cache });
+      continue;
+    }
+    try {
+      const response = await recoveryCache(env).match(await cacheKey(sessionId, request.url));
+      if (response) {
+        try {
+          // Inspect metadata without reading up to 20 MiB of cached SSE on each poll.
+          const header = response.headers.get('X-Weavelet-Status');
+          const saved = header ? JSON.parse(header) as ReturnType<typeof cacheSummary> : cacheSummary(await response.json() as CachedSession);
+          cache = { ...saved, state: saved.expiresAt !== undefined && saved.expiresAt <= Date.now() ? 'expired' : 'available' };
+        } finally { void response.body?.cancel().catch(() => {}); }
+      }
+    } catch { cache = { state: 'error' }; }
+    sessions.push({ sessionId, local: recent.find(s => s.sessionId === sessionId) ?? null, cache });
+  }
+  const response = jsonResponse({ version: '0.6.0', checkedAt: Date.now(),
+    colo: (request.cf as { colo?: string } | undefined)?.colo ?? 'local', instanceId: getInstanceId(), scope: env.recoveryStore ? 'durable-session' : 'current-isolate', recentSessionsVisible: !!env.PROXY_AUTH_TOKEN,
+    limits: { cacheBytes: MAX_RECOVERY_CACHE_BYTES, retentionMs: RECOVERY_TTL_MS, idleTimeoutMs: BODY_IDLE_TIMEOUT_MS }, sessions } satisfies ProxyStatus);
+  response.headers.set('Cache-Control', 'no-store');
+  return response;
 }
 async function handleRequest(request: Request): Promise<Response> {
   let p: Omit<StreamRequest, 'sessionId'>;
@@ -600,7 +761,11 @@ async function handleCancel(
     payload = (await request.json()) as CancelRequest;
   } catch {}
   const local = activeStreams.get(sessionId);
-  if (local) local.abortController.abort();
+  if (local) {
+    const diagnostic = sessionDiagnostics().find(s => s.sessionId === sessionId);
+    if (diagnostic) diagnostic.reason = 'cancel-requested';
+    local.abortController.abort();
+  }
   let providerCancel: 'not-requested' | 'succeeded' | 'failed' =
     'not-requested';
   const p = payload.providerCancel;
@@ -617,7 +782,7 @@ async function handleCancel(
     }
   return jsonResponse({ localAbortRequested: !!local, providerCancel });
 }
-export default {
+const worker = {
   async fetch(
     request: Request,
     env: Env,
@@ -626,10 +791,65 @@ export default {
     if (request.method === 'OPTIONS')
       return withCORS(new Response(null, { status: 204 }));
     const url = new URL(request.url);
+    try { decodeURIComponent(url.pathname); } catch {
+      return jsonResponse({ error: 'Invalid path encoding' }, 400);
+    }
     if (url.pathname === '/health')
-      return jsonResponse({ status: 'ok', version: '0.2.0' });
+      return jsonResponse({ status: 'ok', version: '0.6.0' });
     if (url.pathname.startsWith('/api/') && !authenticated(request, env))
       return jsonResponse({ error: 'Unauthorized' }, 401);
+    if (url.pathname === '/api/storage' && request.method === 'DELETE') {
+      if (!env.PROXY_AUTH_TOKEN) return jsonResponse({ error: 'Bulk deletion requires proxy authentication' }, 403);
+      const index = registry(env);
+      if (!index) return jsonResponse({ error: 'Storage deletion is unavailable' }, 501);
+      return withCORS(await index.fetch(`https://registry.internal/all${url.search}`, { method: 'DELETE' }));
+    }
+    if (env.SESSIONS && !env.recoveryStore) {
+      if (url.pathname === '/api/status' && request.method === 'GET') {
+        const ids = [...new Set(url.searchParams.getAll('sessionId'))];
+        if (ids.length > 20 || ids.some(id => !id || id.length > 512)) return jsonResponse({ error: 'At most 20 session IDs of 1–512 characters are allowed' }, 400);
+        const base = await (await handleStatus(new Request(new URL('/api/status', url)), { ...env, PROXY_AUTH_TOKEN: '' })).json() as ProxyStatus;
+        if (url.searchParams.get('all') === '1') {
+          if (!env.PROXY_AUTH_TOKEN) return jsonResponse({ error: 'Listing all sessions requires proxy authentication' }, 403);
+          const index = registry(env);
+          if (!index) return jsonResponse({ error: 'Global status is unavailable' }, 501);
+          const query = new URLSearchParams();
+          if (url.searchParams.has('cursor')) query.set('cursor', url.searchParams.get('cursor')!);
+          const response = await index.fetch(`https://registry.internal/all?${query}`);
+          if (!response.ok) return withCORS(response);
+          const page = await response.json() as { sessions: ProxyStatus['sessions']; cursor: string | null; failed: number };
+          const result = jsonResponse({ ...base, scope: 'all-sessions', recentSessionsVisible: true, nextCursor: page.cursor, unavailableSessions: page.failed, storageDeletion: { individual: true, all: true }, sessions: page.sessions } satisfies ProxyStatus);
+          result.headers.set('Cache-Control', 'no-store');
+          return result;
+        }
+
+        const results = await Promise.all(ids.map(async id => {
+          try {
+          const target = new URL('/api/status', url); target.searchParams.set('sessionId', id);
+          const response = await env.SESSIONS!.get(env.SESSIONS!.idFromName(id)).fetch(new Request(target, { headers: request.headers }));
+          if (!response.ok) throw new Error('Session status unavailable');
+          return (await response.json() as ProxyStatus).sessions[0];
+          } catch { return { sessionId: id, local: null, cache: { state: 'error' as const } }; }
+        }));
+        const response = jsonResponse({ ...base, scope: 'durable-session', recentSessionsVisible: false, storageDeletion: { individual: true, all: !!env.PROXY_AUTH_TOKEN && !!env.REGISTRY }, sessions: results });
+        response.headers.set('Cache-Control', 'no-store');
+        return response;
+      }
+      let id: string | undefined;
+      if (url.pathname === '/api/stream' && request.method === 'POST') {
+        try { id = (await request.clone().json() as StreamRequest)?.sessionId; } catch { return jsonResponse({ error: 'Invalid JSON body' }, 400); }
+      } else if (/^\/api\/(recover|ack|cancel|storage)\//.test(url.pathname)) id = decodeURIComponent(url.pathname.split('/').slice(3).join('/'));
+      if (id !== undefined) {
+        if (typeof id !== 'string' || !id || id.length > 512) return jsonResponse({ error: 'sessionId must contain 1–512 characters' }, 400);
+        const objectId = env.SESSIONS.idFromName(id);
+        const result = await env.SESSIONS.get(objectId).fetch(request);
+        if (request.method === 'DELETE' && url.pathname.startsWith('/api/storage/') && result.ok) {
+          await registry(env)?.fetch(`https://registry.internal/session?objectId=${objectId}`, { method: 'DELETE' });
+        }
+        return result;
+      }
+    }
+    if (url.pathname === '/api/status' && request.method === 'GET') return handleStatus(request, env);
     if (url.pathname === '/api/stream' && request.method === 'POST')
       return handleStream(request, env, ctx);
     if (url.pathname === '/api/request' && request.method === 'POST')
@@ -638,21 +858,19 @@ export default {
       return handleModeration(request);
     if (url.pathname.startsWith('/api/recover/') && request.method === 'GET') {
       const id = decodeURIComponent(url.pathname.slice('/api/recover/'.length));
-      return id
-        ? handleRecover(
-            id,
-            Number.parseInt(url.searchParams.get('lastEventId') ?? '0', 10) ||
-              0,
-            request,
-            ctx
-          )
-        : jsonResponse({ error: 'sessionId is required' }, 400);
+      const cursor = Number(url.searchParams.get('lastEventId') ?? '0');
+      if (!id || !Number.isSafeInteger(cursor) || cursor < 0)
+        return jsonResponse({ error: 'sessionId and a non-negative integer lastEventId are required' }, 400);
+      return handleRecover(id, cursor, request, ctx, env);
     }
     if (url.pathname.startsWith('/api/ack/') && request.method === 'POST') {
       const id = decodeURIComponent(url.pathname.slice('/api/ack/'.length));
+      const diagnostic = sessionDiagnostics().find(s => s.sessionId === id);
+      if (diagnostic) { diagnostic.phase = 'acknowledged'; diagnostic.updatedAt = Date.now(); }
+      if (diagnostic) await persistDiagnostic(env, diagnostic);
       return id
         ? jsonResponse({
-            deleted: await caches.default.delete(
+            deleted: await recoveryCache(env).delete(
               await cacheKey(id, request.url)
             ),
           })
@@ -667,3 +885,41 @@ export default {
     return jsonResponse({ error: 'Not Found' }, 404);
   },
 };
+
+export default worker;
+
+export class ProxySession {
+  private store: RecoveryStore;
+  constructor(private state: DurableObjectState, private env: Env) {
+    this.store = new RecoveryStore(state.storage);
+  }
+  async fetch(request: Request) {
+    const url = new URL(request.url);
+    if (request.method === 'GET' && url.pathname === '/internal/status') {
+      const diagnostic = await this.store.diagnostic();
+      if (!diagnostic) return jsonResponse({ session: null });
+      const target = new URL('/api/status', request.url);
+      target.searchParams.set('sessionId', diagnostic.sessionId);
+      const response = await handleStatus(new Request(target), { ...this.env, recoveryStore: this.store });
+      const status = await response.json() as ProxyStatus;
+      return jsonResponse({ session: status.sessions[0] });
+    }
+    if (request.method === 'DELETE' && (url.pathname === '/internal/storage' || url.pathname.startsWith('/api/storage/'))) {
+      if (!authenticated(request, this.env) && url.pathname !== '/internal/storage') return jsonResponse({ error: 'Unauthorized' }, 401);
+      const diagnostic = await this.store.diagnostic();
+      const sessionId = diagnostic?.sessionId ?? [...activeStreams.keys()].find(id => this.env.SESSIONS?.idFromName(id).toString() === this.state.id.toString());
+      const purging = this.store.purge();
+      if (sessionId) { activeStreams.get(sessionId)?.abortController.abort(); forgetDiagnostic(sessionId); }
+      await purging;
+      return jsonResponse({ deleted: true });
+    }
+    if (request.method === 'GET' && url.pathname === '/api/status') {
+      const diagnostic = await this.store.diagnostic();
+      if (diagnostic && this.env.REGISTRY) await registry(this.env)!.fetch('https://registry.internal/session', { method: 'PUT', body: JSON.stringify({ objectId: this.state.id.toString() }) });
+    }
+    return worker.fetch(request, { ...this.env, recoveryStore: this.store }, {
+      waitUntil: (promise: Promise<unknown>) => this.state.waitUntil(promise),
+    } as ExecutionContext);
+  }
+  alarm() { return this.store.alarm(); }
+}

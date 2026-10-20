@@ -32,6 +32,7 @@ export const resolveRecoveryTarget = (chats: ChatInterface[] | undefined, conten
   const chat = chats?.[chatIndex];
   const node = chat?.branchTree?.nodes[record.nodeId];
   if (!chat || !node || node.role !== record.checkpointRole) return null;
+  if (node.streamState?.requestId && node.streamState.requestId !== record.requestId) return null;
   const matchesHash = expectedHash !== undefined
     ? node.contentHash === expectedHash
     : node.contentHash === record.checkpointHash || node.contentHash === record.appliedHash;

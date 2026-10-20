@@ -171,6 +171,16 @@ describe('cleanupStale', () => {
   });
 });
 
+describe('pending retention', () => {
+  it('expires unapplied records by creation time, including refreshed and mismatched records', async () => {
+    await saveRequest(makeRecord({ requestId: 'expired', createdAt: Date.now() - 8 * 86400000, updatedAt: Date.now() }));
+    await saveRequest(makeRecord({ requestId: 'recoverable', createdAt: Date.now() - 2 * 86400000 }));
+    await cleanupStale();
+    expect(await getRequest('expired')).toBeUndefined();
+    expect(await getRequest('recoverable')).toBeDefined();
+  });
+});
+
 describe('proxy recovery fields', () => {
   it('persists parser state and cursor in one checkpoint', async () => {
     await saveRequest(makeRecord({ requestId: 'checkpoint-1' }));
@@ -212,8 +222,8 @@ describe('saved checkpoints', () => {
     expect((await getRequest('req-1'))?.checkpointHash).toBe('saved');
   });
   it('retains legacy and mismatched recovery data, including stale unacknowledged records', async () => {
-    await saveRequest(makeRecord({ requestId: 'legacy', createdAt: 1 }));
-    await saveRequest(makeRecord({ requestId: 'mismatch', status: 'completed', chatId: 'chat', nodeId: 'node', checkpointHash: 'old', checkpointRole: 'assistant', appliedHash: 'recovered', createdAt: 1 }));
+    await saveRequest(makeRecord({ requestId: 'legacy', createdAt: Date.now() - 7200000 }));
+    await saveRequest(makeRecord({ requestId: 'mismatch', status: 'completed', chatId: 'chat', nodeId: 'node', checkpointHash: 'old', checkpointRole: 'assistant', appliedHash: 'recovered', createdAt: Date.now() - 7200000 }));
     await cleanupStale(1);
     await updateStreamCheckpoints(snapshot('edited'), []);
     expect(await getRequest('legacy')).toBeDefined();

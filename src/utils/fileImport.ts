@@ -316,6 +316,7 @@ const importExportV3 = (
       t('notifications.invalidFormatForVersion', { ns: 'import' })
     );
   }
+  assertImportDeltaIntegrity(parsedData.contentStore as ContentStoreData);
   const chats = parsedData.chats ?? [];
 
   clearMissingFolderReferences(chats, parsedData.folders);
@@ -681,6 +682,10 @@ export const validatePreviewSource = (source: ImportPreviewSource) => {
 };
 
 /** Converts into a detached plan; no persistence, AI cancellation or live state changes. */
+export function assertImportDeltaIntegrity(store: ContentStoreData): void {
+  if (validateDeltaIntegrity(store).size) throw new Error('Invalid delta content');
+}
+
 export const prepareImportData = (data: unknown, base: StoreState, t: Translator, decisions: ImportDecisions = {}, resolveDecision?: (decision:ImportDecision)=>boolean, allowEmpty=false) => {
   const raw = normalizeLegacyIOSImport(deepClone(data));
   const payload = isRecord(raw) && isRecord(raw.state) ? raw.state : raw;
@@ -696,7 +701,7 @@ export const prepareImportData = (data: unknown, base: StoreState, t: Translator
         throw new Error('Streaming content cannot be previewed');
       }
     }
-    if (validateDeltaIntegrity(contentStore).size) throw new Error('Invalid delta content');
+    assertImportDeltaIntegrity(contentStore);
     recoveredContentCount = prepareMissingPreviewContent(rawChats, contentStore, t);
     const hashedChats = rawChats.map(chat => isRecord(chat) && isRecord(chat.branchTree) && isRecord(chat.branchTree.nodes)
       ? { ...chat, branchTree: { ...chat.branchTree, nodes: Object.fromEntries(

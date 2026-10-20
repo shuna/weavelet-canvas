@@ -956,6 +956,21 @@ describe('Phase 2 generation consistency', () => {
     expect(result).toHaveProperty('d1');
   });
 
+  it('runResidualGC terminates on cyclic bases and preserves chains shared by live references', () => {
+    const store: ContentStoreData = {
+      a: { content: [], refCount: 1, delta: { baseHash: 'b', patches: '' } },
+      b: { content: [], refCount: 1, delta: { baseHash: 'a', patches: '' } },
+      base: textEntry('base'),
+      middle: { content: [], refCount: 1, delta: { baseHash: 'base', patches: '' } },
+      leaf: { content: [], refCount: 1, delta: { baseHash: 'middle', patches: '' } },
+      orphan: textEntry('unreferenced'),
+    };
+    const before = structuredClone(store);
+    const result = runResidualGC(store, [], makeClipboard(['a', 'leaf', 'middle']));
+    expect(Object.keys(result).sort()).toEqual(['a', 'b', 'base', 'leaf', 'middle']);
+    expect(store).toEqual(before);
+  });
+
   it('deleted chat cleanup removes both raw and packed keys', async () => {
     // Save with two chats
     const data1 = {

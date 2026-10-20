@@ -452,6 +452,7 @@ function runResidualGC(
     let cur = hash;
     while (contentStore[cur]?.delta) {
       cur = contentStore[cur].delta!.baseHash;
+      if (needed.has(cur)) break;
       needed.add(cur);
     }
   }

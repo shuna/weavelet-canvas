@@ -78,6 +78,7 @@ describe('branch-domain', () => {
     const ensured = ensureBranchTreeState([createChat()], 0, {});
     const [firstNodeId, secondNodeId] = ensured.chats[0].branchTree!.activePath;
     const secondNode = ensured.chats[0].branchTree!.nodes[secondNodeId];
+    secondNode.streamState = { reason: 'error', requestId: 'original-request', proxy: true, createdAt: Date.now() };
 
     const clipboard: BranchClipboard = {
       sourceChat: ensured.chats[0].id,
@@ -97,6 +98,9 @@ describe('branch-domain', () => {
 
     expect(pasted.chats[0].branchTree?.activePath).toHaveLength(2);
     expect(pasted.contentStore[secondNode.contentHash].refCount).toBe(2);
+    const pastedId = pasted.chats[0].branchTree!.activePath[1];
+    expect(pasted.chats[0].branchTree!.nodes[pastedId].streamState).toBeUndefined();
+    expect(secondNode.streamState?.requestId).toBe('original-request');
   });
 
   it('inserts a message into the active path and rewires parent links', () => {

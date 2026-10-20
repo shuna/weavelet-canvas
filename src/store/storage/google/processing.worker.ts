@@ -6,15 +6,22 @@ import { decodeParts } from './decodeParts';
 import { SyncConflictError } from './records';
 import { prepareHydratedData } from '../../rehydrateData';
 import { prepareSave } from '../prepareSave';
+import { encodeWire, decodeWireParts } from './wire';
+import { encodeCache, decodeCache } from './cacheCodec';
 
-const operations = { encode, decode, toRecords, fromRecords, hashRecords, hashCommits, sameSnapshot, replayHistory, collectHistory, decodeParts, prepareHydratedData, prepareSave };
+const operations = { encode, decode, encodeCache, decodeCache, toRecords, fromRecords,
+  fromRecordsWithContent: ({ records, previous }: { records: Parameters<typeof fromRecords>[0]; previous: Parameters<typeof fromRecords>[1] }) => fromRecords(records, previous),
+  encodeWire: ({ value, full }: { value: Parameters<typeof encodeWire>[0]; full?: Uint8Array }) => encodeWire(value, full),
+  decodeWireParts,
+  hashRecords, hashCommits, sameSnapshot, replayHistory, collectHistory, decodeParts, prepareHydratedData, prepareSave };
 let queue = Promise.resolve();
 self.onmessage = ({ data }: MessageEvent<{ id: number; operation: keyof typeof operations; value: any }>) => {
   queue = queue.then(async () => {
   resetSyncMetrics();
   try {
-    const value = await operations[data.operation](data.value,
-      progress => self.postMessage({ id: data.id, progress }));
+    const value = data.operation === 'replayHistory' || data.operation === 'collectHistory'
+      ? await operations[data.operation](data.value, progress => self.postMessage({ id: data.id, progress }))
+      : await operations[data.operation](data.value);
     self.postMessage({ id: data.id, value, metrics: getSyncMetrics() }, {
       transfer: value instanceof Uint8Array ? [value.buffer] :
         value && typeof value === 'object' && 'bytes' in value && value.bytes instanceof Uint8Array ? [value.bytes.buffer] : [],

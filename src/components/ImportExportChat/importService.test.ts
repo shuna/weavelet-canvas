@@ -544,7 +544,7 @@ describe('importService', () => {
     expect(JSON.stringify(payload)).toBe(input);
   });
 
-  it.each(['missing', 'cyclic'])('keeps the existing %s delta read boundary after collision remapping', async kind => {
+  it.each([['missing', 'append'], ['cyclic', 'append'], ['missing', 'replace'], ['cyclic', 'replace']] as const)('rejects an incoming %s delta during %s without stopping AI tasks or changing either copy', async (kind, mode) => {
     const existing = { body: { content: [{ type: 'text', text: 'existing' }], refCount: 4 } };
     const before = structuredClone(existing);
     testContext.storeState.contentStore = existing;
@@ -555,14 +555,18 @@ describe('importService', () => {
         ...(kind === 'cyclic' ? { loop: { content: [], refCount: 1, delta: { baseHash: 'body', patches: '' } } } : {}),
       },
     };
-    expect((await importChatFromFile(new File([JSON.stringify(payload)], 'broken-delta-v3.json'), t)).success).toBe(true);
+    const input = JSON.stringify(payload), workspace = JSON.stringify(testContext.storeState);
+    expect(await importChatFromFile(new File([input], 'broken-delta-v3.json'), t, mode)).toEqual({ success: false, message: 'Invalid delta content' });
+    expect(testContext.invalidateAiTasks).not.toHaveBeenCalled();
+    expect(testContext.setState).not.toHaveBeenCalled();
+    expect(testContext.saveChatData).not.toHaveBeenCalled();
     const store = testContext.storeState.contentStore as ContentStoreData;
-    expect(store.body).toEqual(before.body);
-    expect(store.body_.delta?.baseHash).toBe(kind === 'missing' ? 'absent' : 'loop');
-    if (kind === 'cyclic') expect(store.loop.delta?.baseHash).toBe('body_');
-    expect(resolveContent(store, 'body_')).toEqual([]);
+    expect(JSON.stringify(testContext.storeState)).toBe(workspace);
+    expect(store).toEqual(before);
+    expect(Object.hasOwn(store, 'body_')).toBe(false);
     expect(resolveContent(store, 'body')).toEqual([{ type: 'text', text: 'existing' }]);
     expect(existing).toEqual(before);
+    expect(JSON.stringify(payload)).toBe(input);
   });
 
   it.each(['constructor', '__proto__'])('handles %s as an own content key without changing the store prototype', async hash => {
@@ -606,6 +610,15 @@ describe('importService', () => {
       },
     };
     const input = JSON.stringify(payload);
+    if (side === 'incoming') {
+      // Immediate import shares preview's strict delta boundary; no alias is published.
+      const workspace = JSON.stringify(testContext.storeState);
+      expect(await importChatFromFile(new File([input], 'missing-suffix-v3.json'), t)).toEqual({ success: false, message: 'Invalid delta content' });
+      expect(JSON.stringify(testContext.storeState)).toBe(workspace);
+      expect(existing).toEqual(before);
+      expect(JSON.stringify(payload)).toBe(input);
+      return;
+    }
     expect((await importChatFromFile(new File([input], 'missing-suffix-v3.json'), t)).success).toBe(true);
     const store = testContext.storeState.contentStore as ContentStoreData;
     expect(testContext.storeState.chats[0].branchTree!.nodes['node-0'].contentHash).toBe('body__');

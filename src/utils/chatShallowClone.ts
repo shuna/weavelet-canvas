@@ -27,8 +27,8 @@ export const cloneChatAtIndex = (
  * Uses structuredClone for correctness without full-array deep clone.
  */
 export const deepCloneSingleChat = (chat: ChatInterface, id: string = uuidv4()): ChatInterface => {
-  return {
-    ...structuredClone(chat),
-    id,
-  };
+  const clone = { ...structuredClone(chat), id };
+  // Recovery records belong to the original chat and node IDs.
+  for (const node of Object.values(clone.branchTree?.nodes ?? {})) delete node.streamState;
+  return clone;
 };

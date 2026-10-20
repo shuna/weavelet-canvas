@@ -35,7 +35,7 @@ import type { EvaluationResultMap } from '@type/evaluation';
 import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
 
 export type {ImportResult,ImportMode,ImportPreviewSource,ImportPreviewSelectionOptions} from '@utils/fileImport';
-import {importParsedData as convertImportData,prepareImportData,buildPreviewAppendPatch as prepareAppendPatch,decodeLegacyRemoteImport,detectImportType,buildFailureResult,buildSuccessResult,previewSourceFromPlan,isRecord,type ImportResult,type ImportMode,type ImportPreviewSource,type ImportPreviewSelectionOptions,type ImportDecisions,type Translator} from '@utils/fileImport';
+import {assertImportDeltaIntegrity,importParsedData as convertImportData,prepareImportData,buildPreviewAppendPatch as prepareAppendPatch,decodeLegacyRemoteImport,detectImportType,buildFailureResult,buildSuccessResult,previewSourceFromPlan,isRecord,type ImportResult,type ImportMode,type ImportPreviewSource,type ImportPreviewSelectionOptions,type ImportDecisions,type Translator} from '@utils/fileImport';
 const cloneState = <T,>(value:T):T=>JSON.parse(JSON.stringify(value));
 const deepClone = <T,>(value:T):T=>typeof structuredClone==='function'?structuredClone(value):cloneState(value);
 const snapshot = (state:StoreState)=>deepClone(createPartializedState({...state,contentStore:deepClone(state.contentStore)}));
@@ -146,6 +146,8 @@ export const importChatFromFile = async (
       return buildFailureResult(t(type.startsWith('Export')
         ? 'notifications.invalidFormatForVersion' : 'notifications.invalidChatsDataFormat', { ns: 'import' }));
     }
+    // Reject corrupt input before cancellation can finalize or stop live AI tasks.
+    if (mode === 'replace' && type === 'ExportV3') assertImportDeltaIntegrity(parsedData.contentStore);
     if (mode === 'replace') invalidateAiTasks();
     const base = useStore.getState();
     const observed = JSON.stringify(snapshot(base));

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   state: { provider: 'google', cloudSync: true, syncTargetConfirmed: true, googleAccessToken: 'token-1',
-    fileId: 'file-1', syncStatus: 'synced', setSyncStatus: vi.fn() },
+    fileId: 'file-1', syncStatus: 'synced', setSyncStatus: vi.fn(), setSyncError: vi.fn() },
   local: { getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn() },
   restoreKey: vi.fn(), push: vi.fn(), unlock: vi.fn(), close: vi.fn(), toast: vi.fn(), streaming: false,
 }));

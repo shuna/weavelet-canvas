@@ -2,7 +2,6 @@ import React, { Suspense, memo, useDeferredValue, useEffect, useRef, useState } 
 import { perfStart, perfEnd } from '@utils/perfTrace';
 import type { StreamingMarkdownPolicy } from '@type/chat';
 import { resolveStreamingMarkdownMode, type StreamingMarkdownEnvironment } from '@utils/markdownStreamingPolicy';
-import { useStreamEndStatusStore, type StreamEndReason } from '@store/stream-end-status-store';
 
 const MarkdownRenderer = React.lazy(() => import('./MarkdownRenderer'));
 
@@ -23,56 +22,12 @@ const MarkdownSkeleton = ({ charCount, newlineCount }: { charCount: number; newl
   );
 };
 
-const streamEndLabels: Record<StreamEndReason, { text: string; className: string }> = {
-  completed: {
-    text: '完了',
-    className: 'text-green-500 dark:text-green-400',
-  },
-  max_tokens: {
-    text: '最大トークン数に到達（応答が途切れている可能性があります）',
-    className: 'text-amber-500 dark:text-amber-400',
-  },
-  interrupted: {
-    text: '中断されました',
-    className: 'text-gray-500 dark:text-gray-400',
-  },
-  error: {
-    text: '送信エラー',
-    className: 'text-red-500 dark:text-red-400',
-  },
-  recovered: {
-    text: 'プロキシから復元済み',
-    className: 'text-blue-500 dark:text-blue-400',
-  },
-  recovered_partial: {
-    text: 'プロキシから部分復元（応答が不完全です）',
-    className: 'text-amber-500 dark:text-amber-400',
-  },
-};
-
-const StreamEndIndicator = memo(function StreamEndIndicator({ nodeId }: { nodeId?: string }) {
-  const status = useStreamEndStatusStore((state) =>
-    nodeId ? state.statuses[nodeId] : undefined
-  );
-
-  if (!status) return null;
-
-  const label = streamEndLabels[status];
-  return (
-    <div className={`mt-1 text-xs ${label.className} transition-opacity duration-500`}>
-      {status === 'completed' ? '✓ ' : status === 'error' ? '✕ ' : status === 'max_tokens' || status === 'recovered_partial' ? '⚠ ' : status === 'interrupted' ? '⏸ ' : '↻ '}
-      {label.text}
-    </div>
-  );
-});
-
 const ContentBody = memo(function ContentBody({
   currentTextContent,
   markdownMode,
   streamingMarkdownPolicy,
   inlineLatex,
   isGeneratingMessage,
-  nodeId,
   environment,
   onCopy,
 }: {
@@ -81,7 +36,6 @@ const ContentBody = memo(function ContentBody({
   streamingMarkdownPolicy: StreamingMarkdownPolicy;
   inlineLatex: boolean;
   isGeneratingMessage: boolean;
-  nodeId?: string;
   environment?: StreamingMarkdownEnvironment;
   onCopy?: (text: string) => Promise<void>;
 }) {
@@ -161,7 +115,6 @@ const ContentBody = memo(function ContentBody({
           {isGeneratingMessage && <span>▌</span>}
         </span>
       )}
-      {!isGeneratingMessage && <StreamEndIndicator nodeId={nodeId} />}
     </div>
   );
 });

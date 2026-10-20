@@ -602,8 +602,8 @@ var WeaveletGoogleSync = (() => {
             return object2[key];
           });
         }
-        function cacheHas(cache, key) {
-          return cache.has(key);
+        function cacheHas(cache2, key) {
+          return cache2.has(key);
         }
         function charsStartIndex(strSymbols, chrSymbols) {
           var index = -1, length = strSymbols.length;
@@ -1418,8 +1418,8 @@ var WeaveletGoogleSync = (() => {
                 if (!(seen ? cacheHas(seen, computed) : includes2(result4, computed, comparator))) {
                   othIndex = othLength;
                   while (--othIndex) {
-                    var cache = caches[othIndex];
-                    if (!(cache ? cacheHas(cache, computed) : includes2(arrays[othIndex], computed, comparator))) {
+                    var cache2 = caches[othIndex];
+                    if (!(cache2 ? cacheHas(cache2, computed) : includes2(arrays[othIndex], computed, comparator))) {
                       continue outer;
                     }
                   }
@@ -3006,12 +3006,12 @@ var WeaveletGoogleSync = (() => {
           }
           function memoizeCapped(func) {
             var result4 = memoize(func, function(key) {
-              if (cache.size === MAX_MEMOIZE_SIZE) {
-                cache.clear();
+              if (cache2.size === MAX_MEMOIZE_SIZE) {
+                cache2.clear();
               }
               return key;
             });
-            var cache = result4.cache;
+            var cache2 = result4.cache;
             return result4;
           }
           function mergeData(data, source) {
@@ -3965,12 +3965,12 @@ var WeaveletGoogleSync = (() => {
               throw new TypeError2(FUNC_ERROR_TEXT);
             }
             var memoized = function() {
-              var args = arguments, key = resolver ? resolver.apply(this, args) : args[0], cache = memoized.cache;
-              if (cache.has(key)) {
-                return cache.get(key);
+              var args = arguments, key = resolver ? resolver.apply(this, args) : args[0], cache2 = memoized.cache;
+              if (cache2.has(key)) {
+                return cache2.get(key);
               }
               var result4 = func.apply(this, args);
-              memoized.cache = cache.set(key, result4) || cache;
+              memoized.cache = cache2.set(key, result4) || cache2;
               return result4;
             };
             memoized.cache = new (memoize.Cache || MapCache)();
@@ -5913,18 +5913,18 @@ var WeaveletGoogleSync = (() => {
         if (longtext.length < 4 || shorttext.length * 2 < longtext.length) {
           return null;
         }
-        var dmp4 = this;
+        var dmp3 = this;
         function diff_halfMatchI_(longtext2, shorttext2, i) {
           var seed = longtext2.substring(i, i + Math.floor(longtext2.length / 4));
           var j = -1;
           var best_common = "";
           var best_longtext_a, best_longtext_b, best_shorttext_a, best_shorttext_b;
           while ((j = shorttext2.indexOf(seed, j + 1)) != -1) {
-            var prefixLength = dmp4.diff_commonPrefix(
+            var prefixLength = dmp3.diff_commonPrefix(
               longtext2.substring(i),
               shorttext2.substring(j)
             );
-            var suffixLength = dmp4.diff_commonSuffix(
+            var suffixLength = dmp3.diff_commonSuffix(
               longtext2.substring(0, i),
               shorttext2.substring(0, j)
             );
@@ -5984,7 +5984,7 @@ var WeaveletGoogleSync = (() => {
         return [text1_a, text1_b, text2_a, text2_b, mid_common];
       };
       diff_match_patch3.prototype.diff_cleanupSemantic = function(diffs) {
-        var changes = false;
+        var changes2 = false;
         var equalities = [];
         var equalitiesLength = 0;
         var lastEquality = null;
@@ -6025,12 +6025,12 @@ var WeaveletGoogleSync = (() => {
               length_insertions2 = 0;
               length_deletions2 = 0;
               lastEquality = null;
-              changes = true;
+              changes2 = true;
             }
           }
           pointer++;
         }
-        if (changes) {
+        if (changes2) {
           this.diff_cleanupMerge(diffs);
         }
         this.diff_cleanupSemanticLossless(diffs);
@@ -6151,7 +6151,7 @@ var WeaveletGoogleSync = (() => {
       diff_match_patch3.blanklineEndRegex_ = /\n\r?\n$/;
       diff_match_patch3.blanklineStartRegex_ = /^\r?\n\r?\n/;
       diff_match_patch3.prototype.diff_cleanupEfficiency = function(diffs) {
-        var changes = false;
+        var changes2 = false;
         var equalities = [];
         var equalitiesLength = 0;
         var lastEquality = null;
@@ -6195,12 +6195,12 @@ var WeaveletGoogleSync = (() => {
                 pointer = equalitiesLength > 0 ? equalities[equalitiesLength - 1] : -1;
                 post_ins = post_del = false;
               }
-              changes = true;
+              changes2 = true;
             }
           }
           pointer++;
         }
-        if (changes) {
+        if (changes2) {
           this.diff_cleanupMerge(diffs);
         }
       };
@@ -6283,7 +6283,7 @@ var WeaveletGoogleSync = (() => {
         if (diffs[diffs.length - 1][1] === "") {
           diffs.pop();
         }
-        var changes = false;
+        var changes2 = false;
         pointer = 1;
         while (pointer < diffs.length - 1) {
           if (diffs[pointer - 1][0] == DIFF_EQUAL && diffs[pointer + 1][0] == DIFF_EQUAL) {
@@ -6291,17 +6291,17 @@ var WeaveletGoogleSync = (() => {
               diffs[pointer][1] = diffs[pointer - 1][1] + diffs[pointer][1].substring(0, diffs[pointer][1].length - diffs[pointer - 1][1].length);
               diffs[pointer + 1][1] = diffs[pointer - 1][1] + diffs[pointer + 1][1];
               diffs.splice(pointer - 1, 1);
-              changes = true;
+              changes2 = true;
             } else if (diffs[pointer][1].substring(0, diffs[pointer + 1][1].length) == diffs[pointer + 1][1]) {
               diffs[pointer - 1][1] += diffs[pointer + 1][1];
               diffs[pointer][1] = diffs[pointer][1].substring(diffs[pointer + 1][1].length) + diffs[pointer + 1][1];
               diffs.splice(pointer + 1, 1);
-              changes = true;
+              changes2 = true;
             }
           }
           pointer++;
         }
-        if (changes) {
+        if (changes2) {
           this.diff_cleanupMerge(diffs);
         }
       };
@@ -6471,14 +6471,14 @@ var WeaveletGoogleSync = (() => {
           throw new Error("Pattern too long for this browser.");
         }
         var s = this.match_alphabet_(pattern);
-        var dmp4 = this;
+        var dmp3 = this;
         function match_bitapScore_(e, x) {
           var accuracy = e / pattern.length;
           var proximity = Math.abs(loc - x);
-          if (!dmp4.Match_Distance) {
+          if (!dmp3.Match_Distance) {
             return proximity ? 1 : accuracy;
           }
-          return accuracy + proximity / dmp4.Match_Distance;
+          return accuracy + proximity / dmp3.Match_Distance;
         }
         var score_threshold = this.Match_Threshold;
         var best_loc = text.indexOf(pattern, loc);
@@ -8468,6 +8468,7 @@ var WeaveletGoogleSync = (() => {
     composerContent: () => composerContent,
     documentOperation: () => documentOperation,
     drain: () => drain,
+    driveErrorKind: () => driveErrorKind,
     driveFolderName: () => driveFolderName,
     driveHeaderID: () => driveHeaderID,
     driveListing: () => driveListing,
@@ -8909,8 +8910,8 @@ var WeaveletGoogleSync = (() => {
       chat.messages = materializeActivePath(chat.branchTree, result3.contentStore, true);
       if (changed)
         capture?.(historyBase, result3);
-      const changes = diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: result3.contentStore })));
-      return JSON.stringify(input.operation === "insertGenerate" ? { status: "updated", nodeID: insertedNodeID, changes } : changes);
+      const changes2 = diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: result3.contentStore })));
+      return JSON.stringify(input.operation === "insertGenerate" ? { status: "updated", nodeID: insertedNodeID, changes: changes2 } : changes2);
     });
   }
 
@@ -8993,12 +8994,12 @@ var WeaveletGoogleSync = (() => {
     for (let i = 0; i < messages.length; i++) {
       const id = editingUUID();
       ids.push(id);
-      const contentHash = addContent(contentStore, messages[i].content);
+      const contentHash2 = addContent(contentStore, messages[i].content);
       nodes[id] = {
         id,
         parentId: i === 0 ? null : ids[i - 1],
         role: messages[i].role,
-        contentHash,
+        contentHash: contentHash2,
         createdAt: Date.now() - (messages.length - i) * 1e3
       };
       setMessageAttributes(tree, id, messages[i]);
@@ -9254,7 +9255,7 @@ var WeaveletGoogleSync = (() => {
     const tree = updatedChats[chatIndex].branchTree;
     const fromNode = tree.nodes[fromNodeId];
     const newId = editingUUID();
-    const contentHash = newContent ? addContentDelta(contentStore, newContent, fromNode.contentHash) : (() => {
+    const contentHash2 = newContent ? addContentDelta(contentStore, newContent, fromNode.contentHash) : (() => {
       retainContent(contentStore, fromNode.contentHash);
       return fromNode.contentHash;
     })();
@@ -9262,7 +9263,7 @@ var WeaveletGoogleSync = (() => {
       id: newId,
       parentId: fromNode.parentId,
       role: fromNode.role,
-      contentHash,
+      contentHash: contentHash2,
       createdAt: Date.now()
     };
     copyMessageAttributes(tree, fromNodeId, tree, newId);
@@ -9622,6 +9623,7 @@ var WeaveletGoogleSync = (() => {
       retainContent(contentStore, srcNode.contentHash);
       tree.nodes[newId] = {
         ...srcNode,
+        streamState: void 0,
         id: newId,
         parentId: prevId,
         createdAt: Date.now()
@@ -9862,6 +9864,7 @@ var WeaveletGoogleSync = (() => {
   var import_diff_match_patch = __toESM(require_diff_match_patch());
   var dmp = new import_diff_match_patch.diff_match_patch();
   var MAX_CHAIN_DEPTH = 5;
+  var MAX_RESOLVE_DEPTH = 100;
   var pendingGCHashes = /* @__PURE__ */ new Set();
   var DELTA_SIZE_THRESHOLD = 0.7;
   function isDeltaEligible(content) {
@@ -9910,7 +9913,7 @@ var WeaveletGoogleSync = (() => {
     if (!entry)
       return false;
     if (entry.delta) {
-      const resolved = resolveContent(store, hash);
+      const resolved = resolveContentStrict(store, hash);
       return JSON.stringify(resolved) === serialized;
     }
     return JSON.stringify(entry.content) === serialized;
@@ -9921,7 +9924,7 @@ var WeaveletGoogleSync = (() => {
       return addContent(store, content);
     if (!isDeltaEligible(content))
       return addContent(store, content);
-    const baseContent = resolveContent(store, baseHash);
+    const baseContent = resolveContentStrict(store, baseHash);
     if (!isDeltaEligible(baseContent))
       return addContent(store, content);
     if (getChainDepth(store, baseHash) >= MAX_CHAIN_DEPTH - 1) {
@@ -9962,12 +9965,10 @@ var WeaveletGoogleSync = (() => {
     }
   }
   function promoteDependents(store, baseHash) {
-    for (const [hash, entry] of Object.entries(store)) {
-      if (entry.delta?.baseHash === baseHash) {
-        const resolved = resolveContent(store, hash);
-        entry.content = resolved;
-        delete entry.delta;
-      }
+    const resolved = Object.entries(store).filter(([, entry]) => entry.delta?.baseHash === baseHash).map(([hash, entry]) => ({ entry, content: resolveContentStrict(store, hash) }));
+    for (const { entry, content } of resolved) {
+      entry.content = content;
+      delete entry.delta;
     }
   }
   function releaseContent(store, hash) {
@@ -9975,67 +9976,74 @@ var WeaveletGoogleSync = (() => {
       return;
     if (!store[hash])
       return;
-    store[hash].refCount--;
-    if (store[hash].refCount <= 0) {
+    if (store[hash].refCount <= 1) {
       promoteDependents(store, hash);
       pendingGCHashes.add(hash);
     }
+    store[hash].refCount--;
   }
   function resolveContent(store, hash) {
     if (isStreamingContentHash(hash)) {
       const target = getStreamingTargetFromHash(hash);
       return target ? peekBufferedContent(target.chatId, target.nodeId) ?? [] : [];
     }
-    const entry = store[hash];
-    if (!entry)
+    try {
+      return resolveContentStrict(store, hash);
+    } catch {
       return [];
-    if (!entry.delta) {
-      return entry.content;
     }
-    const text = resolveDeltaContentJSON(store, hash);
-    return text === null ? [] : JSON.parse(text);
   }
   function resolveDeltaContentJSON(store, hash) {
-    const visited = /* @__PURE__ */ new Set();
-    let current = hash;
-    const deltaChain = [];
-    while (store[current]?.delta) {
-      if (visited.has(current)) {
-        console.error(`[ContentStore] Circular delta chain detected at ${current}`);
-        return null;
-      }
-      visited.add(current);
-      deltaChain.push({
-        hash: current,
-        patches: store[current].delta.patches
-      });
-      current = store[current].delta.baseHash;
-    }
-    const baseEntry = store[current];
-    if (!baseEntry) {
-      console.error(`[ContentStore] Missing delta base: ${current}`);
-      return null;
-    }
-    let text = contentToText(baseEntry.content);
-    for (const { patches: patchText } of deltaChain.reverse()) {
-      const patches = dmp.patch_fromText(patchText);
-      const [result3, applied] = dmp.patch_apply(patches, text);
-      if (applied.some((ok) => !ok)) {
-        console.error(`[ContentStore] Patch apply failed for delta chain`);
-        return null;
-      }
-      text = result3;
-    }
     try {
-      JSON.parse(text);
-      return text;
+      const resolved = resolveStoredContent(store, hash);
+      return resolved.text ?? contentToText(resolved.content);
     } catch {
-      console.error(`[ContentStore] Failed to parse resolved delta content`);
       return null;
+    }
+  }
+  function resolveContentStrict(store, hash) {
+    return resolveStoredContent(store, hash).content;
+  }
+  function resolveStoredContent(store, hash) {
+    const visited = /* @__PURE__ */ new Set();
+    const chain = [];
+    let current = hash;
+    while (true) {
+      const entry = store[current];
+      if (!entry || visited.has(current) || chain.length >= MAX_RESOLVE_DEPTH) {
+        throw new Error("Missing, cyclic or excessively deep message content.");
+      }
+      if (!entry.delta)
+        break;
+      visited.add(current);
+      chain.push(entry.delta.patches);
+      current = entry.delta.baseHash;
+    }
+    const base = store[current].content;
+    if (!Array.isArray(base))
+      throw new Error("Invalid message content.");
+    if (!chain.length)
+      return { content: base };
+    try {
+      let content = base;
+      let text = contentToText(base);
+      for (const patchText of chain.reverse()) {
+        const [result3, applied] = dmp.patch_apply(dmp.patch_fromText(patchText), text);
+        if (applied.some((ok) => !ok))
+          throw new Error();
+        const resolved = JSON.parse(result3);
+        if (!Array.isArray(resolved))
+          throw new Error();
+        content = resolved;
+        text = result3;
+      }
+      return { content, text };
+    } catch {
+      throw new Error("Invalid message delta.");
     }
   }
   function isContentEqual(store, hash, content) {
-    const resolved = resolveContent(store, hash);
+    const resolved = isStreamingContentHash(hash) ? resolveContent(store, hash) : resolveContentStrict(store, hash);
     return JSON.stringify(resolved) === JSON.stringify(content);
   }
   function resolveContentText(store, hash) {
@@ -10045,15 +10053,8 @@ var WeaveletGoogleSync = (() => {
   function buildExportContentStore(store) {
     const exported = {};
     for (const [hash, entry] of Object.entries(store)) {
-      const { delta, ...fullEntry } = entry;
-      if (delta) {
-        exported[hash] = {
-          ...fullEntry,
-          content: resolveContent(store, hash)
-        };
-      } else {
-        exported[hash] = fullEntry;
-      }
+      const { delta: _delta, ...fullEntry } = entry;
+      exported[hash] = { ...fullEntry, content: resolveContentStrict(store, hash) };
     }
     return exported;
   }
@@ -10062,59 +10063,10 @@ var WeaveletGoogleSync = (() => {
     for (const [hash, entry] of Object.entries(store)) {
       if (!entry.delta)
         continue;
-      if (!store[entry.delta.baseHash]) {
-        console.warn(
-          `[ContentStore] Broken delta: ${hash} references missing base ${entry.delta.baseHash}`
-        );
-        corrupt.add(hash);
-        continue;
-      }
-      const visited = /* @__PURE__ */ new Set();
-      let cur = hash;
-      let isCircular = false;
-      while (store[cur]?.delta) {
-        if (visited.has(cur)) {
-          isCircular = true;
-          break;
-        }
-        visited.add(cur);
-        cur = store[cur].delta.baseHash;
-      }
-      if (isCircular) {
-        console.warn(`[ContentStore] Circular delta chain detected at ${hash}`);
-        corrupt.add(hash);
-        continue;
-      }
       try {
-        const patches = dmp.patch_fromText(entry.delta.patches);
-        const baseContent = store[cur]?.content;
-        if (baseContent) {
-          let text = contentToText(baseContent);
-          const chain = [];
-          let walk = hash;
-          while (store[walk]?.delta) {
-            chain.push(walk);
-            walk = store[walk].delta.baseHash;
-          }
-          let patchFailed = false;
-          for (const chainHash of chain.reverse()) {
-            const p = dmp.patch_fromText(store[chainHash].delta.patches);
-            const [result3, applied] = dmp.patch_apply(p, text);
-            if (applied.some((ok) => !ok)) {
-              patchFailed = true;
-              break;
-            }
-            text = result3;
-          }
-          if (patchFailed) {
-            console.warn(`[ContentStore] Patch apply failed for delta ${hash}`);
-            corrupt.add(hash);
-            continue;
-          }
-          JSON.parse(text);
-        }
-      } catch (e) {
-        console.warn(`[ContentStore] Delta validation error for ${hash}:`, e);
+        resolveContentStrict(store, hash);
+      } catch {
+        console.warn(`[ContentStore] Invalid delta chain at ${hash}`);
         corrupt.add(hash);
       }
     }
@@ -10126,15 +10078,119 @@ var WeaveletGoogleSync = (() => {
     return corrupt;
   }
 
+  // src/store/storage/google/recordCache.ts
+  var RECORD_CACHE_BYTES = 64 * 1024 * 1024;
+  var cache = /* @__PURE__ */ new Map();
+  var bytes2 = 0;
+  var generation = 0;
+  var contentHits = 0;
+  var contentMisses = 0;
+  var digestHits = 0;
+  var digestMisses = 0;
+  function lookup(key) {
+    const entry = cache.get(key);
+    if (entry) {
+      cache.delete(key);
+      cache.set(key, entry);
+    }
+    return entry?.value;
+  }
+  function remember(key, value) {
+    const strings = typeof value === "string" ? value.length : value.id.length + value.value.length + Object.entries(value.assets).reduce((total, [id, body]) => total + id.length + body.length, 0);
+    const size = 2 * (key.length + strings);
+    if (size > RECORD_CACHE_BYTES)
+      return;
+    const previous = cache.get(key);
+    if (previous) {
+      bytes2 -= previous.bytes;
+      cache.delete(key);
+    }
+    while (bytes2 + size > RECORD_CACHE_BYTES) {
+      const oldest = cache.keys().next().value;
+      bytes2 -= cache.get(oldest).bytes;
+      cache.delete(oldest);
+    }
+    cache.set(key, { value, bytes: size });
+    bytes2 += size;
+  }
+  function createContentProjector(source, { cache: enabled = true } = {}) {
+    const signatures = /* @__PURE__ */ new Map();
+    const signature = (hash) => {
+      const path = [];
+      const visited = /* @__PURE__ */ new Set();
+      let current = hash;
+      while (!signatures.has(current)) {
+        const entry = source[current];
+        if (!entry || visited.has(current) || path.length >= 100) {
+          throw new Error("Missing, cyclic or excessively deep message content.");
+        }
+        visited.add(current);
+        if (!entry.delta) {
+          if (!Array.isArray(entry.content))
+            throw new Error("Invalid message content.");
+          signatures.set(current, { value: JSON.stringify(["full", entry.content]), depth: 0 });
+          break;
+        }
+        path.push({ hash: current, segment: JSON.stringify(["delta", entry.delta.baseHash, entry.delta.patches]) });
+        current = entry.delta.baseHash;
+      }
+      let base = signatures.get(current);
+      if (path.length + base.depth >= 100)
+        throw new Error("Missing, cyclic or excessively deep message content.");
+      for (const item of path.reverse()) {
+        base = { value: `${item.segment}
+${base.value}`, depth: base.depth + 1 };
+        signatures.set(item.hash, base);
+      }
+      return base.value;
+    };
+    return {
+      async project(hash, build) {
+        const key = `content
+${signature(hash)}`;
+        if (enabled) {
+          const hit = lookup(key);
+          if (hit) {
+            contentHits++;
+            return hit;
+          }
+        }
+        contentMisses++;
+        const startedGeneration = generation;
+        const built = await build(structuredClone(resolveContentStrict(source, hash)));
+        const result3 = Object.freeze({ id: built.id, value: built.value, assets: Object.freeze({ ...built.assets }) });
+        if (enabled && startedGeneration === generation)
+          remember(key, result3);
+        return result3;
+      }
+    };
+  }
+  async function cachedRecordDigest(value, { cache: enabled = true } = {}) {
+    enabled = enabled && value.length <= 2048;
+    const key = `digest
+${value}`;
+    if (enabled) {
+      const hit = lookup(key);
+      if (hit) {
+        digestHits++;
+        return hit;
+      }
+    }
+    digestMisses++;
+    const startedGeneration = generation;
+    const result3 = await digest(value);
+    if (enabled && startedGeneration === generation)
+      remember(key, result3);
+    return result3;
+  }
+
   // shared/google-sync/source/records.ts
-  var import_diff_match_patch2 = __toESM(require_diff_match_patch(), 1);
   var SyncConflictError = class extends Error {
     constructor(keys) {
       super("Concurrent edits conflict. Both copies are preserved.");
       this.keys = keys;
     }
   };
-  var dmp2 = new import_diff_match_patch2.default();
   var forbidden = /* @__PURE__ */ new Set(["__proto__", "prototype", "constructor"]);
   var readNodeOrder = (value) => {
     if (!Array.isArray(value) || value.some((id) => typeof id !== "string") || new Set(value).size !== value.length) {
@@ -10182,30 +10238,17 @@ var WeaveletGoogleSync = (() => {
     }
     return JSON.stringify(value);
   }
-  function resolveStrict(store, hash, visited = /* @__PURE__ */ new Set()) {
-    const entry = store[hash];
-    if (!entry || visited.has(hash) || visited.size >= 100)
-      throw new Error("Missing or cyclic message content; sync stopped.");
-    if (!entry.delta)
-      return entry.content;
-    visited.add(hash);
-    const base = resolveStrict(store, entry.delta.baseHash, visited);
-    const [text, applied] = dmp2.patch_apply(dmp2.patch_fromText(entry.delta.patches), JSON.stringify(base));
-    if (applied.some((ok) => !ok))
-      throw new Error("Invalid message delta; sync stopped.");
-    return JSON.parse(text);
-  }
+  var resolveStrict = resolveContentStrict;
   async function toRecords(snapshot) {
     const started = performance.now();
-    const serialized = JSON.stringify(snapshot);
-    const copy2 = JSON.parse(serialized);
-    const state = withoutBrowserLocalSettings(copy2.state);
+    const { chats: sourceChats, contentStore: source = {}, ...shared2 } = withoutBrowserLocalSettings(snapshot.state);
+    const state = JSON.parse(JSON.stringify(shared2));
     if (state.folders !== void 0 && !validateFolderHierarchy(state.folders))
       throw new Error("Invalid folder hierarchy; sync stopped.");
     const records = /* @__PURE__ */ Object.create(null);
-    const source = state.contentStore ?? {};
     const contentIds = /* @__PURE__ */ new Map();
     const content = /* @__PURE__ */ Object.create(null);
+    const projector = createContentProjector(source);
     const assets = /* @__PURE__ */ Object.create(null);
     const entryIds = /* @__PURE__ */ new Map();
     const entries = /* @__PURE__ */ Object.create(null);
@@ -10216,7 +10259,7 @@ var WeaveletGoogleSync = (() => {
       for (const part of encoded) {
         if (part.type === "image_url" && typeof part.image_url?.url === "string") {
           const url = part.image_url.url;
-          const id = await digest(url);
+          const id = await cachedRecordDigest(url);
           assets[id] = url;
           part.image_url.url = { asset: id };
         }
@@ -10224,14 +10267,26 @@ var WeaveletGoogleSync = (() => {
       return encoded;
     };
     for (const [hash, entry] of Object.entries(source)) {
-      const parts = await externalize(resolveStrict(source, hash));
-      const contentId = await digest(canonical(parts));
-      content[contentId] = parts;
+      const projected = await projector.project(hash, async (parts) => {
+        const found = {};
+        const encoded = JSON.parse(JSON.stringify(parts));
+        for (const part of encoded)
+          if (part.type === "image_url" && typeof part.image_url?.url === "string") {
+            const url = part.image_url.url, id = await cachedRecordDigest(url);
+            found[id] = url;
+            part.image_url.url = { asset: id };
+          }
+        const value = canonical(encoded);
+        return { id: await cachedRecordDigest(value), value, assets: found };
+      });
+      const contentId = projected.id;
+      content[contentId] = projected.value;
       contentIds.set(hash, contentId);
+      Object.assign(assets, projected.assets);
       const { content: _content, refCount: _refCount, delta: _delta, ...metadata } = entry;
       checkSafeMetadata(metadata);
-      const record2 = { contentId, metadata };
-      const entryId = await digest(canonical(record2));
+      const record2 = { contentId, metadata: JSON.parse(JSON.stringify(metadata)) };
+      const entryId = await cachedRecordDigest(canonical(record2));
       entries[entryId] = record2;
       entryIds.set(hash, entryId);
       retained[entryId] = true;
@@ -10246,18 +10301,20 @@ var WeaveletGoogleSync = (() => {
     const chats = /* @__PURE__ */ Object.create(null);
     const order = [];
     const nodeOrder = { chats: /* @__PURE__ */ Object.create(null) };
-    for (const chat of state.chats ?? []) {
+    for (const original of sourceChats ?? []) {
+      const projected = { ...original };
+      captureProjectedMessageAttributes(projected, source);
+      const chat = JSON.parse(JSON.stringify(projected.branchTree ? { ...projected, messages: void 0 } : projected));
       if (!chat.id || chats[chat.id])
         throw new Error("Missing or duplicate chat ID; sync stopped.");
       order.push(chat.id);
       if (chat.branchTree) {
-        captureProjectedMessageAttributes(chat, source);
         readMessageAttributes(chat.branchTree);
         nodeOrder.chats[chat.id] = Object.keys(chat.branchTree.nodes);
         entryRefs.chats[chat.id] = /* @__PURE__ */ Object.create(null);
         for (const node of Object.values(chat.branchTree.nodes)) {
           const statsKey = `${chat.id}:::${node.id}`;
-          const generationId = node.openRouterObservation?.generationId ?? copy2.state.pendingVerifications?.[statsKey]?.generationId ?? copy2.state.verifiedStats?.[statsKey]?.generationId;
+          const generationId = node.openRouterObservation?.generationId ?? snapshot.state.pendingVerifications?.[statsKey]?.generationId ?? snapshot.state.verifiedStats?.[statsKey]?.generationId;
           if (generationId)
             node.openRouterObservation = { ...node.openRouterObservation, generationId };
           translate(node, entryRefs.chats[chat.id]);
@@ -10294,17 +10351,18 @@ var WeaveletGoogleSync = (() => {
       } else
         records[JSON.stringify(path)] = canonical(value);
     };
-    flatten({ version: copy2.version ?? 0, state, chats, order, nodeOrder, contentEntryFormat: 1, contentEntryRefs: entryRefs, retainedContentEntries: retained }, []);
+    flatten({ version: snapshot.version ?? 0, state, chats, order, nodeOrder, contentEntryFormat: 1, contentEntryRefs: entryRefs, retainedContentEntries: retained }, []);
     for (const [id, entry] of Object.entries(entries))
       records[JSON.stringify(["contentEntries", id])] = canonical(entry);
-    for (const [id, parts] of Object.entries(content))
-      records[JSON.stringify(["content", id])] = canonical(parts);
+    for (const [id, value] of Object.entries(content))
+      records[JSON.stringify(["content", id])] = value;
     for (const [id, url] of Object.entries(assets))
       records[JSON.stringify(["assets", id])] = JSON.stringify(url);
-    recordMetric("records", started, new TextEncoder().encode(serialized).length, Object.values(records).reduce((n, value) => n + new TextEncoder().encode(value).length, 0));
+    const bytes4 = Object.values(records).reduce((n, value) => n + new TextEncoder().encode(value).length, 0);
+    recordMetric("records", started, bytes4, bytes4);
     return records;
   }
-  async function fromRecords(records) {
+  async function fromRecords(records, previous = {}) {
     const root = /* @__PURE__ */ Object.create(null);
     let skippedLocalState = false;
     const generationIds = /* @__PURE__ */ new Map();
@@ -10352,6 +10410,7 @@ var WeaveletGoogleSync = (() => {
     }
     if (root.state.folders !== void 0 && !validateFolderHierarchy(root.state.folders))
       throw new Error("Invalid folder hierarchy; sync stopped.");
+    const restoredImages = /* @__PURE__ */ new Map();
     const restoreAssets = async (parts) => {
       if (!Array.isArray(parts))
         throw new Error("Invalid message content.");
@@ -10359,9 +10418,13 @@ var WeaveletGoogleSync = (() => {
       for (const part of restored) {
         if (part.type === "image_url" && typeof part.image_url?.url === "object") {
           const id = part.image_url.url?.asset;
-          const url = root.assets?.[id];
-          if (typeof url !== "string" || await digest(url) !== id)
-            throw new Error("Missing or damaged image.");
+          let url = restoredImages.get(id);
+          if (url === void 0) {
+            url = root.assets?.[id];
+            if (typeof url !== "string" || await digest(url) !== id)
+              throw new Error("Missing or damaged image.");
+            restoredImages.set(id, url);
+          }
           part.image_url.url = url;
         }
       }
@@ -10390,20 +10453,117 @@ var WeaveletGoogleSync = (() => {
       if (refs.clipboard !== void 0)
         checkRefs(refs.clipboard, root.state.branchClipboard?.nodes);
     }
+    const restoredBodies = /* @__PURE__ */ new Map();
+    const restoreBody = async (contentId) => {
+      const cached = restoredBodies.get(contentId);
+      if (cached)
+        return cached;
+      const parts = root.content?.[contentId];
+      if (!parts || await digest(canonical(parts)) !== contentId)
+        throw new Error("Missing or damaged message content.");
+      const body = await restoreAssets(parts);
+      restoredBodies.set(contentId, body);
+      return body;
+    };
+    const verifiedEntries = /* @__PURE__ */ new Set();
+    const readEntry = async (entryId) => {
+      const entry = root.contentEntries?.[entryId];
+      if (!verifiedEntries.has(entryId)) {
+        if (!entry || typeof entry.contentId !== "string" || !entry.metadata || typeof entry.metadata !== "object" || Array.isArray(entry.metadata) || ["content", "refCount", "delta"].some((key) => Object.hasOwn(entry.metadata, key)) || await digest(canonical(entry)) !== entryId) {
+          throw new Error("Missing or damaged content entry.");
+        }
+        checkSafeMetadata(entry.metadata);
+        await restoreBody(entry.contentId);
+        verifiedEntries.add(entryId);
+      }
+      return entry;
+    };
+    const metadataOf = (entry) => {
+      const { content: _content, refCount: _refCount, delta: _delta, ...metadata } = entry;
+      return JSON.parse(JSON.stringify(metadata));
+    };
+    const reuseKey = (parts, metadata) => canonical(extended ? { content: parts, metadata } : parts);
+    let previousDeltas;
+    let remoteContentIds;
+    let remoteEntryIds;
+    let remoteAssetIds;
+    const reuseDelta = async (parts, metadata) => {
+      if (!previousDeltas) {
+        previousDeltas = /* @__PURE__ */ new Map();
+        for (const [id, entry] of Object.entries(previous))
+          if (entry.delta) {
+            try {
+              const resolved = [];
+              let current = id;
+              while (previous[current]) {
+                resolved.push([reuseKey(resolveContentStrict(previous, current), metadataOf(previous[current])), current]);
+                if (!previous[current].delta)
+                  break;
+                current = previous[current].delta.baseHash;
+              }
+              for (const [value, hash2] of resolved)
+                previousDeltas.set(value, hash2);
+            } catch {
+            }
+          }
+      }
+      const hash = previousDeltas.get(reuseKey(parts, metadata));
+      if (hash === void 0)
+        return;
+      const chain = [];
+      try {
+        let current = hash;
+        while (previous[current]) {
+          const body = resolveContentStrict(previous, current);
+          let entryId;
+          if (extended) {
+            remoteContentIds ??= new Map(Object.entries(root.content ?? {}).map(([id, value]) => [canonical(value), id]));
+            remoteEntryIds ??= new Map(Object.entries(root.contentEntries ?? {}).map(([id, value]) => [canonical(value), id]));
+            remoteAssetIds ??= new Map(Object.entries(root.assets ?? {}).map(([id, value]) => [value, id]));
+            const encoded = structuredClone(body);
+            for (const part of encoded)
+              if (part.type === "image_url" && typeof part.image_url?.url === "string") {
+                const asset = remoteAssetIds.get(part.image_url.url);
+                if (asset === void 0)
+                  return;
+                part.image_url.url = { asset };
+              }
+            const contentId = remoteContentIds.get(canonical(encoded));
+            entryId = remoteEntryIds.get(canonical({ contentId, metadata: metadataOf(previous[current]) }));
+            if (!entryId || root.retainedContentEntries?.[entryId] !== true || restoredEntries.has(entryId) && restoredEntries.get(entryId) !== current)
+              return;
+            chain.push({ hash: current, entryId });
+          } else
+            chain.push({ hash: current });
+          if (store[current] && (canonical(resolveContentStrict(store, current)) !== canonical(body) || extended && canonical(metadataOf(store[current])) !== canonical(metadataOf(previous[current]))))
+            return;
+          if (!previous[current].delta)
+            break;
+          current = previous[current].delta.baseHash;
+        }
+      } catch {
+        return;
+      }
+      for (const item of chain)
+        if (item.entryId)
+          await readEntry(item.entryId);
+      for (const item of chain.reverse()) {
+        store[item.hash] ??= { ...structuredClone(previous[item.hash]), refCount: 0 };
+        if (item.entryId)
+          restoredEntries.set(item.entryId, item.hash);
+      }
+      return hash;
+    };
     const restoreEntry = async (entryId) => {
       if (typeof entryId !== "string")
         throw new Error("Invalid content entry reference.");
       if (restoredEntries.has(entryId))
         return restoredEntries.get(entryId);
-      const entry = root.contentEntries?.[entryId];
-      if (!entry || typeof entry.contentId !== "string" || !entry.metadata || typeof entry.metadata !== "object" || Array.isArray(entry.metadata) || ["content", "refCount", "delta"].some((key) => Object.hasOwn(entry.metadata, key)) || await digest(canonical(entry)) !== entryId) {
-        throw new Error("Missing or damaged content entry.");
-      }
-      checkSafeMetadata(entry.metadata);
-      const parts = root.content?.[entry.contentId];
-      if (!parts || await digest(canonical(parts)) !== entry.contentId)
-        throw new Error("Missing or damaged message content.");
-      const body = await restoreAssets(parts);
+      const entry = await readEntry(entryId);
+      const body = await restoreBody(entry.contentId);
+      const reused = await reuseDelta(body, entry.metadata);
+      if (reused !== void 0)
+        return reused;
       let hash = computeContentHash(body);
       while (Object.hasOwn(store, hash))
         hash += "_";
@@ -10411,19 +10571,29 @@ var WeaveletGoogleSync = (() => {
       restoredEntries.set(entryId, hash);
       return hash;
     };
+    const restoredContent = /* @__PURE__ */ new Map();
     const restore = async (node, refs) => {
       if (extended) {
         const entryId = refs?.[node.id];
         if (!entryId || root.contentEntries?.[entryId]?.contentId !== node.contentHash)
           throw new Error("Inconsistent content entry reference.");
         const hash = await restoreEntry(entryId);
-        store[hash].refCount++;
+        retainContent(store, hash);
         node.contentHash = hash;
       } else {
-        const parts = root.content?.[node.contentHash];
-        if (!parts || await digest(canonical(parts)) !== node.contentHash)
-          throw new Error("Missing or damaged message content.");
-        node.contentHash = addContent(store, await restoreAssets(parts));
+        const cached = restoredContent.get(node.contentHash);
+        if (cached !== void 0) {
+          retainContent(store, cached);
+          node.contentHash = cached;
+          return;
+        }
+        const body = await restoreBody(node.contentHash);
+        const reused = await reuseDelta(body);
+        const localHash = reused ?? addContent(store, body);
+        if (reused !== void 0)
+          retainContent(store, reused);
+        restoredContent.set(node.contentHash, localHash);
+        node.contentHash = localHash;
       }
     };
     const ids = [.../* @__PURE__ */ new Set([...root.order, ...Object.keys(root.chats).sort()])];
@@ -10521,18 +10691,18 @@ var WeaveletGoogleSync = (() => {
     }
   }
   async function diffRecords(before, after) {
-    const changes = [];
+    const changes2 = [];
     for (const key of /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])) {
       if (before[key] === after[key])
         continue;
-      changes.push({ key, before: before[key] === void 0 ? null : await digest(before[key]), after: after[key] ?? null });
+      changes2.push({ key, before: before[key] === void 0 ? null : await digest(before[key]), after: after[key] ?? null });
     }
-    return changes;
+    return changes2;
   }
-  async function applyChanges(records, changes) {
+  async function applyChanges(records, changes2) {
     const result3 = { ...records };
     const keys = /* @__PURE__ */ new Set();
-    for (const change of changes) {
+    for (const change of changes2) {
       if (!change || typeof change.key !== "string" || keys.has(change.key) || !(change.before === null || typeof change.before === "string") || !(change.after === null || typeof change.after === "string"))
         throw new Error("Invalid sync change.");
       keys.add(change.key);
@@ -10558,17 +10728,17 @@ var WeaveletGoogleSync = (() => {
   async function hashRecords(records) {
     const hashes = {};
     for (const [key, value] of Object.entries(records))
-      hashes[key] = await digest(value);
+      hashes[key] = await cachedRecordDigest(value);
     return hashes;
   }
   function diffHashedRecords(before, after, hashes) {
-    const changes = [];
+    const changes2 = [];
     for (const key of /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])) {
       if (before[key] === hashes[key])
         continue;
-      changes.push({ key, before: before[key] ?? null, after: after[key] ?? null });
+      changes2.push({ key, before: before[key] ?? null, after: after[key] ?? null });
     }
-    return changes;
+    return changes2;
   }
 
   // src/store/storage/google/editTimes.ts
@@ -10639,19 +10809,19 @@ var WeaveletGoogleSync = (() => {
       const excluded = /* @__PURE__ */ new Set();
       const result3 = [];
       for (let index = versions.length - 1; index >= 0; index--) {
-        const version = versions[index];
-        if (excluded.has(version.id))
+        const version2 = versions[index];
+        if (excluded.has(version2.id))
           continue;
-        result3.push(version);
-        for (const ancestor of historyIds(commits, commits[version.id].parents))
+        result3.push(version2);
+        for (const ancestor of historyIds(commits, commits[version2.id].parents))
           excluded.add(ancestor);
       }
       return result3.reverse();
     };
     const valueOf = (versions, key) => {
       if (isNodeOrderRecord(key))
-        return mergeNodeOrderValues(versions.map((version) => version.value));
-      const time = mergeEditTimes(key, versions.map((version) => version.value));
+        return mergeNodeOrderValues(versions.map((version2) => version2.value));
+      const time = mergeEditTimes(key, versions.map((version2) => version2.value));
       if (time !== void 0)
         return time;
       const values = new Set(versions.map((v) => v.value));
@@ -10662,15 +10832,15 @@ var WeaveletGoogleSync = (() => {
     const repairedPath = (key, versions, records2, preceding) => {
       if (!key.endsWith(',"activePath"]'))
         return;
-      const values = [...new Set(versions.map((version) => version.value))];
+      const values = [...new Set(versions.map((version2) => version2.value))];
       if (values.length < 2) {
         if (!values[0])
           return;
         const path = JSON.parse(key), ids = JSON.parse(values[0]);
         if (!Array.isArray(ids) || !ids.some((id) => {
           const removed = histories.get(JSON.stringify([...path.slice(0, 3), "nodes", id, "id"]));
-          const retained = removed && latest(removed.filter((version) => !preceding || preceding.has(version.id)));
-          return retained?.length && retained.every((version) => version.value === null);
+          const retained = removed && latest(removed.filter((version2) => !preceding || preceding.has(version2.id)));
+          return retained?.length && retained.every((version2) => version2.value === null);
         }))
           return;
       }
@@ -10705,14 +10875,14 @@ var WeaveletGoogleSync = (() => {
             }
             parentValue = parents[0]?.value ?? null;
           } else if (isNonBlockingRecord(change.key) || isNodeOrderRecord(change.key)) {
-            const parentHashes = await Promise.all(parents.map((version) => version.value === null ? null : digest(version.value)));
+            const parentHashes = await Promise.all(parents.map((version2) => version2.value === null ? null : digest(version2.value)));
             const matching = parentHashes.indexOf(change.before);
             parentValue = matching >= 0 ? parents[matching].value : valueOf(parents, change.key);
             if (matching < 0 && change.key.endsWith(',"activePath"]')) {
               const parentRecords = {};
               for (const [key, versions] of histories) {
-                const retained = latest(versions.filter((version) => preceding.has(version.id)));
-                const value = isNodeOrderRecord(key) ? mergeNodeOrderValues(retained.map((version) => version.value)) : mergeEditTimes(key, retained.map((version) => version.value)) ?? retained[0]?.value ?? null;
+                const retained = latest(versions.filter((version2) => preceding.has(version2.id)));
+                const value = isNodeOrderRecord(key) ? mergeNodeOrderValues(retained.map((version2) => version2.value)) : mergeEditTimes(key, retained.map((version2) => version2.value)) ?? retained[0]?.value ?? null;
                 if (value !== null)
                   parentRecords[key] = value;
               }
@@ -10762,18 +10932,189 @@ var WeaveletGoogleSync = (() => {
 
   // shared/google-sync/source/decodeParts.ts
   function decodeParts(parts) {
-    const bytes3 = new Uint8Array(parts.reduce((size, part) => size + part.length, 0));
+    const bytes4 = new Uint8Array(parts.reduce((size, part) => size + part.length, 0));
     let offset = 0;
     for (const part of parts) {
-      bytes3.set(part, offset);
+      bytes4.set(part, offset);
       offset += part.length;
     }
-    return { bytes: bytes3, value: decode(bytes3) };
+    return { bytes: bytes4, value: decode(bytes4) };
+  }
+
+  // src/store/storage/google/wire.ts
+  var import_diff_match_patch2 = __toESM(require_diff_match_patch(), 1);
+  async function decodeWireParts(parts) {
+    const bytes4 = new Uint8Array(parts.reduce((size, part) => size + part.length, 0));
+    let offset = 0;
+    for (const part of parts) {
+      bytes4.set(part, offset);
+      offset += part.length;
+    }
+    return { bytes: bytes4, value: await decodeWire(bytes4) };
+  }
+  var FORMAT = "weavelet-sync-delta";
+  var dmp2 = new import_diff_match_patch2.default();
+  dmp2.Diff_Timeout = 0.1;
+  function contentHash(key) {
+    try {
+      const path = JSON.parse(key);
+      if (Array.isArray(path) && path.length === 2 && path[0] === "content" && typeof path[1] === "string" && /^[a-f0-9]{64}$/.test(path[1]))
+        return path[1];
+    } catch {
+    }
+  }
+  function textParts(value) {
+    try {
+      const parts = JSON.parse(value);
+      return Array.isArray(parts) && parts.length > 0 && parts.every((part) => part !== null && typeof part === "object" && part.type === "text" && typeof part.text === "string");
+    } catch {
+      return false;
+    }
+  }
+  function changes(value) {
+    if (!value || typeof value !== "object" || value.version !== 1)
+      throw new Error("Invalid sync delta payload.");
+    const payload = value;
+    const commits = Object.hasOwn(payload, "commits") ? payload.commits : void 0;
+    if (commits !== void 0 && (!commits || typeof commits !== "object" || Array.isArray(commits))) {
+      throw new Error("Invalid sync delta pack.");
+    }
+    const result3 = [];
+    for (const commit of commits === void 0 ? [payload] : Object.values(commits)) {
+      if (!commit || commit.version !== 1 || !Array.isArray(commit.parents) || commit.parents.some((id) => typeof id !== "string") || !Array.isArray(commit.changes)) {
+        throw new Error("Invalid sync delta commit.");
+      }
+      for (const change of commit.changes) {
+        if (!change || typeof change.key !== "string" || !(change.before === null || typeof change.before === "string") || !(change.after === null || typeof change.after === "string" || change.after && typeof change.after === "object")) {
+          throw new Error("Invalid sync delta change.");
+        }
+        result3.push(change);
+      }
+    }
+    return result3;
+  }
+  async function encodeWire(value, full = encode(value)) {
+    const copy2 = structuredClone(value);
+    const bases = [];
+    let replaced = false;
+    for (const change of changes(copy2)) {
+      const hash = contentHash(change.key);
+      if (!hash || typeof change.after !== "string" || !textParts(change.after) || await digest(change.after) !== hash)
+        continue;
+      let best;
+      for (const base of bases) {
+        if (base.key === change.key)
+          continue;
+        const patches = dmp2.patch_toText(dmp2.patch_make(base.text, change.after));
+        if (patches.length < change.after.length * 0.7 && (!best || patches.length < best.patches.length)) {
+          best = { base: base.key, patches, hash };
+        }
+      }
+      if (best) {
+        change.after = best;
+        replaced = true;
+      } else {
+        bases.push({ key: change.key, text: change.after });
+        if (bases.length > 4)
+          bases.shift();
+      }
+    }
+    if (!replaced)
+      return full;
+    const delta = encode({ format: FORMAT, version: 1, value: copy2 });
+    return delta.length < full.length ? delta : full;
+  }
+  async function decodeWire(bytes4) {
+    const decoded = decode(bytes4);
+    if (!decoded || typeof decoded !== "object" || !Object.hasOwn(decoded, "format"))
+      return decoded;
+    if (decoded.format !== FORMAT || decoded.version !== 1)
+      throw new Error("Unsupported sync delta format.");
+    const entries = changes(decoded.value);
+    const bases = /* @__PURE__ */ new Map();
+    for (const change of entries) {
+      if (!contentHash(change.key) || typeof change.after !== "string")
+        continue;
+      const previous = bases.get(change.key);
+      if (previous !== void 0 && previous !== change.after)
+        throw new Error("Conflicting sync delta bases.");
+      bases.set(change.key, change.after);
+    }
+    const verifiedBases = /* @__PURE__ */ new Set();
+    for (const change of entries) {
+      if (change.after === null || typeof change.after === "string")
+        continue;
+      const delta = change.after, hash = contentHash(change.key);
+      if (!hash || Array.isArray(delta) || Object.keys(delta).sort().join(",") !== "base,hash,patches" || delta.hash !== hash || typeof delta.base !== "string" || typeof delta.patches !== "string" || delta.base === change.key) {
+        throw new Error("Invalid sync content delta.");
+      }
+      const base = bases.get(delta.base), baseHash = contentHash(delta.base);
+      if (base === void 0 || !baseHash)
+        throw new Error("Missing complete sync delta base.");
+      if (!verifiedBases.has(delta.base)) {
+        if (!textParts(base) || await digest(base) !== baseHash)
+          throw new Error("Damaged sync delta base.");
+        verifiedBases.add(delta.base);
+      }
+      try {
+        const [restored, applied] = dmp2.patch_apply(dmp2.patch_fromText(delta.patches), base);
+        if (applied.some((ok) => !ok) || !textParts(restored) || await digest(restored) !== hash) {
+          throw new Error();
+        }
+        change.after = restored;
+      } catch {
+        throw new Error("Damaged sync content delta.");
+      }
+    }
+    return decoded.value;
+  }
+
+  // src/store/storage/google/cacheCodec.ts
+  var magic = new Uint8Array([87, 76, 67, 65, 67, 72, 69]);
+  var version = 1;
+  async function encodeCache(value) {
+    if (typeof CompressionStream === "undefined" || typeof DecompressionStream === "undefined")
+      return encode(value);
+    const started = performance.now();
+    const json = JSON.stringify(value);
+    if (json === void 0)
+      throw new Error("Invalid sync cache value.");
+    const input = new TextEncoder().encode(json);
+    recordMetric("serialize", started, input.length, input.length);
+    const compressStarted = performance.now();
+    const stream = new Blob([input.buffer]).stream().pipeThrough(new CompressionStream("gzip"));
+    const compressed = new Uint8Array(await new Response(stream).arrayBuffer());
+    const result3 = new Uint8Array(magic.length + 1 + compressed.length);
+    result3.set(magic);
+    result3[magic.length] = version;
+    result3.set(compressed, magic.length + 1);
+    recordMetric("compress", compressStarted, input.length, result3.length);
+    return result3;
+  }
+  async function decodeCache(bytes4) {
+    if (!magic.every((byte, index) => bytes4[index] === byte))
+      return decode(bytes4);
+    if (bytes4[magic.length] !== version)
+      throw new Error("Unsupported sync cache format.");
+    if (typeof DecompressionStream === "undefined")
+      throw new Error("Native sync cache decompression is unavailable.");
+    try {
+      const compressed = new Uint8Array(bytes4.subarray(magic.length + 1));
+      const stream = new Blob([compressed.buffer]).stream().pipeThrough(new DecompressionStream("gzip"));
+      const json = new TextDecoder("utf-8", { fatal: true }).decode(await new Response(stream).arrayBuffer());
+      return JSON.parse(json);
+    } catch {
+      throw new Error("Invalid compressed sync cache.");
+    }
   }
 
   // shared/google-sync/adapters/processing.ts
   var encodeAsync = async (value) => encode(value);
   var decodeAsync = async (value) => decode(value);
+  var encodeWireAsync = encodeWire;
+  var decodeWirePartsAsync = decodeWireParts;
+  var encodeCacheAsync = encodeCache;
+  var decodeCacheAsync = decodeCache;
   var toRecordsAsync = toRecords;
   var fromRecordsAsync = fromRecords;
   var hashRecordsAsync = hashRecords;
@@ -12734,13 +13075,13 @@ var WeaveletGoogleSync = (() => {
     };
   }
   function createCachedFormatter(fn2) {
-    var cache = {};
+    var cache2 = {};
     return function invokeFormatter(val, lng, options) {
       var key = lng + JSON.stringify(options);
-      var formatter = cache[key];
+      var formatter = cache2[key];
       if (!formatter) {
         formatter = fn2(lng, options);
-        cache[key] = formatter;
+        cache2[key] = formatter;
       }
       return formatter(val);
     };
@@ -13973,9 +14314,9 @@ var WeaveletGoogleSync = (() => {
       body.session_id = `weavelet:${context.chatId}${context.auxiliary ? ":title" : ""}`;
     const p = context?.auxiliary ? void 0 : settings?.promptCache;
     if (p && p.mode !== "provider-default") {
-      const cache = { type: "ephemeral", ...p.ttl === "1h" ? { ttl: "1h" } : {} };
+      const cache2 = { type: "ephemeral", ...p.ttl === "1h" ? { ttl: "1h" } : {} };
       if (p.mode === "claude-conversation")
-        body.cache_control = cache;
+        body.cache_control = cache2;
       else {
         const messages = body.messages;
         const index = messages.findIndex((m) => m.role === "system");
@@ -13985,7 +14326,7 @@ var WeaveletGoogleSync = (() => {
           throw new Error(instance.t("model:openRouter.errors.system"));
         body.messages = messages.map((m, i) => i !== index ? m : {
           ...m,
-          content: m.content.map((c2, j) => j !== lastText ? c2 : { ...c2, cache_control: cache })
+          content: m.content.map((c2, j) => j !== lastText ? c2 : { ...c2, cache_control: cache2 })
         });
       }
     }
@@ -14149,8 +14490,8 @@ var WeaveletGoogleSync = (() => {
     const match = /claude(?:-[a-z]+)*[-.](\d+(?:[.-]\d+)?)/.exec(id);
     if (!match)
       return void 0;
-    const version = parseFloat(match[1].replace("-", "."));
-    return Number.isFinite(version) ? version : void 0;
+    const version2 = parseFloat(match[1].replace("-", "."));
+    return Number.isFinite(version2) ? version2 : void 0;
   };
   var isClaudeReasoningModel = (modelId) => {
     const id = normalizeModelId(modelId);
@@ -14158,10 +14499,10 @@ var WeaveletGoogleSync = (() => {
       return false;
     if (id.includes("thinking"))
       return true;
-    const version = getClaudeVersion(id);
-    if (version === void 0)
+    const version2 = getClaudeVersion(id);
+    if (version2 === void 0)
       return true;
-    return version >= 3.7;
+    return version2 >= 3.7;
   };
   var isOpenRouterAdaptiveReasoningModel = (modelId, providerId) => {
     if (providerId !== "openrouter")
@@ -14169,10 +14510,10 @@ var WeaveletGoogleSync = (() => {
     const id = normalizeModelId(modelId);
     if (!id.includes("claude"))
       return false;
-    const version = getClaudeVersion(id);
-    if (version === void 0)
+    const version2 = getClaudeVersion(id);
+    if (version2 === void 0)
       return true;
-    return version >= 4.6;
+    return version2 >= 4.6;
   };
   var isOpenRouterClaudeEffortModel = (modelId, providerId) => {
     if (providerId !== "openrouter")
@@ -14180,30 +14521,30 @@ var WeaveletGoogleSync = (() => {
     const id = normalizeModelId(modelId);
     if (!id.includes("claude"))
       return false;
-    const version = getClaudeVersion(id);
-    if (version === void 0)
+    const version2 = getClaudeVersion(id);
+    if (version2 === void 0)
       return true;
-    return version >= 4.7;
+    return version2 >= 4.7;
   };
   var isOpenRouterClaudeVerbosityModel = (modelId, providerId) => {
     if (providerId !== "openrouter")
       return false;
     const id = normalizeModelId(modelId);
-    const version = getClaudeVersion(id);
-    if (version === void 0)
+    const version2 = getClaudeVersion(id);
+    if (version2 === void 0)
       return false;
     if (id.includes("opus"))
-      return version >= 4.5;
+      return version2 >= 4.5;
     if (id.includes("sonnet"))
-      return version >= 4.6;
-    return /(?:fable|mythos)/.test(id) && version >= 5;
+      return version2 >= 4.6;
+    return /(?:fable|mythos)/.test(id) && version2 >= 5;
   };
   var supportsMaxVerbosity = (modelId, providerId) => {
     if (!isOpenRouterClaudeVerbosityModel(modelId, providerId))
       return false;
     const id = normalizeModelId(modelId);
-    const version = getClaudeVersion(id);
-    return version !== void 0 && version >= 4.6;
+    const version2 = getClaudeVersion(id);
+    return version2 !== void 0 && version2 >= 4.6;
   };
 
   // src/api/providerModels.ts
@@ -14339,11 +14680,11 @@ var WeaveletGoogleSync = (() => {
     }
     return favorites.find((f) => f.modelId === modelId);
   }
-  function findCachedModel(cache, modelId, providerId) {
-    if (providerId && cache[providerId]) {
-      return cache[providerId].find((m) => m.id === modelId);
+  function findCachedModel(cache2, modelId, providerId) {
+    if (providerId && cache2[providerId]) {
+      return cache2[providerId].find((m) => m.id === modelId);
     }
-    for (const models of Object.values(cache)) {
+    for (const models of Object.values(cache2)) {
       if (!models)
         continue;
       const found = models.find((m) => m.id === modelId);
@@ -14628,7 +14969,7 @@ ${message.content}` : message.content).join("\n\n").trim();
     }
     return trimmed;
   };
-  var textParts = (message) => {
+  var textParts2 = (message) => {
     if (!message?.content?.length || !message.content.every(isTextContent))
       return null;
     const parts = message.content.map((value) => value.text);
@@ -14639,11 +14980,11 @@ ${message.content}` : message.content).join("\n\n").trim();
   var validGeneration = (value) => {
     if (value === void 0)
       return true;
-    const generation = value;
-    return !!generation && typeof generation === "object" && typeof generation.model === "string" && (generation.providerId === void 0 || typeof generation.providerId === "string") && Number.isFinite(generation.createdAt) && !!generation.settings && typeof generation.settings === "object" && Number.isFinite(generation.settings.temperature) && Number.isFinite(generation.settings.max_tokens) && (generation.settings.reasoning_effort === void 0 || typeof generation.settings.reasoning_effort === "string");
+    const generation2 = value;
+    return !!generation2 && typeof generation2 === "object" && typeof generation2.model === "string" && (generation2.providerId === void 0 || typeof generation2.providerId === "string") && Number.isFinite(generation2.createdAt) && !!generation2.settings && typeof generation2.settings === "object" && Number.isFinite(generation2.settings.temperature) && Number.isFinite(generation2.settings.max_tokens) && (generation2.settings.reasoning_effort === void 0 || typeof generation2.settings.reasoning_effort === "string");
   };
   var isBubbleSummary = (value) => !!value && typeof value === "object" && typeof value.id === "string" && (value.mode === "single" || value.mode === "through" || value.mode === "range") && typeof value.text === "string" && typeof value.useForSubmit === "boolean" && (value.format === void 0 || value.format === "compact") && validGeneration(value.generation) && Array.isArray(value.sources) && value.sources.every((source) => !!source && typeof source.nodeId === "string" && (source.parentId === null || typeof source.parentId === "string") && (source.role === "user" || source.role === "assistant") && Array.isArray(source.textParts) && source.textParts.every((part) => typeof part === "string"));
-  var isSummaryEligible = (message) => !!message && (message.role === "user" || message.role === "assistant") && textParts(message) !== null && !hasTool(message);
+  var isSummaryEligible = (message) => !!message && (message.role === "user" || message.role === "assistant") && textParts2(message) !== null && !hasTool(message);
   var resolveValidSummary = (chat, summary, generatingNodeIds = []) => {
     if (!isBubbleSummary(summary))
       return null;
@@ -14658,7 +14999,7 @@ ${message.content}` : message.content).join("\n\n").trim();
       return null;
     for (let offset = 0; offset < candidate.sources.length; offset++) {
       const index = first + offset, source = candidate.sources[offset], nodeId = path[index];
-      const node = chat.branchTree?.nodes[nodeId], message = chat.messages[index], parts = textParts(message);
+      const node = chat.branchTree?.nodes[nodeId], message = chat.messages[index], parts = textParts2(message);
       if (!source || source.nodeId !== nodeId || generatingNodeIds.includes(nodeId) || !isSummaryEligible(message) || !parts || message.role !== source.role || !Array.isArray(source.textParts) || !equalParts(parts, source.textParts) || (node?.parentId ?? null) !== source.parentId)
         return null;
     }
@@ -15350,13 +15691,13 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       if (!value || typeof value.autoTitle !== "boolean" || typeof value.titleModel !== "string" || value.titleProviderId !== void 0 && !Object.hasOwn(DEFAULT_PROVIDERS, value.titleProviderId))
         throw new Error("Invalid title settings.");
       const state = input.state ?? {};
-      const changes = ["autoTitle", "titleModel", "titleProviderId"].flatMap((key) => {
+      const changes2 = ["autoTitle", "titleModel", "titleProviderId"].flatMap((key) => {
         const next = value[key];
         if (next === void 0)
           return Object.hasOwn(state, key) ? [{ op: "remove", path: [key] }] : [];
         return state[key] === next ? [] : [{ op: "set", path: [key], value: next }];
       });
-      return JSON.stringify({ changes });
+      return JSON.stringify({ changes: changes2 });
     }
     if (input.operation === "select") {
       if (!input.settings || input.language === void 0)
@@ -16544,20 +16885,20 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         defaultShouldIncludeInContext: true,
         shouldIncludeInContext: true
       };
-      const version2 = {
+      const version3 = {
         type: "multiStep",
         role: "assistant",
         senderInfo: { senderName: modelSlug },
         steps: [contentBlock]
       };
-      return { versions: [version2], currentlySelected: 0 };
+      return { versions: [version3], currentlySelected: 0 };
     }
-    const version = {
+    const version2 = {
       type: "singleStep",
       role,
       content: [{ type: "text", text }]
     };
-    return { versions: [version], currentlySelected: 0 };
+    return { versions: [version2], currentlySelected: 0 };
   };
   var chatToLMStudioFormat = (chat, contentStore, options = {}) => {
     const visibleBranchOnly = options.visibleBranchOnly ?? false;
@@ -16822,8 +17163,8 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     const state = deepClone(raw.state);
     const chats = state.chats;
     const hasInlineNodes = chats.some((chat) => chat.branchTree && Object.values(chat.branchTree.nodes).some((node) => "content" in node && !node.contentHash));
-    const version = hasInlineNodes ? 2 : isRecord3(state.contentStore) ? 3 : 1;
-    if (version === 3 || hasInlineNodes) {
+    const version2 = hasInlineNodes ? 2 : isRecord3(state.contentStore) ? 3 : 1;
+    if (version2 === 3 || hasInlineNodes) {
       const hashedChats = hasInlineNodes ? chats.map((chat) => chat.branchTree ? {
         ...chat,
         branchTree: { ...chat.branchTree, nodes: Object.fromEntries(
@@ -16846,10 +17187,10 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       if (chat.messages === void 0) {
         if (!chat.branchTree)
           throw new Error("Invalid legacy remote snapshot: missing chat messages");
-        chat.messages = version === 3 ? materializeActivePath(chat.branchTree, state.contentStore) : [];
+        chat.messages = version2 === 3 ? materializeActivePath(chat.branchTree, state.contentStore) : [];
       }
     }
-    return { ...state, version, chats, folders: state.folders ?? {} };
+    return { ...state, version: version2, chats, folders: state.folders ?? {} };
   };
   var detectImportType = (parsedData) => {
     if (isRecord3(parsedData) && parsedData.version === 3)
@@ -16974,6 +17315,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         t2("notifications.invalidFormatForVersion", { ns: "import" })
       );
     }
+    assertImportDeltaIntegrity(parsedData.contentStore);
     const chats = parsedData.chats ?? [];
     clearMissingFolderReferences(chats, parsedData.folders);
     shiftAndMergeFolders(plan, parsedData.folders);
@@ -17287,6 +17629,10 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       }
     }
   };
+  function assertImportDeltaIntegrity(store) {
+    if (validateDeltaIntegrity(store).size)
+      throw new Error("Invalid delta content");
+  }
   var prepareImportData = (data, base, t2, decisions = {}, resolveDecision, allowEmpty = false) => {
     const raw = normalizeLegacyIOSImport(deepClone(data));
     const payload = isRecord3(raw) && isRecord3(raw.state) ? raw.state : raw;
@@ -17301,8 +17647,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
           throw new Error("Streaming content cannot be previewed");
         }
       }
-      if (validateDeltaIntegrity(contentStore).size)
-        throw new Error("Invalid delta content");
+      assertImportDeltaIntegrity(contentStore);
       recoveredContentCount = prepareMissingPreviewContent(rawChats, contentStore, t2);
       const hashedChats = rawChats.map((chat) => isRecord3(chat) && isRecord3(chat.branchTree) && isRecord3(chat.branchTree.nodes) ? { ...chat, branchTree: { ...chat.branchTree, nodes: Object.fromEntries(
         Object.entries(chat.branchTree.nodes).filter(([, node]) => isRecord3(node) && node.contentHash !== void 0)
@@ -18035,8 +18380,8 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       if (typeof input.collapsed !== "boolean")
         throw new Error("Invalid collapse state.");
       const result3 = setChatNodeMapState([input.chat], { chatId: input.chat.id, value: input.collapsed }, "collapsedNodes");
-      const changes = result3.status === "updated" ? diffJSONChanges({ chat: input.chat }, { chat: result3.chats[0] }) : [];
-      return JSON.stringify({ status: result3.status, changes });
+      const changes2 = result3.status === "updated" ? diffJSONChanges({ chat: input.chat }, { chat: result3.chats[0] }) : [];
+      return JSON.stringify({ status: result3.status, changes: changes2 });
     }
     const target = resolveNodeTarget([input.chat], { chatId: input.chat.id, nodeId: input.nodeId });
     if (target.status !== "valid")
@@ -18081,8 +18426,8 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         chat.messages = materializeActivePath(chat.branchTree, contentStore, true);
       if (historyBase)
         capture?.(historyBase, { chats: [chat], contentStore });
-      const changes = diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore })));
-      return JSON.stringify({ status: changes.length ? "updated" : "unchanged", nodeId, path: chat.branchTree?.activePath, changes });
+      const changes2 = diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore })));
+      return JSON.stringify({ status: changes2.length ? "updated" : "unchanged", nodeId, path: chat.branchTree?.activePath, changes: changes2 });
     });
   }
 
@@ -18411,8 +18756,8 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     const results = [];
     for (let i = 0; i < chat.messages.length; i++) {
       const msg = chat.messages[i];
-      const textParts2 = msg.content.filter(isTextContent).map((c) => c.text);
-      const fullText = textParts2.join(" ");
+      const textParts3 = msg.content.filter(isTextContent).map((c) => c.text);
+      const fullText = textParts3.join(" ");
       const lowerText = fullText.toLowerCase();
       const idx = lowerText.indexOf(lowerQuery);
       if (idx < 0)
@@ -18734,6 +19079,8 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     const chat = chats?.[chatIndex];
     const node = chat?.branchTree?.nodes[record2.nodeId];
     if (!chat || !node || node.role !== record2.checkpointRole)
+      return null;
+    if (node.streamState?.requestId && node.streamState.requestId !== record2.requestId)
       return null;
     const matchesHash = expectedHash !== void 0 ? node.contentHash === expectedHash : node.contentHash === record2.checkpointHash || node.contentHash === record2.appliedHash;
     if (!matchesHash)
@@ -19257,6 +19604,8 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   var SyncFileNotFoundError = class extends Error {
     name = "NotFoundError";
   };
+  var InvalidSyncFileIdError = class extends Error {
+  };
 
   // shared/google-sync/adapters/cache.ts
   var syncCache = async (dataset) => {
@@ -19286,6 +19635,8 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     cacheFingerprint;
     remoteConflicts = {};
     remoteCache;
+    persistedReplay;
+    replaySavedAt = 0;
     loading = /* @__PURE__ */ new Set();
     persistedCommits = /* @__PURE__ */ new Set();
     encodedCommits = /* @__PURE__ */ new Map();
@@ -19301,6 +19652,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       this.closed = true;
       this.key = void 0;
       this.remoteCache = void 0;
+      this.persistedReplay = void 0;
     }
     async parallel(values, work) {
       const results = new Array(values.length);
@@ -19344,8 +19696,23 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
           if (file.sent)
             entries.push([`ack:${file.id}`, await encrypt(this.requireKey(), encode(upload.id), this.context(`ack:${file.id}`))]);
         }
+      let replay = this.persistedReplay;
+      if (this.remoteCache && this.remoteCache !== replay) {
+        const known = new Set(replay?.commits ?? []);
+        const added = this.remoteCache.commits.filter((id) => !known.has(id));
+        const changedBytes = added.reduce((total, id) => total + this.cache.commits[id].changes.reduce(
+          (size, change) => size + change.key.length * 2 + (change.after?.length ?? 0) * 2,
+          0
+        ), 0);
+        if (!replay || !replay.commits.length || changedBytes >= 8 * 1024 * 1024 || added.length >= 256 || performance.now() - this.replaySavedAt >= 5 * 60 * 1e3) {
+          replay = this.remoteCache;
+          entries.push(["replay", await encrypt(this.requireKey(), await encodeCacheAsync(replay), this.context("replay"))]);
+        }
+      }
       const stored = {
         version: 2,
+        replay: replay ? true : void 0,
+        wireDelta: this.options.wireDelta,
         commits: Object.keys(this.cache.commits),
         token: this.cache.token,
         baseline: this.cache.baseline,
@@ -19361,8 +19728,8 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
           files: this.cache.compaction.files.map(({ id, kind, size }) => ({ id, kind, size }))
         }
       };
-      const bytes3 = await encrypt(this.requireKey(), await encodeAsync(stored), this.context("cache"));
-      await writeSyncCache(this.dataset, bytes3, entries, remove);
+      const bytes4 = await encrypt(this.requireKey(), await encodeCacheAsync(stored), this.context("cache"));
+      await writeSyncCache(this.dataset, bytes4, entries, remove);
       for (const id of Object.keys(commits)) {
         this.persistedCommits.add(id);
         this.encodedCommits.delete(id);
@@ -19370,7 +19737,10 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       for (const upload of uploads)
         for (const file of upload.files)
           delete file.bytes;
-      this.cacheFingerprint = await digest(bytes3);
+      if (replay !== this.persistedReplay)
+        this.replaySavedAt = performance.now();
+      this.persistedReplay = replay;
+      this.cacheFingerprint = await digest(bytes4);
       const packs = Object.values(this.cache.packs ?? {});
       const covered = new Set(packs.flatMap((pack) => Object.keys(pack.commits)));
       reportSyncHistory({
@@ -19381,9 +19751,10 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         cleanupTargets: this.cache.compaction?.remove.length ?? 0
       });
     }
-    async loadCache(bytes3) {
+    async loadCache(bytes4) {
       this.remoteCache = void 0;
-      const stored = await decodeAsync(await decrypt(this.requireKey(), bytes3, this.context("cache")));
+      this.persistedReplay = void 0;
+      const stored = await decodeCacheAsync(await decrypt(this.requireKey(), bytes4, this.context("cache")));
       if (stored.version === 1) {
         this.cache = stored;
         if (stored.baseline)
@@ -19401,6 +19772,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       }
       if (stored.version !== 2 || !Array.isArray(stored.commits))
         throw new Error("Unsupported local sync cache.");
+      this.options.wireDelta ??= stored.wireDelta === true;
       const ids = [.../* @__PURE__ */ new Set([...stored.commits, ...stored.pending ? [stored.pending.id] : []])];
       const values = await readSyncEntries(this.dataset, ids.map((id) => `commit:${id}`));
       const commits = {};
@@ -19420,6 +19792,19 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         parts: stored.parts,
         compaction: stored.compaction && { ...stored.compaction, files: stored.compaction.files.map((f) => ({ ...f, sent: false })) }
       };
+      if (stored.replay) {
+        try {
+          const [bytes5] = await readSyncEntries(this.dataset, ["replay"]);
+          if (bytes5) {
+            const replay = await decodeCacheAsync(await decrypt(this.requireKey(), bytes5, this.context("replay")));
+            if (replay.version === 1 && Array.isArray(replay.commits) && Array.isArray(replay.tips) && replay.commits.every((id) => typeof id === "string" && !!this.cache.commits[id]) && replay.tips.every((id) => typeof id === "string" && replay.commits.includes(id)) && replay.records && typeof replay.records === "object" && !Array.isArray(replay.records) && Object.values(replay.records).every((value) => typeof value === "string") && replay.conflicts && typeof replay.conflicts === "object" && !Array.isArray(replay.conflicts) && Object.values(replay.conflicts).every((values2) => Array.isArray(values2) && values2.every((value) => value === null || typeof value === "string"))) {
+              this.remoteCache = this.persistedReplay = replay;
+              this.replaySavedAt = performance.now();
+            }
+          }
+        } catch {
+        }
+      }
     }
     run(work) {
       const task = async () => {
@@ -19442,6 +19827,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
             this.cacheFingerprint = void 0;
             this.cache = emptyCache();
             this.remoteCache = void 0;
+            this.persistedReplay = void 0;
             this.persistedCommits.clear();
             this.encodedCommits.clear();
             throw error2;
@@ -19475,9 +19861,9 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         const [saved] = await readSyncEntries(this.dataset, ["initial-key"]);
         if (!saved)
           return;
-        const bytes3 = await decrypt(this.requireKey(), saved, this.context("initial-key"));
+        const bytes4 = await decrypt(this.requireKey(), saved, this.context("initial-key"));
         await this.transport.folder(this.dataset, header);
-        await this.transport.put(header, this.dataset, "key", bytes3);
+        await this.transport.put(header, this.dataset, "key", bytes4);
         await writeSyncCache(this.dataset, void 0, [], ["initial-key"]);
       });
     }
@@ -19504,7 +19890,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     async downloadManifest(id) {
       const encoded = await decrypt(this.requireKey(), await this.transport.read(id), this.context(id));
       const manifest = await decodeAsync(encoded);
-      if (manifest.version !== 2 && (manifest.version !== 1 || !Array.isArray(manifest.parts) || !manifest.parts.length || manifest.parts.some((p) => typeof p !== "string")))
+      if (manifest.version !== 2 && (![1, 3].includes(manifest.version) || !Array.isArray(manifest.parts) || !manifest.parts.length || manifest.parts.some((p) => typeof p !== "string")))
         throw new Error("Invalid sync commit.");
       return manifest;
     }
@@ -19530,13 +19916,13 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
           payload = await encodeAsync(commit);
         } else {
           const chunks = await this.parallel(manifest.parts, async (part) => {
-            const bytes3 = await decrypt(this.requireKey(), await this.transport.read(part), this.context(part));
-            completedFile(bytes3.length);
-            return bytes3;
+            const bytes4 = await decrypt(this.requireKey(), await this.transport.read(part), this.context(part));
+            completedFile(bytes4.length);
+            return bytes4;
           });
-          const decoded = await decodePartsAsync(chunks);
-          payload = decoded.bytes;
+          const decoded = manifest.version === 3 ? await decodeWirePartsAsync(chunks) : await decodePartsAsync(chunks);
           commit = decoded.value;
+          payload = manifest.version === 3 ? await encodeAsync(commit) : decoded.bytes;
         }
         if (commit.version !== 1 || !Array.isArray(commit.parents) || !Array.isArray(commit.changes) || commit.parents.some((p) => typeof p !== "string" || p === id))
           throw new Error("Invalid sync commit.");
@@ -19551,7 +19937,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     }
     async readPackManifest(id) {
       const pack = await decodeAsync(await decrypt(this.requireKey(), await this.transport.read(id, "pack-index"), this.context(id)));
-      if (pack.version !== 1 || !pack.commits || typeof pack.commits !== "object" || Array.isArray(pack.commits) || !Object.keys(pack.commits).length || Object.entries(pack.commits).some(([id2, hash]) => !/^[A-Za-z0-9_-]+$/.test(id2) || ["__proto__", "constructor", "prototype"].includes(id2) || typeof hash !== "string" || !/^[a-f0-9]{64}$/.test(hash)) || !Array.isArray(pack.parts) || !pack.parts.length || pack.parts.some((part) => typeof part !== "string" || !part) || new Set(pack.parts).size !== pack.parts.length || !Number.isSafeInteger(pack.bytes) || pack.bytes < 1) {
+      if (![1, 2].includes(pack.version) || !pack.commits || typeof pack.commits !== "object" || Array.isArray(pack.commits) || !Object.keys(pack.commits).length || Object.entries(pack.commits).some(([id2, hash]) => !/^[A-Za-z0-9_-]+$/.test(id2) || ["__proto__", "constructor", "prototype"].includes(id2) || typeof hash !== "string" || !/^[a-f0-9]{64}$/.test(hash)) || !Array.isArray(pack.parts) || !pack.parts.length || pack.parts.some((part) => typeof part !== "string" || !part) || new Set(pack.parts).size !== pack.parts.length || !Number.isSafeInteger(pack.bytes) || pack.bytes < 1) {
         throw new Error("Invalid sync pack.");
       }
       return pack;
@@ -19569,14 +19955,14 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       }
       syncPhase("downloading", pack.parts.length);
       const chunks = await this.parallel(pack.parts, async (part) => {
-        const bytes3 = await decrypt(this.requireKey(), await this.transport.read(part, verify ? "verification" : "pack"), this.context(part));
-        completedFile(bytes3.length);
-        return bytes3;
+        const bytes4 = await decrypt(this.requireKey(), await this.transport.read(part, verify ? "verification" : "pack"), this.context(part));
+        completedFile(bytes4.length);
+        return bytes4;
       });
-      const size = chunks.reduce((total, bytes3) => total + bytes3.length, 0);
+      const size = chunks.reduce((total, bytes4) => total + bytes4.length, 0);
       if (size !== pack.bytes)
         throw new Error("Incomplete sync pack.");
-      const { value: data } = await decodePartsAsync(chunks);
+      const { value: data } = pack.version === 2 ? await decodeWirePartsAsync(chunks) : await decodePartsAsync(chunks);
       if (data.version !== 1 || !data.commits || Object.keys(data.commits).length !== Object.keys(pack.commits).length) {
         throw new Error("Invalid sync pack.");
       }
@@ -19594,12 +19980,10 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         }
       if (!verify)
         recordPackAccess(false);
-      if (encoded.size)
-        this.remoteCache = void 0;
-      for (const [commit, bytes3] of encoded) {
+      for (const [commit, bytes4] of encoded) {
         this.cache.commits[commit] = data.commits[commit];
         if (!this.persistedCommits.has(commit))
-          this.encodedCommits.set(commit, bytes3);
+          this.encodedCommits.set(commit, bytes4);
       }
     }
     async discoverPacks(ids) {
@@ -19630,8 +20014,6 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
           this.cache.token = token;
         }
         const page = await this.transport.changes(this.cache.token);
-        if (page.changes.some((change) => change.removed || change.dataset === this.dataset && (change.kind === "commit" || change.kind === "pack")))
-          this.remoteCache = void 0;
         const removed = new Set(page.changes.filter((change) => change.removed).map((change) => change.id));
         if (removed.has(this.dataset))
           throw new Error("Sync folder was deleted from storage; sync stopped.");
@@ -19664,7 +20046,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
           const downloaded = await this.parallel(unbundled, async (id) => [id, await this.downloadManifest(id)]);
           for (const [id, manifest] of downloaded) {
             manifests.set(id, manifest);
-            if (manifest.version === 1)
+            if (manifest.version !== 2)
               partCount += manifest.parts.length;
           }
           syncPhase("downloading", missing2.length + partCount, void 0, missing2.length);
@@ -19692,10 +20074,52 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     }
     async remote(allowConflicts = false, tips) {
       syncPhase("verifying");
+      const heads = tips ?? this.heads();
+      const ids = Object.keys(this.cache.commits).sort();
       const cached = tips ? void 0 : this.remoteCache;
-      const { records, conflicts } = cached ?? await replayHistoryAsync({ commits: this.cache.commits, tips: tips ?? this.heads() });
-      if (!tips)
-        this.remoteCache = { records, conflicts };
+      let result3 = cached && JSON.stringify(cached.commits) === JSON.stringify(ids) && JSON.stringify(cached.tips) === JSON.stringify(heads) ? cached : void 0;
+      if (!result3 && cached?.tips.length === 1 && !Object.keys(cached.conflicts).length && ids.length > cached.commits.length && cached.commits.every((id) => !!this.cache.commits[id])) {
+        const known = new Set(cached.commits);
+        const added = ids.filter((id) => !known.has(id));
+        const children = /* @__PURE__ */ new Map();
+        const direct = added.every((id) => {
+          const commit = this.cache.commits[id];
+          if (commit.parents.length !== 1 || children.has(commit.parents[0]) || commit.resolutions)
+            return false;
+          children.set(commit.parents[0], id);
+          return commit.changes.every((change) => {
+            if (change.after === null || isNonBlockingRecord(change.key))
+              return false;
+            const path = JSON.parse(change.key);
+            return path[0] !== "chats" || !["id", "parentId", "rootId"].includes(path[path.length - 1]);
+          });
+        });
+        if (heads.length === 1 && direct) {
+          try {
+            let records2 = cached.records, head = cached.tips[0], count = 0;
+            while (children.has(head) && count < added.length) {
+              head = children.get(head);
+              const changes2 = this.cache.commits[head].changes;
+              records2 = await applyChanges(records2, changes2);
+              for (const change of changes2) {
+                const time = mergeEditTimes(change.key, [change.after]);
+                if (time !== void 0)
+                  records2[change.key] = time;
+              }
+              if (++count % 8 === 0)
+                await new Promise((resolve) => setTimeout(resolve, 0));
+            }
+            if (count === added.length && head === heads[0])
+              result3 = { ...cached, records: records2 };
+          } catch {
+          }
+        }
+      }
+      const { records, conflicts } = result3 ?? await replayHistoryAsync({ commits: this.cache.commits, tips: heads });
+      if (!tips && (!cached || result3 !== cached)) {
+        this.remoteCache = { version: 1, commits: ids, tips: heads, records, conflicts };
+        await this.save();
+      }
       this.remoteConflicts = conflicts;
       if (!allowConflicts && Object.keys(conflicts).length)
         throw new SyncConflictError(Object.keys(conflicts));
@@ -19714,11 +20138,11 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       syncPhase("uploading", remaining.length, remaining.reduce((total, file) => total + file.size, 0));
       const send = async (file) => {
         this.requireKey();
-        const [bytes3] = await readSyncEntries(this.dataset, [`outbox:${file.id}`]);
-        if (!bytes3 || bytes3.length !== file.size)
+        const [bytes4] = await readSyncEntries(this.dataset, [`outbox:${file.id}`]);
+        if (!bytes4 || bytes4.length !== file.size)
           throw new Error("Missing local upload data.");
-        await decrypt(this.requireKey(), bytes3, this.context(file.id));
-        await this.transport.put(file.id, this.dataset, file.kind, bytes3);
+        await decrypt(this.requireKey(), bytes4, this.context(file.id));
+        await this.transport.put(file.id, this.dataset, file.kind, bytes4);
         const ack = await encrypt(this.requireKey(), encode(pending.id), this.context(`ack:${file.id}`));
         await writeSyncCache(this.dataset, void 0, [[`ack:${file.id}`, ack]]);
         file.sent = true;
@@ -19730,27 +20154,96 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         await send(file);
     }
     async sendPending() {
-      const pending = this.cache.pending;
+      let pending = this.cache.pending;
       if (!pending)
         return;
-      await this.sendFiles(pending, "commit");
+      try {
+        await this.sendFiles(pending, "commit");
+      } catch (error2) {
+        if (!(error2 instanceof InvalidSyncFileIdError))
+          throw error2;
+        await this.reissuePendingCommit(pending);
+        pending = this.cache.pending;
+        await this.sendFiles(pending, "commit");
+      }
       syncPhase("saving");
       (this.cache.parts ??= {})[pending.id] = pending.files.filter((file) => file.kind === "part").map((file) => file.id);
       this.cache.commits[pending.id] = pending.commit;
-      this.remoteCache = void 0;
       if (pending.baseline)
         this.cache.baseline = pending.baseline;
       delete this.cache.pending;
       await this.save(pending.files.flatMap((f) => [`outbox:${f.id}`, `ack:${f.id}`]));
     }
+    async reissuePendingCommit(pending) {
+      const oldIds = pending.files.map((file) => file.id);
+      const { files, ids } = await this.reissueFiles(pending.id, pending.files, "commit");
+      const replacement = { ...pending, id: ids.get(pending.id), files };
+      if (!replacement.id)
+        throw new Error("Cannot replace the rejected sync commit ID.");
+      this.cache.pending = replacement;
+      this.persistedCommits.delete(pending.id);
+      this.encodedCommits.delete(pending.id);
+      await this.save(oldIds.flatMap((id) => [`outbox:${id}`, `ack:${id}`]).concat(`commit:${pending.id}`));
+    }
+    async reissuePendingPack(pending) {
+      const oldIds = pending.files.map((file) => file.id);
+      const { files, ids } = await this.reissueFiles(pending.id, pending.files, "pack");
+      const id = ids.get(pending.id);
+      if (!id)
+        throw new Error("Cannot replace the rejected sync pack ID.");
+      this.cache.compaction = {
+        ...pending,
+        id,
+        files,
+        manifest: { ...pending.manifest, parts: pending.manifest.parts.map((part) => ids.get(part) ?? part) }
+      };
+      await this.save(oldIds.flatMap((fileId) => [`outbox:${fileId}`, `ack:${fileId}`]));
+    }
+    async reissueFiles(id, files, publication) {
+      if (files.filter((file) => file.kind === publication).length !== 1 || !files.some((file) => file.id === id && file.kind === publication)) {
+        throw new Error(`Cannot recover the rejected sync ${publication} ID.`);
+      }
+      const oldIds = files.map((file) => file.id);
+      const newIds = await this.transport.ids(oldIds.length);
+      const ids = new Map(oldIds.map((oldId, index) => [oldId, newIds[index]]));
+      if (newIds.length !== oldIds.length || new Set(newIds).size !== newIds.length || newIds.some((newId) => !newId || oldIds.includes(newId))) {
+        throw new Error(`Drive did not return fresh IDs for the rejected sync ${publication}.`);
+      }
+      const replacementFiles = [];
+      for (const file of files) {
+        const [ciphertext] = await readSyncEntries(this.dataset, [`outbox:${file.id}`]);
+        if (!ciphertext || ciphertext.length !== file.size)
+          throw new Error(`Missing local upload data for the rejected sync ${publication}.`);
+        let plaintext = await decrypt(this.requireKey(), ciphertext, this.context(file.id));
+        if (file.kind === publication) {
+          const manifest = await decodeAsync(plaintext);
+          if (manifest.version === 1 && manifest.parts) {
+            plaintext = await encodeAsync({ ...manifest, parts: manifest.parts.map((part) => ids.get(part) ?? part) });
+          }
+        }
+        const newId = ids.get(file.id);
+        const bytes4 = await encrypt(this.requireKey(), plaintext, this.context(newId));
+        replacementFiles.push({ id: newId, kind: file.kind, bytes: bytes4, size: bytes4.length, sent: false });
+      }
+      return { files: replacementFiles, ids };
+    }
     async finishCompaction() {
-      const pending = this.cache.compaction;
-      if (!pending)
+      const initial = this.cache.compaction;
+      if (!initial)
         return;
+      let pending = initial;
       if (useGoogleSyncDiagnostics.getState().compaction.status !== "running") {
         reportCompaction({ status: "running", reason: "resume", sourceFiles: pending.remove.length, newFiles: pending.files.length });
       }
-      await this.sendFiles(pending, "pack");
+      try {
+        await this.sendFiles(pending, "pack");
+      } catch (error2) {
+        if (!(error2 instanceof InvalidSyncFileIdError))
+          throw error2;
+        await this.reissuePendingPack(pending);
+        pending = this.cache.compaction;
+        await this.sendFiles(pending, "pack");
+      }
       try {
         const manifest = await this.readPackManifest(pending.id);
         if (await digest(await encodeAsync(manifest)) !== await digest(await encodeAsync(pending.manifest))) {
@@ -19826,43 +20319,47 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       }
       for (const group2 of groups) {
         const commits = Object.fromEntries([...new Set(group2.commits)].sort().map((id2) => [id2, this.cache.commits[id2]]));
-        const payload = await encodeAsync({ version: 1, commits });
+        const value = { version: 1, commits };
+        const logical = await encodeAsync(value);
+        const payload = this.options.wireDelta ? await encodeWireAsync(value, logical) : logical;
         const hashes = await hashCommitsAsync(commits);
         const [id, ...parts] = await this.transport.ids(1 + Math.ceil(payload.length / PACK_BYTES));
         const files = [];
         for (let i = 0; i < parts.length; i++) {
-          const bytes4 = await encrypt(this.requireKey(), payload.slice(i * PACK_BYTES, (i + 1) * PACK_BYTES), this.context(parts[i]));
-          files.push({ id: parts[i], kind: "pack-part", bytes: bytes4, size: bytes4.length, sent: false });
+          const bytes5 = await encrypt(this.requireKey(), payload.slice(i * PACK_BYTES, (i + 1) * PACK_BYTES), this.context(parts[i]));
+          files.push({ id: parts[i], kind: "pack-part", bytes: bytes5, size: bytes5.length, sent: false });
         }
-        const manifest = { version: 1, commits: hashes, parts, bytes: payload.length };
-        const bytes3 = await encrypt(this.requireKey(), await encodeAsync(manifest), this.context(id));
-        if (bytes3.length > PACK_BYTES + 28)
+        const manifest = { version: payload.length < logical.length ? 2 : 1, commits: hashes, parts, bytes: payload.length };
+        const bytes4 = await encrypt(this.requireKey(), await encodeAsync(manifest), this.context(id));
+        if (bytes4.length > PACK_BYTES + 28)
           throw new Error("Sync pack index too large.");
-        files.push({ id, kind: "pack", bytes: bytes3, size: bytes3.length, sent: false });
+        files.push({ id, kind: "pack", bytes: bytes4, size: bytes4.length, sent: false });
         this.cache.compaction = { id, manifest, files, remove: [...new Set(group2.sources)] };
         await this.save();
         reportCompaction({ status: "running", reason: "new", sourceFiles: this.cache.compaction.remove.length, newFiles: files.length });
         await this.finishCompaction();
       }
     }
-    async prepare(changes, baseline, resolutions) {
+    async prepare(changes2, baseline, resolutions) {
       syncPhase("encrypting");
-      const commit = { version: 1, parents: this.heads(), changes, ...resolutions ? { resolutions } : {} };
-      const payload = await encodeAsync(commit);
-      const inline = commit.parents.length > 0 && payload.length <= INLINE_BYTES;
+      const commit = { version: 1, parents: this.heads(), changes: changes2, ...resolutions ? { resolutions } : {} };
+      const logical = await encodeAsync(commit);
+      const payload = this.options.wireDelta ? await encodeWireAsync(commit, logical) : logical;
+      const delta = payload.length < logical.length;
+      const inline = !delta && commit.parents.length > 0 && payload.length <= INLINE_BYTES;
       const partBytes = this.options.partBytes ?? PART_BYTES;
       const [id, ...parts] = await this.transport.ids(inline ? 1 : 1 + Math.ceil(payload.length / partBytes));
       syncPhase("encrypting", parts.length + 1);
       const files = [];
       for (let i = 0; i < parts.length; i++) {
-        const bytes4 = await encrypt(this.requireKey(), payload.slice(i * partBytes, (i + 1) * partBytes), this.context(parts[i]));
-        files.push({ id: parts[i], kind: "part", bytes: bytes4, size: bytes4.length, sent: false });
-        completedFile(bytes4.length);
+        const bytes5 = await encrypt(this.requireKey(), payload.slice(i * partBytes, (i + 1) * partBytes), this.context(parts[i]));
+        files.push({ id: parts[i], kind: "part", bytes: bytes5, size: bytes5.length, sent: false });
+        completedFile(bytes5.length);
       }
-      const bytes3 = await encrypt(this.requireKey(), await encodeAsync(inline ? { ...commit, version: 2 } : { version: 1, parts }), this.context(id));
-      files.push({ id, kind: "commit", bytes: bytes3, size: bytes3.length, sent: false });
-      completedFile(bytes3.length);
-      this.encodedCommits.set(id, payload);
+      const bytes4 = await encrypt(this.requireKey(), await encodeAsync(inline ? { ...commit, version: 2 } : { version: delta ? 3 : 1, parts }), this.context(id));
+      files.push({ id, kind: "commit", bytes: bytes4, size: bytes4.length, sent: false });
+      completedFile(bytes4.length);
+      this.encodedCommits.set(id, logical);
       this.cache.pending = { id, commit, baseline, files };
       await this.save();
     }
@@ -19878,9 +20375,9 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         const remote = await syncStage(3, 6, () => this.remote());
         await syncStage(4, 6, async () => {
           const merged = await mergeSyncRecords({}, local, remote);
-          const changes = await diffRecords(remote, merged);
-          if (changes.length) {
-            await this.prepare(changes, this.cache.baseline);
+          const changes2 = await diffRecords(remote, merged);
+          if (changes2.length) {
+            await this.prepare(changes2, this.cache.baseline);
             await this.sendPending();
           }
         });
@@ -19912,7 +20409,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         });
         await syncStage(2, 8, () => this.refresh());
         const remote = await syncStage(3, 8, () => this.remote());
-        const { localHashes, changes } = await syncStage(4, 8, async () => {
+        const { localHashes, changes: changes2 } = await syncStage(4, 8, async () => {
           syncPhase("preparing");
           if (replace === "if-empty" && !this.cache.baseline && Object.keys(remote).length)
             throw new Error("Existing history must be downloaded before initializing sync.");
@@ -19920,17 +20417,19 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
             throw new Error("Choose upload or download before enabling automatic sync.");
           const base = replace === true || replace === "if-empty" && !this.cache.baseline ? await hashRecordsAsync(remote) : this.cache.baseline;
           const localHashes2 = await hashRecordsAsync(local);
-          const changes2 = await Promise.all(diffHashedRecords(base, local, localHashes2).filter((change) => {
+          const changes3 = await Promise.all(diffHashedRecords(base, local, localHashes2).filter((change) => {
             if (isBrowserLocalRecord(change.key))
               return false;
             const path = JSON.parse(change.key);
-            return change.after !== null || path[0] !== "content" && path[0] !== "assets" && path[0] !== "contentEntries";
+            if (["content", "assets", "contentEntries"].includes(path[0]) && change.after === remote[change.key])
+              return false;
+            return change.after !== null || !["content", "assets", "contentEntries"].includes(path[0]);
           }).map(async (change) => isNonBlockingRecord(change.key) ? { ...change, before: remote[change.key] === void 0 ? null : await digest(remote[change.key]) } : change));
           if (snapshot.state.chats?.length === 0 && Object.keys(remote).some((key) => JSON.parse(key)[0] === "chats" && JSON.parse(key).length > 1)) {
             throw new Error("Cloud sync skipped because the snapshot would erase all chats.");
           }
-          const merged = await applyChanges(remote, changes2);
-          for (const change of changes2) {
+          const merged = await applyChanges(remote, changes3);
+          for (const change of changes3) {
             if (change.after === null)
               continue;
             const selected = selectActivePath(change.key, [change.after, remote[change.key] ?? null], merged);
@@ -19948,13 +20447,13 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
           } catch (error2) {
             await fromRecordsAsync(local);
             await fromRecordsAsync(remote);
-            throw new SyncConflictError(changes2.map((change) => change.key));
+            throw new SyncConflictError(changes3.map((change) => change.key));
           }
-          return { localHashes: localHashes2, changes: changes2 };
+          return { localHashes: localHashes2, changes: changes3 };
         });
         await syncStage(5, 8, async () => {
-          if (changes.length) {
-            await syncStage(0, 2, () => this.prepare(changes, localHashes));
+          if (changes2.length) {
+            await syncStage(0, 2, () => this.prepare(changes2, localHashes));
             await syncStage(1, 2, () => this.sendPending());
           } else {
             this.cache.baseline = localHashes;
@@ -19966,7 +20465,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
           await this.refresh();
           return this.remote();
         });
-        return fromRecordsAsync(finalRemote);
+        return fromRecordsAsync(finalRemote, snapshot.state.contentStore);
       });
     }
     async push(snapshot, replace = false) {
@@ -20018,26 +20517,26 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         });
         await syncStage(2, 8, () => this.refresh());
         const remote = await syncStage(3, 8, () => this.remote(true));
-        const { result: result3, changes, resolutions } = await syncStage(4, 8, async () => {
+        const { result: result3, changes: changes2, resolutions } = await syncStage(4, 8, async () => {
           const resolutions2 = this.remoteConflicts;
           const cloud = await this.coherentCloudRecords(remote);
           const chosen = mode === "local" ? local : mode === "cloud" ? cloud : await mergeSyncRecords(this.cache.baseline ?? {}, local, cloud);
-          const result4 = await fromRecordsAsync(chosen);
-          const changes2 = await diffRecords(remote, chosen);
+          const result4 = await fromRecordsAsync(chosen, snapshot.state.contentStore);
+          const changes3 = await diffRecords(remote, chosen);
           for (const key of Object.keys(resolutions2))
-            if (!changes2.some((change) => change.key === key)) {
-              changes2.push({ key, before: remote[key] === void 0 ? null : await digest(remote[key]), after: chosen[key] ?? null });
+            if (!changes3.some((change) => change.key === key)) {
+              changes3.push({ key, before: remote[key] === void 0 ? null : await digest(remote[key]), after: chosen[key] ?? null });
             }
-          return { result: result4, changes: changes2, resolutions: resolutions2 };
+          return { result: result4, changes: changes3, resolutions: resolutions2 };
         });
         await syncStage(5, 8, async () => {
-          if (changes.length) {
-            await syncStage(0, 2, async () => this.prepare(changes, await hashRecordsAsync(local), Object.keys(resolutions).length ? resolutions : void 0));
+          if (changes2.length) {
+            await syncStage(0, 2, async () => this.prepare(changes2, await hashRecordsAsync(local), Object.keys(resolutions).length ? resolutions : void 0));
             await syncStage(1, 2, () => this.sendPending());
           }
         });
         await syncStage(6, 8, async () => {
-          if (changes.length) {
+          if (changes2.length) {
             await this.refresh();
             await this.remote();
           }
@@ -20085,7 +20584,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       throw new Error("File system host is unavailable.");
     return request(method, args);
   };
-  var bytes2 = (value) => new Uint8Array(value);
+  var bytes3 = (value) => new Uint8Array(value);
   var NativeFileHandle = class {
     constructor(name, create) {
       this.name = name;
@@ -20094,7 +20593,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     kind = "file";
     async read() {
       try {
-        return bytes2(await call("fs.read", this.name));
+        return bytes3(await call("fs.read", this.name));
       } catch (error2) {
         if (this.create && error2 instanceof Error && error2.name === "NotFoundError")
           return new Uint8Array();
@@ -20112,7 +20611,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     async createWritable(_options) {
       let expected;
       try {
-        expected = bytes2(await call("fs.read", this.name));
+        expected = bytes3(await call("fs.read", this.name));
       } catch (error2) {
         if (!(error2 instanceof Error) || error2.name !== "NotFoundError")
           throw error2;
@@ -20247,15 +20746,15 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         throw new SyncFileNotFoundError("\u540C\u671F\u30D5\u30A1\u30A4\u30EB\u304C\u307E\u3060\u5230\u7740\u3057\u3066\u3044\u307E\u305B\u3093\u3002");
       return new Uint8Array(await (await handle2.getFile()).arrayBuffer());
     }
-    async write(name, bytes3) {
+    async write(name, bytes4) {
       const handle2 = await this.directory.getFileHandle(name, { create: true });
       const writer = await handle2.createWritable({ mode: "exclusive" });
       try {
         const existing = new Uint8Array(await (await handle2.getFile()).arrayBuffer());
-        const expected = typeof bytes3 === "string" ? new TextEncoder().encode(bytes3) : bytes3;
+        const expected = typeof bytes4 === "string" ? new TextEncoder().encode(bytes4) : bytes4;
         if (existing.length && await digest(existing) !== await digest(expected))
           throw new Error("\u65E2\u5B58\u306E\u540C\u671F\u30D5\u30A1\u30A4\u30EB\u3068\u5185\u5BB9\u304C\u4E00\u81F4\u3057\u307E\u305B\u3093\u3002\u4E0A\u66F8\u304D\u3092\u505C\u6B62\u3057\u307E\u3057\u305F\u3002");
-        await writer.write(bytes3);
+        await writer.write(bytes4);
         await writer.close();
       } catch (error2) {
         await writer.abort().catch(() => {
@@ -20263,20 +20762,20 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         throw error2;
       }
     }
-    async put(id, dataset, kind, bytes3) {
+    async put(id, dataset, kind, bytes4) {
       await this.keyHeader(dataset);
       if (!kinds.some((value) => value === kind))
         throw new Error("\u540C\u671F\u30D5\u30A1\u30A4\u30EB\u7A2E\u5225\u304C\u4E0D\u6B63\u3067\u3059\u3002");
       const existing = await this.locate(id);
       if (existing) {
         const previous = new Uint8Array(await (await existing.getFile()).arrayBuffer());
-        if (existing.name !== `${id}.${kind}.bin` || previous.length && await digest(previous) !== await digest(bytes3)) {
+        if (existing.name !== `${id}.${kind}.bin` || previous.length && await digest(previous) !== await digest(bytes4)) {
           throw new Error("\u65E2\u5B58\u306E\u540C\u671F\u30D5\u30A1\u30A4\u30EB\u3068\u5185\u5BB9\u304C\u4E00\u81F4\u3057\u307E\u305B\u3093\u3002\u4E0A\u66F8\u304D\u3092\u505C\u6B62\u3057\u307E\u3057\u305F\u3002");
         }
         if (previous.length)
           return;
       }
-      await this.write(`${id}.${kind}.bin`, bytes3);
+      await this.write(`${id}.${kind}.bin`, bytes4);
     }
     async scan() {
       const manifest = await this.manifest();
@@ -20320,13 +20819,24 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       const known = new Set(previous);
       if (previous.some((id) => !ids.has(id)))
         throw new Error("\u65E2\u5B58\u306E\u540C\u671F\u30D5\u30A1\u30A4\u30EB\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002\u540C\u671F\u30A2\u30D7\u30EA\u306E\u5FA9\u5143\u3092\u78BA\u8A8D\u3057\u3066\u304B\u3089\u518D\u958B\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
-      const changes = current.filter((file) => !known.has(file.id));
-      return { token: JSON.stringify([...ids]), changes };
+      const changes2 = current.filter((file) => !known.has(file.id));
+      return { token: JSON.stringify([...ids]), changes: changes2 };
     }
     async remove(_id) {
       throw new Error("\u30D5\u30A1\u30A4\u30EB\u540C\u671F\u3067\u306F\u5C65\u6B74\u3092\u81EA\u52D5\u524A\u9664\u3057\u307E\u305B\u3093\u3002");
     }
   };
+
+  // src/store/storage/google/driveErrors.ts
+  function isInvalidSyncFileId(status, body) {
+    if (status !== 400 || !body || typeof body !== "object")
+      return false;
+    const error2 = body.error;
+    if (!error2 || typeof error2 !== "object")
+      return false;
+    const errors = error2.errors;
+    return Array.isArray(errors) && errors.some((item) => item && typeof item === "object" && (item.location === "fileId" || item.location === "parameter fileId"));
+  }
 
   // src/utils/chatFolders.ts
   var orderedFolders = (folders) => Object.values(folders).sort((a, b) => a.order - b.order);
@@ -20437,10 +20947,10 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
 
   // src/utils/chatShallowClone.ts
   var deepCloneSingleChat = (chat, id = editingUUID()) => {
-    return {
-      ...structuredClone(chat),
-      id
-    };
+    const clone2 = { ...structuredClone(chat), id };
+    for (const node of Object.values(clone2.branchTree?.nodes ?? {}))
+      delete node.streamState;
+    return clone2;
   };
 
   // src/utils/newChatDefaults.ts
@@ -22749,11 +23259,11 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   function wordDiff(a, b) {
     if (a === b)
       return [{ type: "equal", text: a }];
-    const dmp4 = new import_diff_match_patch3.diff_match_patch();
+    const dmp3 = new import_diff_match_patch3.diff_match_patch();
     const encode2 = (text) => text.split(/(\s+)/).map((token) => JSON.stringify(token) + "\n").join("");
-    const { chars1, chars2, lineArray } = dmp4.diff_linesToChars_(encode2(a), encode2(b));
-    const diffs = dmp4.diff_main(chars1, chars2, false);
-    dmp4.diff_charsToLines_(diffs, lineArray);
+    const { chars1, chars2, lineArray } = dmp3.diff_linesToChars_(encode2(a), encode2(b));
+    const diffs = dmp3.diff_main(chars1, chars2, false);
+    dmp3.diff_charsToLines_(diffs, lineArray);
     return diffs.map(([operation, encoded]) => ({
       type: operation === 0 ? "equal" : operation === 1 ? "added" : "removed",
       // A capped dictionary entry may contain many JSON lines; restore them all.
@@ -24941,8 +25451,8 @@ Do not attempt to edit, create, or delete files in these directories. If Claude 
   }
   function result(before, document2) {
     const persisted = JSON.parse(JSON.stringify(document2));
-    const changes = diffJSONChanges(before, persisted);
-    return { document: persisted, changes };
+    const changes2 = diffJSONChanges(before, persisted);
+    return { document: persisted, changes: changes2 };
   }
   function applySyncDocumentEdits(document2, before, edited, now = Date.now()) {
     validate(document2);
@@ -25004,21 +25514,7 @@ Do not attempt to edit, create, or delete files in these directories. If Claude 
   }
 
   // src/store/storage/google/records.ts
-  var import_diff_match_patch4 = __toESM(require_diff_match_patch(), 1);
-  var dmp3 = new import_diff_match_patch4.default();
-  function resolveStrict2(store, hash, visited = /* @__PURE__ */ new Set()) {
-    const entry = store[hash];
-    if (!entry || visited.has(hash) || visited.size >= 100)
-      throw new Error("Missing or cyclic message content; sync stopped.");
-    if (!entry.delta)
-      return entry.content;
-    visited.add(hash);
-    const base = resolveStrict2(store, entry.delta.baseHash, visited);
-    const [text, applied] = dmp3.patch_apply(dmp3.patch_fromText(entry.delta.patches), JSON.stringify(base));
-    if (applied.some((ok) => !ok))
-      throw new Error("Invalid message delta; sync stopped.");
-    return JSON.parse(text);
-  }
+  var resolveStrict2 = resolveContentStrict;
 
   // shared/google-sync/document.ts
   function documentOperation(json) {
@@ -25044,7 +25540,7 @@ Do not attempt to edit, create, or delete files in these directories. If Claude 
         }
         const original = input.document.snapshot;
         const replacedChats = /* @__PURE__ */ new Set();
-        const changes = diffJSONChanges(original, next.snapshot).flatMap((change) => {
+        const changes2 = diffJSONChanges(original, next.snapshot).flatMap((change) => {
           if (change.path[0] === "state" && change.path[1] === "chats" && typeof change.path[2] === "number") {
             const index = change.path[2], chat = next.snapshot.state.chats[index];
             if (chat && original.state.chats?.[index]?.id !== chat.id) {
@@ -25083,24 +25579,24 @@ Do not attempt to edit, create, or delete files in these directories. If Claude 
           const value = protect(change.value, [], sourcePath);
           return { ...change, value, rawSources };
         });
-        return JSON.stringify(changes);
+        return JSON.stringify(changes2);
       }
       case "v3Layout":
         return JSON.stringify(v3DocumentLayout(input.v3));
       case "project":
         return JSON.stringify(projectSyncDocument(input.document));
       case "applyEdits": {
-        let changes = applySyncDocumentEdits(input.document, input.before, input.edited, input.now).changes;
+        let changes2 = applySyncDocumentEdits(input.document, input.before, input.edited, input.now).changes;
         for (const hash of input.deltaEntries ?? []) {
           const before = input.before.contentStore?.[hash], edited = input.edited.contentStore?.[hash];
           if (edited && !orderedJSONEqual(before?.content, edited.content)) {
             const contentPath = ["snapshot", "state", "contentStore", hash, "content"];
-            changes = changes.filter((change) => !contentPath.every((part, index) => change.path[index] === part));
-            changes.push({ op: "set", path: contentPath, value: edited.content });
-            changes.push({ op: "remove", path: ["snapshot", "state", "contentStore", hash, "delta"] });
+            changes2 = changes2.filter((change) => !contentPath.every((part, index) => change.path[index] === part));
+            changes2.push({ op: "set", path: contentPath, value: edited.content });
+            changes2.push({ op: "remove", path: ["snapshot", "state", "contentStore", hash, "delta"] });
           }
         }
-        return JSON.stringify(changes);
+        return JSON.stringify(changes2);
       }
       case "importV3": {
         const layout = v3DocumentLayout(input.v3);
@@ -25112,19 +25608,19 @@ Do not attempt to edit, create, or delete files in these directories. If Claude 
       }
       case "mergeSnapshot": {
         mergeSyncDocumentSnapshot(input.document, input.incoming);
-        const changes = Object.keys(input.incoming).filter((key) => key !== "state").map((key) => ({
+        const changes2 = Object.keys(input.incoming).filter((key) => key !== "state").map((key) => ({
           op: "set",
           path: ["snapshot", key],
           source: "incoming",
           sourcePath: [key]
         }));
-        changes.push(...Object.keys(input.incoming.state).map((key) => ({
+        changes2.push(...Object.keys(input.incoming.state).map((key) => ({
           op: "set",
           path: ["snapshot", "state", key],
           source: "incoming",
           sourcePath: ["state", key]
         })));
-        return JSON.stringify(changes);
+        return JSON.stringify(changes2);
       }
       default:
         throw new Error("Unsupported document operation.");
@@ -25851,10 +26347,10 @@ ${messageContent}---
     if (!snapshot.state || typeof snapshot.state !== "object" || Array.isArray(snapshot.state)) {
       throw new Error("Invalid CloudKit snapshot state.");
     }
-    const version = snapshot.version == null ? 0 : Number(snapshot.version);
-    if (!Number.isSafeInteger(version) || version < 0)
+    const version2 = snapshot.version == null ? 0 : Number(snapshot.version);
+    if (!Number.isSafeInteger(version2) || version2 < 0)
       throw new Error("Invalid CloudKit snapshot version.");
-    return { wrapped: true, version };
+    return { wrapped: true, version: version2 };
   };
   var cloudKitLocalWins = (localUpdatedAt, serverUpdatedAt) => localUpdatedAt >= (serverUpdatedAt ?? 0);
 
@@ -27113,6 +27609,10 @@ ${text}`;
   var driveFolderName = (json) => JSON.stringify(defaultSyncFolderName(JSON.parse(json)));
   var driveListing = (json) => JSON.stringify({ parameters: driveListParameters(), suggestedName: nextSyncFolderName(DEFAULT_SYNC_FOLDER_NAME, JSON.parse(json)) });
   var driveHeaderID = (json) => JSON.stringify(encryptedSyncHeaderId(JSON.parse(json)));
+  var driveErrorKind = (json) => {
+    const input = JSON.parse(json);
+    return JSON.stringify(isInvalidSyncFileId(input.status, input.body));
+  };
   var global2 = globalThis;
   global2.crypto = { randomUUID: () => host("uuid") };
   global2.console = { error: () => {
@@ -27264,7 +27764,7 @@ ${text}`;
     if (result3.ok)
       reply.resolve(result3.value);
     else
-      reply.reject(result3.notFound ? new SyncFileNotFoundError(result3.error) : new Error(result3.error));
+      reply.reject(result3.invalidFileId ? new InvalidSyncFileIdError(result3.error) : result3.notFound ? new SyncFileNotFoundError(result3.error) : new Error(result3.error));
   };
   var result2 = () => JSON.stringify({ ...outcome, value: void 0, valueJSON: outcome.value === void 0 ? null : JSON.stringify(outcome.value) });
   var recordOutcome;

@@ -5,6 +5,7 @@ import useStore from '@store/store';
 import PopupModal from '@components/PopupModal';
 import Toggle from '@components/Toggle';
 import { SettingsGroup } from './SettingsMenu';
+import ProxyStatusButton from './ProxyStatusView';
 
 const INPUT_CLASS =
   'w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500';
@@ -68,6 +69,7 @@ const ProxySettingsForm = ({
             />
           </div>
         </SettingsGroup>
+        <ProxyStatusButton config={{ endpoint, authToken }} />
       </>
     );
   }
@@ -105,6 +107,7 @@ const ProxySettingsForm = ({
           aria-label={t('proxyAuthToken') as string}
         />
       </div>
+      <ProxyStatusButton config={{ endpoint, authToken }} />
     </>
   );
 };

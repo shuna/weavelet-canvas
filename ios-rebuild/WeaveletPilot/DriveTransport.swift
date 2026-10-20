@@ -6,13 +6,14 @@ protocol SyncDrive: Sendable {
 }
 
 enum DriveTransportError: LocalizedError, Equatable {
-    case notFound, invalidResponse, http(Int), collision
+    case notFound, invalidResponse, http(Int), collision, invalidFileId
     var errorDescription: String? {
         switch self {
         case .notFound: return "Google Driveの同期ファイルが見つかりません。"
         case .invalidResponse: return "Google Driveの応答形式が不正です。"
         case .http(let status): return "Google Drive HTTP \(status)"
         case .collision: return "Google Driveのfile IDが異なるデータと衝突しました。"
+        case .invalidFileId: return "Google Driveが同期file IDを受け付けませんでした。"
         }
     }
 }
@@ -51,6 +52,13 @@ actor DriveTransport: SyncDrive {
         guard let http = response as? HTTPURLResponse else { throw DriveTransportError.invalidResponse }
         return (data, http)
     }
+    private func failure(_ status: Int, body: Data) throws -> DriveTransportError {
+        guard status == 400 else { return .http(status) }
+        let parsed = (try? OrderedJSON.decode(body)) ?? .null
+        let invalid = try SharedWebOperations.call("driveErrorKind", .object([
+            .init(key: "status", value: .number(String(status))), .init(key: "body", value: parsed)]))
+        return invalid == .bool(true) ? .invalidFileId : .http(status)
+    }
     private func json(_ path: String, query: [URLQueryItem] = [], body: OrderedJSON? = nil) async throws -> OrderedJSON {
         var request = URLRequest(url: try url(path, query: query))
         if let body {
@@ -58,13 +66,13 @@ actor DriveTransport: SyncDrive {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
         let (data, response) = try await send(request)
-        guard (200...299).contains(response.statusCode) else { throw DriveTransportError.http(response.statusCode) }
+        guard (200...299).contains(response.statusCode) else { throw try failure(response.statusCode, body: data) }
         return try OrderedJSON.decode(data)
     }
     private func read(_ id: String) async throws -> Data {
         let (bytes, response) = try await send(URLRequest(url: url("/files/\(component(id))", query: [URLQueryItem(name: "alt", value: "media")])))
         if response.statusCode == 404 { throw DriveTransportError.notFound }
-        guard (200...299).contains(response.statusCode) else { throw DriveTransportError.http(response.statusCode) }
+        guard (200...299).contains(response.statusCode) else { throw try failure(response.statusCode, body: bytes) }
         return bytes
     }
     private func put(_ id: String, dataset: String, kind: String, bytes: Data) async throws {
@@ -81,12 +89,12 @@ actor DriveTransport: SyncDrive {
         var request = URLRequest(url: try url("/files", query: [URLQueryItem(name: "uploadType", value: "multipart")], upload: true))
         request.httpMethod = "POST"; request.httpBody = body
         request.setValue("multipart/related; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        let (_, response) = try await send(request)
+        let (responseData, response) = try await send(request)
         if response.statusCode == 409 {
             guard SHA256.hash(data: try await read(id)) == SHA256.hash(data: bytes) else { throw DriveTransportError.collision }
             return
         }
-        guard (200...299).contains(response.statusCode) else { throw DriveTransportError.http(response.statusCode) }
+        guard (200...299).contains(response.statusCode) else { throw try failure(response.statusCode, body: responseData) }
     }
     private func list(_ dataset: String, kind: String) async throws -> OrderedJSON {
         var ids: [OrderedJSON] = []; var page: String?; var seen = Set<String>()

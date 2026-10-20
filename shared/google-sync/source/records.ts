@@ -4,8 +4,8 @@ import { isBrowserLocalRecord, withoutBrowserLocalSettings } from './settings';
 import type { StorageValue } from 'zustand/middleware';
 import type { PersistedStoreState } from '@store/persistence';
 import type { BranchNode, ContentInterface } from '@type/chat';
-import { addContent, computeContentHash, type ContentStoreData } from '@utils/contentStore';
-import DiffMatchPatch from 'diff-match-patch';
+import { addContent, computeContentHash, retainContent, resolveContentStrict, type ContentStoreData } from '@utils/contentStore';
+import { createContentProjector, cachedRecordDigest } from './recordCache';
 import { digest } from './crypto';
 import { captureProjectedMessageAttributes, readMessageAttributes } from '@utils/branchUtils';
 
@@ -16,7 +16,6 @@ export class SyncConflictError extends Error {
 export type Snapshot = StorageValue<Partial<PersistedStoreState>>;
 export type Records = Record<string, string>;
 export type Change = { key: string; before: string | null; after: string | null };
-const dmp = new DiffMatchPatch();
 const forbidden = new Set(['__proto__', 'prototype', 'constructor']);
 
 const readNodeOrder = (value: unknown): string[] => {
@@ -69,28 +68,18 @@ function canonical(value: any): string {
 }
 
 // Fail closed: the local resolver deliberately repairs damaged chains; sync must not publish that repair as an empty message.
-export function resolveStrict(store: ContentStoreData, hash: string, visited = new Set<string>()): ContentInterface[] {
-  const entry = store[hash];
-  if (!entry || visited.has(hash) || visited.size >= 100) throw new Error('Missing or cyclic message content; sync stopped.');
-  if (!entry.delta) return entry.content;
-  visited.add(hash);
-  const base = resolveStrict(store, entry.delta.baseHash, visited);
-  const [text, applied] = dmp.patch_apply(dmp.patch_fromText(entry.delta.patches), JSON.stringify(base));
-  if (applied.some((ok: boolean) => !ok)) throw new Error('Invalid message delta; sync stopped.');
-  return JSON.parse(text);
-}
+export const resolveStrict = resolveContentStrict;
 
 export async function toRecords(snapshot: Snapshot): Promise<Records> {
-  // JSON also removes undefined fields, exactly as the existing persistence format does.
   const started = performance.now();
-  const serialized = JSON.stringify(snapshot);
-  const copy = JSON.parse(serialized) as Snapshot;
-  const state = withoutBrowserLocalSettings(copy.state);
+  // Copy only mutable metadata; never stringify and parse the entire body store.
+  const { chats: sourceChats, contentStore: source = {}, ...shared } = withoutBrowserLocalSettings(snapshot.state);
+  const state = JSON.parse(JSON.stringify(shared)) as Snapshot['state'];
   if (state.folders !== undefined && !validateFolderHierarchy(state.folders)) throw new Error('Invalid folder hierarchy; sync stopped.');
   const records: Records = Object.create(null);
-  const source = state.contentStore ?? {};
   const contentIds = new Map<string, string>();
-  const content: Record<string, unknown> = Object.create(null);
+  const content: Records = Object.create(null);
+  const projector = createContentProjector(source);
   const assets: Record<string, string> = Object.create(null);
   const entryIds = new Map<string, string>();
   const entries: Record<string, { contentId: string; metadata: Record<string, unknown> }> = Object.create(null);
@@ -101,7 +90,7 @@ export async function toRecords(snapshot: Snapshot): Promise<Records> {
     for (const part of encoded) {
       if (part.type === 'image_url' && typeof part.image_url?.url === 'string') {
         const url = part.image_url.url;
-        const id = await digest(url);
+        const id = await cachedRecordDigest(url);
         assets[id] = url;
         part.image_url.url = { asset: id };
       }
@@ -110,14 +99,26 @@ export async function toRecords(snapshot: Snapshot): Promise<Records> {
   };
   // Entry identity includes unknown metadata; refCount and delta encoding are local optimizations.
   for (const [hash, entry] of Object.entries(source)) {
-    const parts = await externalize(resolveStrict(source, hash));
-    const contentId = await digest(canonical(parts));
-    content[contentId] = parts;
+    const projected = await projector.project(hash, async parts => {
+      // Keep dependencies with the projection so cache hits retain every asset.
+      const found: Records = {};
+      const encoded = JSON.parse(JSON.stringify(parts));
+      for (const part of encoded) if (part.type === 'image_url' && typeof part.image_url?.url === 'string') {
+        const url = part.image_url.url, id = await cachedRecordDigest(url);
+        found[id] = url;
+        part.image_url.url = { asset: id };
+      }
+      const value = canonical(encoded);
+      return { id: await cachedRecordDigest(value), value, assets: found };
+    });
+    const contentId = projected.id;
+    content[contentId] = projected.value;
     contentIds.set(hash, contentId);
+    Object.assign(assets, projected.assets);
     const { content: _content, refCount: _refCount, delta: _delta, ...metadata } = entry;
     checkSafeMetadata(metadata);
-    const record = { contentId, metadata };
-    const entryId = await digest(canonical(record));
+    const record = { contentId, metadata: JSON.parse(JSON.stringify(metadata)) };
+    const entryId = await cachedRecordDigest(canonical(record));
     entries[entryId] = record;
     entryIds.set(hash, entryId);
     retained[entryId] = true;
@@ -131,17 +132,20 @@ export async function toRecords(snapshot: Snapshot): Promise<Records> {
   const chats: Record<string, unknown> = Object.create(null);
   const order: string[] = [];
   const nodeOrder: { chats: Record<string, string[]>; clipboard?: string[] } = { chats: Object.create(null) };
-  for (const chat of state.chats ?? []) {
+  for (const original of sourceChats ?? []) {
+    const projected = { ...original };
+    captureProjectedMessageAttributes(projected, source);
+    // Capture opaque projected attributes before omitting duplicated tree bodies.
+    const chat = JSON.parse(JSON.stringify(projected.branchTree ? { ...projected, messages: undefined } : projected)) as NonNullable<typeof sourceChats>[number];
     if (!chat.id || chats[chat.id]) throw new Error('Missing or duplicate chat ID; sync stopped.');
     order.push(chat.id);
     if (chat.branchTree) {
-      captureProjectedMessageAttributes(chat as any, source);
       readMessageAttributes(chat.branchTree);
       nodeOrder.chats[chat.id] = Object.keys(chat.branchTree.nodes);
       entryRefs.chats[chat.id] = Object.create(null);
       for (const node of Object.values(chat.branchTree.nodes)) {
         const statsKey = `${chat.id}:::${node.id}`;
-        const generationId = node.openRouterObservation?.generationId ?? copy.state.pendingVerifications?.[statsKey]?.generationId ?? copy.state.verifiedStats?.[statsKey]?.generationId;
+        const generationId = node.openRouterObservation?.generationId ?? snapshot.state.pendingVerifications?.[statsKey]?.generationId ?? snapshot.state.verifiedStats?.[statsKey]?.generationId;
         // Retain the lookup identity, not the device's verification queue/cache.
         if (generationId) node.openRouterObservation = { ...node.openRouterObservation, generationId };
         translate(node, entryRefs.chats[chat.id]);
@@ -174,15 +178,16 @@ export async function toRecords(snapshot: Snapshot): Promise<Records> {
       }
     } else records[JSON.stringify(path)] = canonical(value);
   };
-  flatten({ version: copy.version ?? 0, state, chats, order, nodeOrder, contentEntryFormat: 1, contentEntryRefs: entryRefs, retainedContentEntries: retained }, []);
+  flatten({ version: snapshot.version ?? 0, state, chats, order, nodeOrder, contentEntryFormat: 1, contentEntryRefs: entryRefs, retainedContentEntries: retained }, []);
   for (const [id, entry] of Object.entries(entries)) records[JSON.stringify(['contentEntries', id])] = canonical(entry);
-  for (const [id, parts] of Object.entries(content)) records[JSON.stringify(['content', id])] = canonical(parts);
+  for (const [id, value] of Object.entries(content)) records[JSON.stringify(['content', id])] = value;
   for (const [id, url] of Object.entries(assets)) records[JSON.stringify(['assets', id])] = JSON.stringify(url);
-  recordMetric('records', started, new TextEncoder().encode(serialized).length, Object.values(records).reduce((n, value) => n + new TextEncoder().encode(value).length, 0));
+  const bytes = Object.values(records).reduce((n, value) => n + new TextEncoder().encode(value).length, 0);
+  recordMetric('records', started, bytes, bytes);
   return records;
 }
 
-export async function fromRecords(records: Records): Promise<Snapshot> {
+export async function fromRecords(records: Records, previous: ContentStoreData = {}): Promise<Snapshot> {
   const root: any = Object.create(null);
   let skippedLocalState = false;
   const generationIds = new Map<string, string>();
@@ -224,14 +229,19 @@ export async function fromRecords(records: Records): Promise<Snapshot> {
     if (orders.clipboard !== undefined) readNodeOrder(orders.clipboard);
   }
   if (root.state.folders !== undefined && !validateFolderHierarchy(root.state.folders)) throw new Error('Invalid folder hierarchy; sync stopped.');
+  const restoredImages = new Map<string, string>();
   const restoreAssets = async (parts: any[]) => {
     if (!Array.isArray(parts)) throw new Error('Invalid message content.');
     const restored = structuredClone(parts);
     for (const part of restored) {
       if (part.type === 'image_url' && typeof part.image_url?.url === 'object') {
         const id = part.image_url.url?.asset;
-        const url = root.assets?.[id];
-        if (typeof url !== 'string' || await digest(url) !== id) throw new Error('Missing or damaged image.');
+        let url = restoredImages.get(id);
+        if (url === undefined) {
+          url = root.assets?.[id];
+          if (typeof url !== 'string' || await digest(url) !== id) throw new Error('Missing or damaged image.');
+          restoredImages.set(id, url);
+        }
         part.image_url.url = url;
       }
     }
@@ -252,35 +262,129 @@ export async function fromRecords(records: Records): Promise<Snapshot> {
     for (const [chatId, values] of Object.entries(refs.chats)) checkRefs(values, root.chats[chatId]?.branchTree?.nodes);
     if (refs.clipboard !== undefined) checkRefs(refs.clipboard, root.state.branchClipboard?.nodes);
   }
+  const restoredBodies = new Map<string, ContentInterface[]>();
+  const restoreBody = async (contentId: string): Promise<ContentInterface[]> => {
+    const cached = restoredBodies.get(contentId);
+    if (cached) return cached;
+    const parts = root.content?.[contentId];
+    if (!parts || await digest(canonical(parts)) !== contentId) throw new Error('Missing or damaged message content.');
+    const body = await restoreAssets(parts);
+    restoredBodies.set(contentId, body);
+    return body;
+  };
+  const verifiedEntries = new Set<string>();
+  const readEntry = async (entryId: string) => {
+    const entry = root.contentEntries?.[entryId];
+    if (!verifiedEntries.has(entryId)) {
+      if (!entry || typeof entry.contentId !== 'string' || !entry.metadata || typeof entry.metadata !== 'object' || Array.isArray(entry.metadata) ||
+          ['content', 'refCount', 'delta'].some(key => Object.hasOwn(entry.metadata, key)) || await digest(canonical(entry)) !== entryId) {
+        throw new Error('Missing or damaged content entry.');
+      }
+      checkSafeMetadata(entry.metadata);
+      await restoreBody(entry.contentId);
+      verifiedEntries.add(entryId);
+    }
+    return entry;
+  };
+  const metadataOf = (entry: ContentStoreData[string]) => {
+    const { content: _content, refCount: _refCount, delta: _delta, ...metadata } = entry;
+    return JSON.parse(JSON.stringify(metadata));
+  };
+  const reuseKey = (parts: ContentInterface[], metadata?: Record<string, unknown>) =>
+    canonical(extended ? { content: parts, metadata } : parts);
+  let previousDeltas: Map<string, string> | undefined;
+  let remoteContentIds: Map<string, string> | undefined;
+  let remoteEntryIds: Map<string, string> | undefined;
+  let remoteAssetIds: Map<string, string> | undefined;
+  const reuseDelta = async (parts: ContentInterface[], metadata?: Record<string, unknown>): Promise<string | undefined> => {
+    if (!previousDeltas) {
+      previousDeltas = new Map();
+      for (const [id, entry] of Object.entries(previous)) if (entry.delta) {
+        try {
+          const resolved: [string, string][] = [];
+          let current = id;
+          while (previous[current]) {
+            resolved.push([reuseKey(resolveContentStrict(previous, current), metadataOf(previous[current])), current]);
+            if (!previous[current].delta) break;
+            current = previous[current].delta!.baseHash;
+          }
+          for (const [value, hash] of resolved) previousDeltas.set(value, hash);
+        } catch { /* Damaged old representations cannot replace verified remote content. */ }
+      }
+    }
+    const hash = previousDeltas.get(reuseKey(parts, metadata));
+    if (hash === undefined) return;
+    const chain: { hash: string; entryId?: string }[] = [];
+    try {
+      let current = hash;
+      while (previous[current]) {
+        const body = resolveContentStrict(previous, current);
+        let entryId: string | undefined;
+        if (extended) {
+          // Reuse only entries retained by the remote snapshot, including every delta base.
+          remoteContentIds ??= new Map(Object.entries(root.content ?? {}).map(([id, value]) => [canonical(value), id]));
+          remoteEntryIds ??= new Map(Object.entries(root.contentEntries ?? {}).map(([id, value]) => [canonical(value), id]));
+          remoteAssetIds ??= new Map(Object.entries(root.assets ?? {}).map(([id, value]) => [value as string, id]));
+          const encoded = structuredClone(body) as any[];
+          for (const part of encoded) if (part.type === 'image_url' && typeof part.image_url?.url === 'string') {
+            const asset = remoteAssetIds.get(part.image_url.url);
+            if (asset === undefined) return;
+            part.image_url.url = { asset };
+          }
+          const contentId = remoteContentIds.get(canonical(encoded));
+          entryId = remoteEntryIds.get(canonical({ contentId, metadata: metadataOf(previous[current]) }));
+          if (!entryId || root.retainedContentEntries?.[entryId] !== true ||
+              (restoredEntries.has(entryId) && restoredEntries.get(entryId) !== current)) return;
+          chain.push({ hash: current, entryId });
+        } else chain.push({ hash: current });
+        if (store[current] && (canonical(resolveContentStrict(store, current)) !== canonical(body) ||
+            (extended && canonical(metadataOf(store[current])) !== canonical(metadataOf(previous[current]))))) return;
+        if (!previous[current].delta) break;
+        current = previous[current].delta!.baseHash;
+      }
+    } catch { return; } // A damaged old delta uses the verified full-body fallback.
+    // Remote validation errors must propagate, rather than be swallowed as local cache damage.
+    for (const item of chain) if (item.entryId) await readEntry(item.entryId);
+    for (const item of chain.reverse()) {
+      store[item.hash] ??= { ...structuredClone(previous[item.hash]), refCount: 0 };
+      if (item.entryId) restoredEntries.set(item.entryId, item.hash);
+    }
+    return hash;
+  };
   const restoreEntry = async (entryId: string): Promise<string> => {
     if (typeof entryId !== 'string') throw new Error('Invalid content entry reference.');
     if (restoredEntries.has(entryId)) return restoredEntries.get(entryId)!;
-    const entry = root.contentEntries?.[entryId];
-    if (!entry || typeof entry.contentId !== 'string' || !entry.metadata || typeof entry.metadata !== 'object' || Array.isArray(entry.metadata) ||
-        ['content', 'refCount', 'delta'].some(key => Object.hasOwn(entry.metadata, key)) || await digest(canonical(entry)) !== entryId) {
-      throw new Error('Missing or damaged content entry.');
-    }
-    checkSafeMetadata(entry.metadata);
-    const parts = root.content?.[entry.contentId];
-    if (!parts || await digest(canonical(parts)) !== entry.contentId) throw new Error('Missing or damaged message content.');
-    const body = await restoreAssets(parts);
+    const entry = await readEntry(entryId);
+    const body = await restoreBody(entry.contentId);
+    const reused = await reuseDelta(body, entry.metadata);
+    if (reused !== undefined) return reused;
     let hash = computeContentHash(body);
     while (Object.hasOwn(store, hash)) hash += '_';
     store[hash] = { ...entry.metadata, content: body, refCount: 0 };
     restoredEntries.set(entryId, hash);
     return hash;
   };
+  const restoredContent = new Map<string, string>();
   const restore = async (node: BranchNode, refs?: Record<string, string>) => {
     if (extended) {
       const entryId = refs?.[node.id];
       if (!entryId || root.contentEntries?.[entryId]?.contentId !== node.contentHash) throw new Error('Inconsistent content entry reference.');
       const hash = await restoreEntry(entryId);
-      store[hash].refCount++;
+      retainContent(store, hash);
       node.contentHash = hash;
     } else {
-      const parts = root.content?.[node.contentHash];
-      if (!parts || await digest(canonical(parts)) !== node.contentHash) throw new Error('Missing or damaged message content.');
-      node.contentHash = addContent(store, await restoreAssets(parts));
+      const cached = restoredContent.get(node.contentHash);
+      if (cached !== undefined) {
+        retainContent(store, cached);
+        node.contentHash = cached;
+        return;
+      }
+      const body = await restoreBody(node.contentHash);
+      const reused = await reuseDelta(body);
+      const localHash = reused ?? addContent(store, body);
+      if (reused !== undefined) retainContent(store, reused);
+      restoredContent.set(node.contentHash, localHash);
+      node.contentHash = localHash;
     }
   };
   // New chats created concurrently may not appear in another writer's order array.
@@ -406,7 +510,7 @@ export async function applyChanges(records: Records, changes: Change[]): Promise
 // The baseline only needs equality/precondition hashes, not a second copy of every image/body.
 export async function hashRecords(records: Records): Promise<Records> {
   const hashes: Records = {};
-  for (const [key, value] of Object.entries(records)) hashes[key] = await digest(value);
+  for (const [key, value] of Object.entries(records)) hashes[key] = await cachedRecordDigest(value);
   return hashes;
 }
 export function diffHashedRecords(before: Records, after: Records, hashes: Records): Change[] {

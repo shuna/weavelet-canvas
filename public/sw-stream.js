@@ -590,7 +590,7 @@ async function handleStartStream(msg, port) {
           'read#' + readCount + ' bytes=' + byteLength + ' total=' + totalBytes + ' done=' + done
         );
         const chunk = partial + decoder.decode(done ? undefined : value, { stream: !done });
-        const proxySse = parseProxySse(chunk, done);
+        const proxySse = parseProxySse(chunk);
         partial = proxySse.partial;
 
         for (const evt of proxySse.events) {
@@ -613,6 +613,7 @@ async function handleStartStream(msg, port) {
           }
 
           if (evt.rawText) {
+            scheduleFlush();
             // Unwrap: parse the raw LLM SSE text
             const llmChunk = llmPartial + evt.rawText;
             const llmParsed = parseEventSource(llmChunk, false);
@@ -649,7 +650,6 @@ async function handleStartStream(msg, port) {
                 totalTextChars += parsed.content.length;
                 postToClient({ type: 'sw-chunk', requestId, text: parsed.content, generationId });
                 bufferedText += parsed.content;
-                scheduleFlush();
               }
             }
 

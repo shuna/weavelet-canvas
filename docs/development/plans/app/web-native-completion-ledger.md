@@ -1130,4 +1130,18 @@ nativeは原本payloadとrecord既知metadataを既存CloudKitSyncStoreへ原子
 
 以前baselineでも失敗していたexchangeRead.contractのmockへ、実importServiceが参照するgetInitialStateを補った。期待値・比較assertを変更せず既存10件が全成功し、従来6件のmock起因失敗を解消した。ログ /private/tmp/weavelet-exchange-read-mock-test.log、/private/tmp/weavelet-legacy-cloudkit-{native-test,types,build}.log。変更のないcodec/全I/O/暗号化同期の成功結果は再利用した。
 
-origin/mainをfetchしa4d83db6へ28commitの追加を確認した。指定範囲の差分棚卸しではweavelet-sync-delta(version1)、commit manifest3/pack2、WLCACHE、Google事前採番とproxyの永続復旧・status/storage管理等が増えている。現在の共有/native側では新wire識別子を確認できず、最新版とのオンライン互換性を完了扱いにしない。今回の成果を保存した上で次の機能群でmain→featureの取り込みと共有接続を扱う。mainへの統合・push・iPhone照会/導入は行っていない。
+origin/mainをfetchしa4d83db6へ28commitの追加を確認した。指定範囲の差分棚卸しではweavelet-sync-delta(version1)、commit manifest3/pack2、WLCACHE、Google事前採番とproxyの永続復旧・status/storage管理等が増えている。この時点では最新版とのオンライン互換性を完了扱いにせず、次節でmain→featureの取り込みと共有接続を確認した。mainへの統合・push・iPhone照会/導入は行っていない。
+
+## 最新mainの同期形式を共有実行へ統合（2026-10-20）
+
+main a4d83db6をfeatureへ取り込み、未知属性・未参照content entry・全ノード列挙の保持と、mainのwire delta/commit manifest3/pack2・cache・Google事前採番を両立した。iOSはWebのEncryptedSync実クラスを既存JSC bundleで実行し、Swiftに別の同期protocolを追加しない。wireDeltaの書込既定値はWeb同様falseを維持する。Web workerとnative adapterは同じwire結合/復号関数を使い、cache codecはブラウザstream APIがない環境で既存fallbackを利用する。native HTTP境界は構造化された400 fileIdエラーだけを共有判定へ渡し、既存engineのID再採番へ接続する。応答本文を利用者向けerrorへ露出しない。
+
+同じ本文でもremote entryのmetadataが変わった場合やbaseがremoteで保持されなくなった場合、以前のlocal delta entryを復活させない。record digest回数の期待値3→5は、本文ID2・metadata entry ID2・共有image ID1という実処理に対応する。opaqueなmessage属性はWebのmessages投影を削除する前に捕捉する。
+
+mainの表示用resolveContentは破損deltaを空表示へ落とすため、取込み境界では既存validateDeltaIntegrityによりmissing/cyclic deltaを拒否する。旧exchangeRead fixtureの履歴的な空表示成功を入力受入の保証とは扱わず、strict拒否・元workspace/入力不変へ期待を修正した。正常入力と既存workspaceの壊れた参照は区別する。独立Astraでimmediate replaceが検証前にAIを取り消す問題を発見し、同じ検証を取消前にも実行した。共有変換入口の検証は残し、正常時は取消完了後のstateを取得する既存順序を維持する。append/replace双方で未取消・未公開・未保存と全state/入力不変を確認し、限定再監査は新規なし。
+
+実Web engine/WebCryptoが生成したmanifest3 multipartとpack2をCatalystで読み込み、全records照合、native更新/保存/再起動を確認した。そのnative暗号化出力2本を実Web readerで読み戻し、全キーとrecord文字列が一致した。JSONにはprototypeがないため、比較時に外側辞書だけObject.fromEntriesで揃え、record内部のキー順・値・未知属性を正規化しない。認証が通る暗号化payload内のdelta hashだけを破損させた入力は拒否され、accepted snapshotを公開しない。fixtureは合成データ/FAKE passphraseのみ。
+
+確認結果：初回Web関連242件中241件成功、残る破損取込の期待差は上記根拠で修正した。取込境界100件成功後、Astra指摘修正に関係する2files81件成功（前結果と重複、追加replace2件を含む）。proxy mergeのWeb79件とWorker43件成功。既存Catalyst同期25件、HTTP/ID回復境界2件、新wire境界2件成功を回収し、最終bundleではMarkdown接続1件と新wire境界2件が成功した。型検査・Vite build・共有bundle/Markdown再生成と鮮度確認成功。Markdownから不要になったWeb状態store依存が除去されたため、それらだけのnoticeも生成結果から除かれる。
+
+ログは /private/tmp/weavelet-main-{integration-web-test,import-boundary-test,import-final-test,proxy-merge-test,proxy-worker-test,integration-native-test,invalid-id-native-test,wire-delta-native-test,wire-delta-web-read,final-native-test,final-types,final-build,final-freshness,final-markdown-freshness}.log。未変更の全業務規則や旧移行suiteを一律再実行していない。実Google/CloudKit、ブラウザ実権限、実iCloud配信、手動UI/性能は未確認。mainへ追加されたproxy状態/保存データ管理と永続node状態のnative表示接続、旧Google保存の読取等は次の機能群として残す。feature→mainの統合・push・iPhone照会/導入は行っていない。

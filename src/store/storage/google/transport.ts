@@ -1,7 +1,7 @@
 import { defaultSyncFolderName } from './datasetListing';
 import { encryptedSyncHeaderId, SYNC_FOLDER_TYPE } from './datasetHeader';
 export { SYNC_FOLDER_TYPE } from './datasetHeader';
-import { SyncFileNotFoundError, type SyncChange, type SyncTransport } from '../sync/transport';
+import { InvalidSyncFileIdError, SyncFileNotFoundError, type SyncChange, type SyncTransport } from '../sync/transport';
 import type { TransferPurpose } from './diagnostics';
 import { measure, recordMetric } from './metrics';
 import { beginTransfer } from './progress';
@@ -10,6 +10,7 @@ import useCloudAuthStore from '@store/cloud-auth-store';
 import { createMultipartRelatedBody } from '@api/helper';
 import type { GoogleFileResource } from '@type/google-api';
 import { digest } from './crypto';
+import { isInvalidSyncFileId } from './driveErrors';
 
 export { DEFAULT_SYNC_FOLDER_NAME, nextSyncFolderName } from './datasetListing';
 
@@ -19,7 +20,35 @@ export interface DriveFile extends GoogleFileResource {
 }
 export { SyncFileNotFoundError as DriveNotFoundError };
 export class DriveTransport implements SyncTransport<DriveFile> {
+  private readonly generatedIds = new Set<string>();
   constructor(private token: () => string) {}
+
+  private async driveError(response: Response, url: string, method = 'GET', context?: string): Promise<Error> {
+    let detail = response.statusText;
+    let invalidFileId = false;
+    try {
+      const body = await response.text();
+      if (body) {
+        try {
+          const parsed = JSON.parse(body);
+          const apiError = parsed?.error;
+          invalidFileId = isInvalidSyncFileId(response.status, parsed);
+          const reasons = Array.isArray(apiError?.errors)
+            ? apiError.errors.map((item: { domain?: string; reason?: string; location?: string; locationType?: string }) => {
+              const reason = [item.domain, item.reason].filter(Boolean).join('/');
+              const location = item.location && `${item.locationType ? `${item.locationType} ` : ''}${item.location}`;
+              return [reason, location && `${reason ? 'at ' : ''}${location}`].filter(Boolean).join(' ');
+            }).filter(Boolean).join(', ')
+            : '';
+          detail = [apiError?.message, apiError?.status, reasons, context].filter(Boolean).join(' — ') || body;
+        } catch { detail = body; }
+      }
+      if (context && !detail.includes(context)) detail += ` — ${context}`;
+    } catch { /* Keep status text if the response body is unavailable. */ }
+    const endpoint = new URL(url).pathname.replace(/\/files\/[^/]+(?=\/|$)/g, '/files/{fileId}');
+    const message = `Google Drive ${response.status} (${method} ${endpoint}): ${detail.slice(0, 1000) || 'Unknown error'}`;
+    return invalidFileId ? new InvalidSyncFileIdError(message) : new Error(message);
+  }
 
   private async request(url: string, init: RequestInit = {}) {
     const connection = useCloudAuthStore.getState().providers.google.connectionId;
@@ -53,7 +82,7 @@ export class DriveTransport implements SyncTransport<DriveFile> {
   private async json(url: string, init?: RequestInit): Promise<any> {
     const started = performance.now();
     const response = await this.request(url, init);
-    if (!response.ok) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
+    if (!response.ok) throw await this.driveError(response, url, init?.method ?? 'GET');
     const text = await response.text();
     recordMetric('drive', started, typeof init?.body === 'string' ? new TextEncoder().encode(init.body).length : 0, new TextEncoder().encode(text).length);
     return JSON.parse(text);
@@ -71,6 +100,7 @@ export class DriveTransport implements SyncTransport<DriveFile> {
         throw new Error('Drive did not return the requested file IDs.');
       }
       ids.push(...data.ids);
+      data.ids.forEach((id: string) => this.generatedIds.add(id));
     }
     if (new Set(ids).size !== count) throw new Error('Drive returned duplicate file IDs.');
     return ids;
@@ -99,7 +129,7 @@ export class DriveTransport implements SyncTransport<DriveFile> {
       const file = await this.metadata(id);
       if (file.id === id && file.mimeType === SYNC_FOLDER_TYPE && file.appProperties?.weaveletSync === '1' && file.appProperties.headerId === headerId) return file;
     }
-    if (!response.ok) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
+    if (!response.ok) throw await this.driveError(response, `${API}/files?fields=id,name,mimeType,appProperties`, 'POST');
     const text = await response.text();
     recordMetric('drive', started, new TextEncoder().encode(body).length, new TextEncoder().encode(text).length);
     return JSON.parse(text);
@@ -109,7 +139,7 @@ export class DriveTransport implements SyncTransport<DriveFile> {
     const started = performance.now();
     const response = await this.request(`${API}/files/${encodeURIComponent(id)}?alt=media`);
     if (response.status === 404) throw new SyncFileNotFoundError('Google Drive 404: missing sync file.');
-    if (!response.ok) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
+    if (!response.ok) throw await this.driveError(response, `${API}/files/${encodeURIComponent(id)}?alt=media`);
     const bytes = new Uint8Array(await response.arrayBuffer());
     finish(bytes.length);
     recordMetric('drive', started, 0, bytes.length);
@@ -129,7 +159,8 @@ export class DriveTransport implements SyncTransport<DriveFile> {
       if (await digest(await this.read(id)) !== await digest(bytes)) throw new Error('Drive file ID collision.');
       return;
     }
-    if (!response.ok) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
+    if (!response.ok) throw await this.driveError(response, 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', 'POST',
+      `fileId=${JSON.stringify(id)} (length ${id.length}, generated in this session: ${this.generatedIds.has(id)}); parentId=${JSON.stringify(dataset)}; kind=${kind}`);
     finish(bytes.length);
   }
   async startToken(): Promise<string> {
@@ -171,7 +202,7 @@ export class DriveTransport implements SyncTransport<DriveFile> {
   async remove(id: string): Promise<void> {
     const response = await this.request(`${API}/files/${encodeURIComponent(id)}`, { method: 'DELETE' });
     // Deleting the captured source set is safe to retry after a lost response.
-    if (!response.ok && response.status !== 404) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
+    if (!response.ok && response.status !== 404) throw await this.driveError(response, `${API}/files/${encodeURIComponent(id)}`, 'DELETE');
   }
   private async listKind(dataset: string, kind: 'commit' | 'pack'): Promise<string[]> {
     const ids: string[] = [];

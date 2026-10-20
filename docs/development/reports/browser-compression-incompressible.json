@@ -1,0 +1,109 @@
+{
+  "createdAt": "2026-10-15T13:09:35.159Z",
+  "browser": "155.0.8059.79",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+  "hardwareConcurrency": 10,
+  "cases": [
+    {
+      "name": "scale1",
+      "options": {
+        "scale": 1,
+        "bodyBytes": 5300,
+        "incompressible": true
+      },
+      "profile": {
+        "treeChats": 73,
+        "treeNodes": 3724,
+        "legacyChats": 722,
+        "legacyNodes": 9383,
+        "maxTreeNodes": 558,
+        "maxDepth": 38,
+        "maxFanout": 65,
+        "targetJsonBytes": 60150763
+      },
+      "generationMs": 848,
+      "serializeMs": 52.89999985694885,
+      "inputBytes": 60972662,
+      "measurements": [
+        {
+          "format": "gzip",
+          "supported": true,
+          "compressMs": 1101.2999999523163,
+          "decompressMs": 255.5,
+          "compressedBytes": 45168368,
+          "ratio": 0.7407970476998363,
+          "roundtrip": true
+        },
+        {
+          "format": "deflate-raw",
+          "supported": true,
+          "compressMs": 1058.5999999046326,
+          "decompressMs": 253.10000014305115,
+          "compressedBytes": 45168350,
+          "ratio": 0.7407967524855648,
+          "roundtrip": true
+        },
+        {
+          "format": "brotli",
+          "supported": false
+        }
+      ]
+    },
+    {
+      "name": "scale3",
+      "options": {
+        "scale": 3,
+        "bodyBytes": 5300,
+        "incompressible": true
+      },
+      "profile": {
+        "treeChats": 73,
+        "treeNodes": 3724,
+        "legacyChats": 722,
+        "legacyNodes": 9383,
+        "maxTreeNodes": 558,
+        "maxDepth": 38,
+        "maxFanout": 65,
+        "targetJsonBytes": 60150763
+      },
+      "generationMs": 2313.9000000953674,
+      "serializeMs": 158.70000004768372,
+      "inputBytes": 182381326,
+      "measurements": [
+        {
+          "format": "gzip",
+          "supported": true,
+          "compressMs": 3274.7000000476837,
+          "decompressMs": 753.6000001430511,
+          "compressedBytes": 135081640,
+          "ratio": 0.7406549944702123,
+          "roundtrip": true
+        },
+        {
+          "format": "deflate-raw",
+          "supported": true,
+          "compressMs": 3115.600000143051,
+          "decompressMs": 708.2000000476837,
+          "compressedBytes": 135081622,
+          "ratio": 0.7406548957758976,
+          "roundtrip": true
+        },
+        {
+          "format": "brotli",
+          "supported": false
+        }
+      ]
+    }
+  ],
+  "concurrentWorkload": "Node scale3 sync benchmark was running concurrently; CPU/resource contention was not controlled.",
+  "limitations": [
+    "Synthetic text only; no personal exports were loaded or inspected.",
+    "Random text is a contrasting compression scenario; neither synthetic scenario estimates the personal export compression ratio.",
+    "One run per case/format; timings are indicative, not statistical distributions.",
+    "Concurrent system workload is not controlled; timings may reflect CPU/resource contention.",
+    "Native compression means the browser CompressionStream API; hardware acceleration is not established.",
+    "Compression input is pre-serialized JSON. Native timings include UTF-8/stream copies; LZ works on UTF-16 strings.",
+    "This isolates codecs; it does not include sync, network, encryption, IndexedDB or Worker overhead.",
+    "No reliable peak memory measurement was collected."
+  ]
+}

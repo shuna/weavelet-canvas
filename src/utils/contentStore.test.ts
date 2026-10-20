@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { diff_match_patch } from 'diff-match-patch';
 import {
   ContentStoreData,
   addContent,
@@ -8,8 +9,11 @@ import {
   getChainDepth,
   isDeltaEligible,
   promoteToFull,
+  promoteDependents,
+  getPendingGCHashes,
   releaseContent,
   resolveContent,
+  resolveContentStrict,
   retainContent,
   validateDeltaIntegrity,
   flushPendingGC,
@@ -351,5 +355,69 @@ describe('existing functionality regression', () => {
     expect(store[hash].refCount).toBeLessThanOrEqual(0);
     flushPendingGC(store);
     expect(store[hash]).toBeUndefined();
+  });
+});
+
+
+describe('corrupt delta persistence protection', () => {
+  const dmp = new diff_match_patch();
+  const patch = (before: string, after: string) => dmp.patch_toText(dmp.patch_make(before, after));
+
+  it.each(['missing', 'cycle', 'depth', 'parse', 'apply', 'json', 'shape'])('rejects %s corruption without promoting or exporting an empty message', mode => {
+    const store: ContentStoreData = { base: { content: [], refCount: 1 },
+      broken: { content: [], refCount: 1, delta: { baseHash: 'base', patches: '' } } };
+    if (mode === 'missing') store.broken.delta!.baseHash = 'absent';
+    if (mode === 'cycle') store.broken.delta!.baseHash = 'broken';
+    if (mode === 'depth') {
+      for (let i = 0; i < 100; i++) store[`depth${i}`] = { content: [], refCount: 1,
+        delta: { baseHash: i ? `depth${i - 1}` : 'base', patches: '' } };
+      store.broken.delta!.baseHash = 'depth99';
+    }
+    if (mode === 'parse') store.broken.delta!.patches = 'invalid patch';
+    if (mode === 'apply') store.broken.delta!.patches = patch('x'.repeat(200), 'y'.repeat(200));
+    if (mode === 'json') store.broken.delta!.patches = patch('[]', '{');
+    if (mode === 'shape') store.broken.delta!.patches = patch('[]', 'null');
+    const before = structuredClone(store);
+    expect(resolveContent(store, 'broken')).toEqual([]);
+    expect(() => resolveContentStrict(store, 'broken')).toThrow();
+    expect(() => promoteToFull(store, 'broken')).toThrow();
+    expect(() => buildExportContentStore(store)).toThrow();
+    expect(store).toEqual(before);
+  });
+
+  it('keeps all siblings, the base, its refcount and pending GC unchanged when any promotion fails', () => {
+    const store: ContentStoreData = {};
+    const base = addContent(store, lt(''));
+    const valid = addContentDelta(store, lt(' valid sibling'), base);
+    store.broken = { content: [], refCount: 1, delta: { baseHash: base, patches: 'invalid patch' } };
+    expect(store[valid].delta).toBeDefined();
+    const before = structuredClone(store);
+    const pending = new Set(getPendingGCHashes());
+    expect(() => promoteDependents(store, base)).toThrow();
+    expect(() => releaseContent(store, base)).toThrow();
+    expect(store).toEqual(before);
+    expect(getPendingGCHashes()).toEqual(pending);
+    flushPendingGC(store);
+    expect(store[base]).toBeDefined();
+  });
+
+  it('retains pending bases that acquire a delta dependency before GC', () => {
+    const store: ContentStoreData = {};
+    const base = addContent(store, lt(''));
+    releaseContent(store, base);
+    const child = addContentDelta(store, lt(' newly dependent'), base);
+    expect(store[child].delta).toBeDefined();
+    flushPendingGC(store);
+    expect(resolveContentStrict(store, child)).toEqual(lt(' newly dependent'));
+  });
+
+  it('accepts legacy chains longer than the generation limit and preserves valid empty content', () => {
+    const store: ContentStoreData = { base: { content: [], refCount: 1 } };
+    for (let i = 0; i < 99; i++) store[`legacy${i}`] = { content: [], refCount: 1,
+      delta: { baseHash: i ? `legacy${i - 1}` : 'base', patches: '' } };
+    expect(resolveContentStrict(store, 'legacy98')).toEqual([]);
+    promoteToFull(store, 'legacy98');
+    expect(store.legacy98.delta).toBeUndefined();
+    expect(resolveContentStrict(store, 'base')).toEqual([]);
   });
 });

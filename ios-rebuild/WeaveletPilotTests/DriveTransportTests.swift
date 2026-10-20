@@ -11,6 +11,20 @@ final class DriveTransportTests: XCTestCase {
     override func tearDown() { DriveURLProtocol.handler = nil; super.tearDown() }
     private func json(_ value: String) -> Data { Data(value.utf8) }
 
+    func testStructuredInvalidFileIDCrossesNativeHTTPBoundaryWithoutExposingResponseText() async throws {
+        for location in ["fileId", "parameter fileId", "parentId"] {
+            let response = json("{\"error\":{\"message\":\"FAKE PRIVATE RESPONSE\",\"errors\":[{\"location\":\"\(location)\"}]}}")
+            let drive = transport { _ in (400, response) }
+            for (method, args) in [("metadata", [OrderedJSON.string("FAKE")]), ("put", [.string("FAKE"), .string("dataset"), .string("part"), .syncBytes(Data([1]))])] {
+                do { _ = try await drive.call(method, args: args); XCTFail("HTTP error accepted") }
+                catch let error as DriveTransportError {
+                    XCTAssertEqual(error, location == "parentId" ? .http(400) : .invalidFileId)
+                    XCTAssertFalse(error.localizedDescription.contains("FAKE PRIVATE RESPONSE"))
+                }
+            }
+        }
+    }
+
     func testDatasetListingUsesSharedQueryAndCompletePagination() async throws {
         var requests = 0
         let definition = try SharedWebOperations.call("driveListing", .array([.string("Weavelet encrypted sync"), .string("Weavelet encrypted sync (2)")]))

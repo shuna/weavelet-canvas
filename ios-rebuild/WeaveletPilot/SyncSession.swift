@@ -93,7 +93,8 @@ actor SyncSession {
                     let folderMissing: Bool
                     if case .missing? = error as? FolderSyncFilesError { folderMissing = true } else { folderMissing = false }
                     response = .object([JSONField(key: "ok", value: .bool(false)), JSONField(key: "error", value: .string(error.localizedDescription)),
-                        JSONField(key: "notFound", value: .bool((error as? DriveTransportError) == .notFound || folderMissing))])
+                        JSONField(key: "notFound", value: .bool((error as? DriveTransportError) == .notFound || folderMissing)),
+                        JSONField(key: "invalidFileId", value: .bool((error as? DriveTransportError) == .invalidFileId))])
                 }
                 _ = try invoke("settle", [id, String(decoding: try response.encoded(), as: UTF8.self)])
             }

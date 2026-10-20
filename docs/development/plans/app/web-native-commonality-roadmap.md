@@ -366,3 +366,9 @@ UIはWebの会話上部（左モデル・右表示）、役割見出し/本文/�
 ### 2026-10-14：自動Local/Hybridの共有元とnative接続
 
 実Webのmoderationモデル選択を抽出し、Web2callerとnativeで同じ元を利用する。既存threshold/policy/結果mutatorもそのまま共有し、Swiftはファイル供給・WK lifetime・通信/資格情報・atomic保存の接続だけを担当する。Webの準備失敗によるfallback未到達も同じ機能群内で局所修正した。nativeの方式Picker/Hybrid設定を接続し、任意の未知設定値を保持する。Catalyst境界と独立Astraは確認済み、実モデル/クラウド/全画面の未証明は完成ledgerへ残す。全機能再現と全I/O/実同期互換の最終条件は縮小しない。
+
+## 2026-10-20：最新mainの共有接続と次の範囲
+
+main a4d83db6の新同期wireをWeb実engineの共有実行へ取り込んだ。Swiftは暗号/HTTP/保存境界を維持し、wire・履歴・ID回復を別実装しない。Web worker/nativeの結合処理を共有し、未知属性とremote保持entryの意味を維持する。新形式のWeb→native→Web往復、認証済み不正deltaの拒否、保存/再起動の証拠は完成ledgerの同日節に記録した。
+
+次はmainで増えたproxy状態/保存データ管理・永続node状態表示を実Web callerから接続し、業務規則は必要箇所だけ抽出する。旧Google保存のreadonly移行、実cloud互換性、狭幅/文字サイズ等のUI受入は引き続き残る。既存共有範囲の全面再設計やnativeへの再実装は行わず、機能群単位の検証と独立Astra監査を維持する。

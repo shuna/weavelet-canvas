@@ -59,7 +59,7 @@ export function deleteMessageAttributes(owner: BranchTree | BranchClipboard, nod
 }
 
 // Capture only rows with opaque attributes; ordinary redundant projections need no correspondence check.
-export function captureProjectedMessageAttributes(chat: ChatInterface, contentStore: ContentStoreData): void {
+export function captureProjectedMessageAttributes(chat: Partial<Pick<ChatInterface, 'branchTree' | 'messages'>>, contentStore: ContentStoreData): void {
   if (!chat.branchTree) return;
   let next = chat.branchTree;
   for (const [index, message] of (chat.messages ?? []).entries()) {

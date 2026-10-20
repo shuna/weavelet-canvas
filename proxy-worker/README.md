@@ -13,17 +13,36 @@ CloudFlare Worker that proxies SSE streams from LLM APIs with disconnect recover
 1. Client sends LLM request to the Worker instead of directly to the LLM API
 2. Worker forwards the request and streams SSE back with sequential event IDs
 3. Worker buffers up to 1 MiB of chunks in memory during the stream
-4. Disconnect snapshots use the Workers Cache API (5 minute best-effort TTL; entries are not shared between data centers). The saved prefix is capped at 1 MiB; a capacity-limited recovery ends as interrupted.
+4. Streams, recovery, cancellation, ACK, and status are routed to one SQLite-backed Durable Object per session ID. Initial, periodic, disconnect, and terminal snapshots are committed to its storage (5 minute TTL). The most recent contiguous window is capped at 1 MiB. Recovery succeeds when the saved client cursor is within that window; a missing prefix returns an interrupted result.
 5. If the client disconnects, the Worker reads for at most 20 seconds, then waits at most another 5 seconds for its final cache write.
-6. Client reconnects and calls `/api/recover/:sessionId?lastEventId=N` to get missed chunks
+6. Client reconnects and calls `/api/recover/:sessionId?lastEventId=N` to get missed chunks. The cursor must be a non-negative safe integer; missing prefixes and inconsistent terminal cursors return an interrupted result.
+7. The Web app saves each bubble's stream status and request identity with the chat. Incomplete bubbles keep an inline recovery action after reload, scoped to that request. Recovery checkpoints expire seven days after creation; acknowledged records are cleaned up after one hour.
 
-## Free plan limits
+Changed snapshots are saved every 10 seconds throughout the stream, without a lifetime write-count limit. Terminal delivery waits up to five seconds for the serialized final cache write. Connected snapshots also cover loss of the final response before disconnect detection. Reconnects through another data center use the same stored snapshot. Unexpected runtime termination can lose events since the latest snapshot; recovery still rejects missing event ranges. Response bodies are deleted after five minutes or ACK. Metadata remains for 24 hours, with alarm-based cleanup. Existing Cache API sessions from older deployments cannot be migrated.
 
-| Resource | Free tier | Impact |
-|----------|-----------|--------|
-| Requests | 100k/day | ~100k stream + recover calls |
-| CPU time | 10ms/req | Network waits are excluded, but parsing and snapshot serialization consume CPU; measure production usage |
-| Cache API | No KV write quota | Best-effort recovery only; eviction and a different data center can miss |
+## Inspecting proxy state
+
+Open **Settings → Proxy → プロキシの状態を確認**. The view refreshes every five seconds and lists stored records from all devices and runtimes in pages of twenty, comparing local recovery cursors where available. It shows the Worker version, Cloudflare data center, execution-instance identifier, relay phase, received/buffered bytes, cache-write failures, expiry, and classified termination reason. A session ID from another device can be entered manually.
+
+The authenticated `GET /api/status?all=1` API enumerates the shared registry and reads metadata directly from each durable session, including requests this browser has never seen. It requires configured `PROXY_AUTH_TOKEN`. The response uses `scope: "all-sessions"`, `nextCursor`, and `unavailableSessions`; repeat with `cursor` to browse further pages. It never returns prompt/response bodies or provider credentials. Expired/removed diagnostic records are omitted; a page can be empty while still exposing a cursor for later registry entries. Missing objects are distinct from temporarily unavailable lookups, which are counted and shown as errors.
+
+Known-ID inspection remains available through `GET /api/status?sessionId=...` (up to twenty IDs), including open-proxy mode where IDs act as capability tokens. Each known ID resolves to its durable session independently of the caller's data center. Diagnostic receipt is persisted before contacting the provider; unavailable receipt storage returns 503 without starting generation. Retained IDs cannot be reused. The browser's local database is only used to attach recovery cursors and actions; it does not select or block global records.
+
+The status reader reads compact stored metadata rather than downloading response bodies on each poll. Blocked client writes transition to disconnected after 15 seconds; the existing 20-second upstream-read and 25-second final-save deadlines still apply. Stream-end logs contain only a hashed session reference, counters and a classified reason.
+
+## Deleting stored data
+
+The status view offers individual deletion and **プロキシの全保存データを削除**. Confirmation names the scope: response snapshots and diagnostic history are removed and matching active relays are aborted. Local conversations/checkpoints remain. New saves or ACKs from an already-deleted relay cannot recreate its stored data.
+
+- `DELETE /api/storage/:sessionId` removes that session's response and diagnostic storage, alarms, and in-memory diagnostic record.
+- `DELETE /api/storage` requires configured `PROXY_AUTH_TOKEN` and valid bearer authentication. It removes data across devices, including sessions outside the browser's twenty-item status list. Sessions started after the server's initial cutoff are preserved.
+- Bulk responses contain `{ deleted, failed, before, cursor }`. Continue with the returned `before` and `cursor` until `cursor` is null. A failed item stays indexed for retry; clients must report failures rather than claiming complete deletion.
+
+The REGISTRY Durable Object indexes opaque session object IDs with bounded retention (48 hours from their last registration). Each call deletes at most twenty objects. Deploy the v2 migration with the Worker. Before upgrading an existing v0.4 deployment, wait for its retained records to expire or inspect their known IDs so they are registered; previously created objects cannot be enumerated through a Durable Object binding. No live session storage existed in this production deployment when the registry was introduced.
+
+## Storage and execution limits
+
+Recovery uses SQLite-backed Durable Objects, provisioned by the binding and migration in `wrangler.toml`. Storage, request, and execution charges/limits apply according to the Cloudflare account plan; periodic snapshot writes continue for the duration of a stream. Each object keeps at most the latest 1 MiB of raw upstream data plus bounded metadata. Stored JSON is split into bounded values and committed atomically. [Cloudflare storage limits](https://developers.cloudflare.com/durable-objects/platform/limits/).
 
 ## Setup
 
@@ -136,16 +155,16 @@ Proxies a moderation request to an OpenAI-compatible Moderation API endpoint.
 
 ### `POST /api/ack/:sessionId`
 
-Client confirms full receipt of the stream. Deletes a local Cache API entry when present; `deleted: false` is normal for a cache miss or another data center.
+Client confirms full receipt of the stream. Deletes response parts from the session's durable storage and records acknowledgement. A delayed snapshot cannot recreate the deleted response; diagnostic metadata remains for 24 hours.
 
 **Response:** `{ "deleted": true }`
 
 ### `GET /api/recover/:sessionId?lastEventId=N`
 
-Replays chunks after the given event ID. A local cache miss is returned immediately; a still-streaming local entry is polled for at most 25 seconds. Cache entries are best effort: expiry, eviction, or a different data center can make recovery unavailable.
+Replays chunks after the given event ID. A missing/expired/acknowledged response returns a cache miss immediately; a still-streaming entry is polled for at most 25 seconds. Requests from every data center route to the same durable session.
 
 **Response:** SSE stream of missed chunks, same format as `/api/stream`.
 
 ### `GET /health`
 
-Returns `{ "status": "ok", "version": "0.2.0" }`. No auth required.
+Returns `{ "status": "ok", "version": "0.6.0" }`. No auth required.

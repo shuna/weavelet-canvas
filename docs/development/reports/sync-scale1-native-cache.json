@@ -1,0 +1,530 @@
+{
+  "engine": "current",
+  "node": "v22.22.3",
+  "platform": "darwin",
+  "options": {
+    "scale": 1,
+    "seed": 1,
+    "bodyBytes": 5300,
+    "sharedRatio": 0.5,
+    "editRatio": 0,
+    "incompressible": false,
+    "profile": {
+      "treeChats": 73,
+      "treeNodes": 3724,
+      "legacyChats": 722,
+      "legacyNodes": 9383,
+      "maxTreeNodes": 558,
+      "maxDepth": 38,
+      "maxFanout": 65,
+      "targetJsonBytes": 60150763
+    }
+  },
+  "inputBytes": 61031396,
+  "targetJsonBytes": 60150763,
+  "chats": 795,
+  "nodes": 13107,
+  "complete": true,
+  "limitations": "Zero network latency; fake IndexedDB; no browser Worker/copy measurement. Memory sampling can miss synchronous peaks; high-water RSS is process-wide.",
+  "scenarios": {
+    "initial": {
+      "ms": 72957.245542,
+      "uploadedBytes": 678013,
+      "downloadedBytes": 0,
+      "transportCalls": {
+        "ids": 2,
+        "folder": 1,
+        "put": 3,
+        "startToken": 1,
+        "history": 1,
+        "changes": 2
+      },
+      "remoteStorageBytes": 678013,
+      "localEncryptedStorageBytes": 2100373,
+      "metrics": {
+        "encrypt": {
+          "calls": 16,
+          "ms": 2.9194999999699576,
+          "inputBytes": 4938690,
+          "outputBytes": 4939138
+        },
+        "serialize": {
+          "calls": 13,
+          "ms": 292.58441600002857,
+          "inputBytes": 144780759,
+          "outputBytes": 144780759
+        },
+        "compress": {
+          "calls": 13,
+          "ms": 70984.68400099996,
+          "inputBytes": 144780759,
+          "outputBytes": 4260755
+        },
+        "cache": {
+          "calls": 15,
+          "ms": 7.550294000003873,
+          "inputBytes": 4939078,
+          "outputBytes": 0
+        },
+        "records": {
+          "calls": 1,
+          "ms": 487.9175,
+          "inputBytes": 60825775,
+          "outputBytes": 60825775
+        },
+        "decrypt": {
+          "calls": 2,
+          "ms": 0.33241600000474136,
+          "inputBytes": 677654,
+          "outputBytes": 0
+        }
+      },
+      "cacheBefore": {
+        "contentHits": 0,
+        "contentMisses": 0,
+        "digestHits": 0,
+        "digestMisses": 0,
+        "bytes": 0,
+        "entries": 0
+      },
+      "cacheAfter": {
+        "contentHits": 0,
+        "contentMisses": 1888,
+        "digestHits": 22112,
+        "digestMisses": 9105,
+        "bytes": 41563734,
+        "entries": 6494
+      },
+      "memory": {
+        "before": {
+          "rss": 324517888,
+          "heapTotal": 138461184,
+          "heapUsed": 115829128,
+          "external": 2366369,
+          "arrayBuffers": 112554
+        },
+        "after": {
+          "rss": 943636480,
+          "heapTotal": 360218624,
+          "heapUsed": 331074184,
+          "external": 146857204,
+          "arrayBuffers": 210752770
+        },
+        "sampledPeakRss": 1054605312,
+        "sampledPeakHeap": 554631416,
+        "processHighWaterRssBytes": 1054605312
+      }
+    },
+    "unchanged": {
+      "ms": 1501.8177080000023,
+      "uploadedBytes": 0,
+      "downloadedBytes": 0,
+      "transportCalls": {
+        "changes": 2
+      },
+      "remoteStorageBytes": 678013,
+      "localEncryptedStorageBytes": 2100373,
+      "metrics": {
+        "records": {
+          "calls": 1,
+          "ms": 508.58941700001014,
+          "inputBytes": 60825775,
+          "outputBytes": 60825775
+        },
+        "cache": {
+          "calls": 4,
+          "ms": 1.028374999994412,
+          "inputBytes": 2160069,
+          "outputBytes": 0
+        },
+        "serialize": {
+          "calls": 3,
+          "ms": 21.634874000010313,
+          "inputBytes": 12811863,
+          "outputBytes": 12811863
+        },
+        "compress": {
+          "calls": 3,
+          "ms": 107.87370900000678,
+          "inputBytes": 12811863,
+          "outputBytes": 2159985
+        },
+        "encrypt": {
+          "calls": 3,
+          "ms": 1.0344159999949625,
+          "inputBytes": 2159985,
+          "outputBytes": 2160069
+        }
+      },
+      "cacheBefore": {
+        "contentHits": 0,
+        "contentMisses": 1888,
+        "digestHits": 22112,
+        "digestMisses": 9105,
+        "bytes": 41563734,
+        "entries": 6494
+      },
+      "cacheAfter": {
+        "contentHits": 0,
+        "contentMisses": 3776,
+        "digestHits": 48830,
+        "digestMisses": 13604,
+        "bytes": 67091564,
+        "entries": 7683
+      },
+      "memory": {
+        "before": {
+          "rss": 943669248,
+          "heapTotal": 360218624,
+          "heapUsed": 331254992,
+          "external": 146857430,
+          "arrayBuffers": 210752770
+        },
+        "after": {
+          "rss": 1288372224,
+          "heapTotal": 813154304,
+          "heapUsed": 777696016,
+          "external": 154750669,
+          "arrayBuffers": 222916696
+        },
+        "sampledPeakRss": 1288372224,
+        "sampledPeakHeap": 777655224,
+        "processHighWaterRssBytes": 1288372224
+      }
+    },
+    "titleEdit": {
+      "ms": 1514.4590000000026,
+      "uploadedBytes": 224,
+      "downloadedBytes": 0,
+      "transportCalls": {
+        "changes": 2,
+        "ids": 1,
+        "put": 1
+      },
+      "remoteStorageBytes": 678237,
+      "localEncryptedStorageBytes": 2100617,
+      "metrics": {
+        "records": {
+          "calls": 1,
+          "ms": 412.67179100000067,
+          "inputBytes": 60825764,
+          "outputBytes": 60825764
+        },
+        "cache": {
+          "calls": 9,
+          "ms": 2.272999999986496,
+          "inputBytes": 4320898,
+          "outputBytes": 0
+        },
+        "serialize": {
+          "calls": 8,
+          "ms": 43.19521100001293,
+          "inputBytes": 25624283,
+          "outputBytes": 25624283
+        },
+        "compress": {
+          "calls": 8,
+          "ms": 209.7354159999959,
+          "inputBytes": 25624283,
+          "outputBytes": 4320674
+        },
+        "encrypt": {
+          "calls": 8,
+          "ms": 1.7674990000086837,
+          "inputBytes": 4320674,
+          "outputBytes": 4320898
+        },
+        "decrypt": {
+          "calls": 1,
+          "ms": 0.06300000000919681,
+          "inputBytes": 224,
+          "outputBytes": 0
+        }
+      },
+      "cacheBefore": {
+        "contentHits": 0,
+        "contentMisses": 3776,
+        "digestHits": 48830,
+        "digestMisses": 13604,
+        "bytes": 67091564,
+        "entries": 7683
+      },
+      "cacheAfter": {
+        "contentHits": 1888,
+        "contentMisses": 3776,
+        "digestHits": 75547,
+        "digestMisses": 16216,
+        "bytes": 67091754,
+        "entries": 7684
+      },
+      "memory": {
+        "before": {
+          "rss": 1288372224,
+          "heapTotal": 813154304,
+          "heapUsed": 777803304,
+          "external": 154750898,
+          "arrayBuffers": 222916696
+        },
+        "after": {
+          "rss": 1304690688,
+          "heapTotal": 662093824,
+          "heapUsed": 623818872,
+          "external": 35815224,
+          "arrayBuffers": 99710726
+        },
+        "sampledPeakRss": 1306378240,
+        "sampledPeakHeap": 777803304,
+        "processHighWaterRssBytes": 1334673408
+      }
+    },
+    "bodyEdit": {
+      "ms": 1539.5367920000135,
+      "uploadedBytes": 1248,
+      "downloadedBytes": 0,
+      "transportCalls": {
+        "changes": 2,
+        "ids": 1,
+        "put": 1
+      },
+      "remoteStorageBytes": 679485,
+      "localEncryptedStorageBytes": 2101944,
+      "metrics": {
+        "records": {
+          "calls": 1,
+          "ms": 417.6817919999885,
+          "inputBytes": 60831113,
+          "outputBytes": 60831113
+        },
+        "cache": {
+          "calls": 9,
+          "ms": 2.1247090000251774,
+          "inputBytes": 4323298,
+          "outputBytes": 0
+        },
+        "serialize": {
+          "calls": 8,
+          "ms": 43.621165999997174,
+          "inputBytes": 25636215,
+          "outputBytes": 25636215
+        },
+        "compress": {
+          "calls": 8,
+          "ms": 212.95425100000284,
+          "inputBytes": 25636215,
+          "outputBytes": 4323074
+        },
+        "encrypt": {
+          "calls": 8,
+          "ms": 1.8181680000125198,
+          "inputBytes": 4323074,
+          "outputBytes": 4323298
+        },
+        "decrypt": {
+          "calls": 1,
+          "ms": 0.06437500000174623,
+          "inputBytes": 1248,
+          "outputBytes": 0
+        }
+      },
+      "cacheBefore": {
+        "contentHits": 1888,
+        "contentMisses": 3776,
+        "digestHits": 75547,
+        "digestMisses": 16216,
+        "bytes": 67091754,
+        "entries": 7684
+      },
+      "cacheAfter": {
+        "contentHits": 3776,
+        "contentMisses": 3777,
+        "digestHits": 102264,
+        "digestMisses": 18830,
+        "bytes": 67092272,
+        "entries": 7685
+      },
+      "memory": {
+        "before": {
+          "rss": 1304690688,
+          "heapTotal": 662093824,
+          "heapUsed": 624206552,
+          "external": 35815455,
+          "arrayBuffers": 99710726
+        },
+        "after": {
+          "rss": 1376698368,
+          "heapTotal": 565542912,
+          "heapUsed": 527483776,
+          "external": 57519371,
+          "arrayBuffers": 53735169
+        },
+        "sampledPeakRss": 1378385920,
+        "sampledPeakHeap": 624206552,
+        "processHighWaterRssBytes": 1383153664
+      }
+    },
+    "sharedBody": {
+      "ms": 1538.4907499999972,
+      "uploadedBytes": 290,
+      "downloadedBytes": 0,
+      "transportCalls": {
+        "changes": 2,
+        "ids": 1,
+        "put": 1
+      },
+      "remoteStorageBytes": 679775,
+      "localEncryptedStorageBytes": 2102244,
+      "metrics": {
+        "records": {
+          "calls": 1,
+          "ms": 401.6891659999965,
+          "inputBytes": 60831113,
+          "outputBytes": 60831113
+        },
+        "cache": {
+          "calls": 9,
+          "ms": 2.205626000009943,
+          "inputBytes": 4321578,
+          "outputBytes": 0
+        },
+        "serialize": {
+          "calls": 8,
+          "ms": 43.125001000007614,
+          "inputBytes": 25625773,
+          "outputBytes": 25625773
+        },
+        "compress": {
+          "calls": 8,
+          "ms": 212.8366229999956,
+          "inputBytes": 25625773,
+          "outputBytes": 4321354
+        },
+        "encrypt": {
+          "calls": 8,
+          "ms": 1.8013320000027306,
+          "inputBytes": 4321354,
+          "outputBytes": 4321578
+        },
+        "decrypt": {
+          "calls": 1,
+          "ms": 0.053583000000799075,
+          "inputBytes": 290,
+          "outputBytes": 0
+        }
+      },
+      "cacheBefore": {
+        "contentHits": 3776,
+        "contentMisses": 3777,
+        "digestHits": 102264,
+        "digestMisses": 18830,
+        "bytes": 67092272,
+        "entries": 7685
+      },
+      "cacheAfter": {
+        "contentHits": 5665,
+        "contentMisses": 3777,
+        "digestHits": 128982,
+        "digestMisses": 21442,
+        "bytes": 67092272,
+        "entries": 7685
+      },
+      "memory": {
+        "before": {
+          "rss": 1376714752,
+          "heapTotal": 565542912,
+          "heapUsed": 527879496,
+          "external": 57519602,
+          "arrayBuffers": 53735169
+        },
+        "after": {
+          "rss": 1564377088,
+          "heapTotal": 1026719744,
+          "heapUsed": 984187528,
+          "external": 68985601,
+          "arrayBuffers": 65201271
+        },
+        "sampledPeakRss": 1564377088,
+        "sampledPeakHeap": 984140544,
+        "processHighWaterRssBytes": 1564377088
+      }
+    },
+    "restartPull": {
+      "ms": 958.7715829999943,
+      "uploadedBytes": 0,
+      "downloadedBytes": 359,
+      "transportCalls": {
+        "keyHeader": 1,
+        "read": 1,
+        "changes": 1
+      },
+      "remoteStorageBytes": 679775,
+      "localEncryptedStorageBytes": 2102264,
+      "metrics": {
+        "decrypt": {
+          "calls": 7,
+          "ms": 2.8751249999913853,
+          "inputBytes": 2102304,
+          "outputBytes": 0
+        },
+        "cache": {
+          "calls": 5,
+          "ms": 3.1755010000051698,
+          "inputBytes": 1440304,
+          "outputBytes": 0
+        },
+        "serialize": {
+          "calls": 2,
+          "ms": 18.93954200000735,
+          "inputBytes": 8541828,
+          "outputBytes": 8541828
+        },
+        "compress": {
+          "calls": 2,
+          "ms": 73.8777909999917,
+          "inputBytes": 8541828,
+          "outputBytes": 1440248
+        },
+        "encrypt": {
+          "calls": 2,
+          "ms": 0.7164170000032755,
+          "inputBytes": 1440248,
+          "outputBytes": 1440304
+        }
+      },
+      "cacheBefore": {
+        "contentHits": 0,
+        "contentMisses": 0,
+        "digestHits": 0,
+        "digestMisses": 0,
+        "bytes": 0,
+        "entries": 0
+      },
+      "cacheAfter": {
+        "contentHits": 0,
+        "contentMisses": 0,
+        "digestHits": 0,
+        "digestMisses": 0,
+        "bytes": 0,
+        "entries": 0
+      },
+      "memory": {
+        "before": {
+          "rss": 1564377088,
+          "heapTotal": 1026719744,
+          "heapUsed": 984364048,
+          "external": 68985833,
+          "arrayBuffers": 65201271
+        },
+        "after": {
+          "rss": 1427144704,
+          "heapTotal": 378896384,
+          "heapUsed": 344630456,
+          "external": 194070766,
+          "arrayBuffers": 193861493
+        },
+        "sampledPeakRss": 1674330112,
+        "sampledPeakHeap": 984364048,
+        "processHighWaterRssBytes": 1674657792
+      }
+    }
+  }
+}

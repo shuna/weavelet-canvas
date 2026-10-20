@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BranchNode, ChatInterface, ContentInterface, FolderCollection } from '@type/chat';
 import type { ExportV3 } from '@type/export';
 import { validateExportV3 } from './import';
-import { resolveContent, type ContentStoreData } from './contentStore';
+import { resolveContent, resolveContentStrict, type ContentStoreData } from './contentStore';
 import { prepareChatForExport } from './chatExport';
 
 const context = vi.hoisted(() => {
@@ -85,11 +85,13 @@ describe('expanded V3 exchange read contract and Web observations', () => {
     const text = JSON.stringify(payload);
     const file = { name: 'exchange.json', text: async () => text } as File;
     const result = await importChatFromFile(file, (key) => key);
-    if (spec === 'outside-expanded-v3' && observed.resolveThrows) {
-      // main propagates normalization failures before publish; the fixture records the former swallowed error.
-      expect(result).toEqual({ success: false, message: 'Invalid patch string: not a patch' });
+    if (spec === 'outside-expanded-v3' && (observed.resolveThrows || (payload.contentStore.body?.delta && observed.resolvedBody?.length === 0))) {
+      // Preview already rejects corrupt deltas; immediate V3 import now shares that trust boundary.
+      // main's UI resolver may return [], but that is not a successful file conversion.
+      expect(result).toEqual({ success: false, message: 'Invalid delta content' });
       expect(context.state).toEqual(before);
-      expect(() => resolveContent(payload.contentStore, 'body')).toThrow('Invalid patch string: not a patch');
+      expect(() => resolveContentStrict(payload.contentStore, 'body')).toThrow();
+      expect(resolveContent(payload.contentStore, 'body')).toEqual([]);
       return;
     }
     expect(result.success, JSON.stringify(result)).toBe(observed.importSuccess);

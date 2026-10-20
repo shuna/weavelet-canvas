@@ -1,6 +1,6 @@
 import { isMessageVisible } from '@utils/advancedDisplay';
 import { useSyncReview, acknowledgeSyncChat } from '@store/storage/google/conflicts';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { useTranslation } from 'react-i18next';
 
@@ -295,6 +295,12 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
   const getChatScrollAnchor = useStore((state) => state.getChatScrollAnchor);
   const anchorRef = useRef({ firstVisibleItemIndex: 0, offsetWithinItem: 0, wasAtBottom: true, nodeId: undefined as string | undefined, scrollTop: 0 });
   const atBottomRef = useRef(true);
+  const streamFollowRef = useRef(true);
+  const streamScrollerRef = useRef<HTMLElement | null>(null);
+  const streamScrollTopRef = useRef(0);
+  const scrollContentRef = useRef<HTMLDivElement>(null);
+  const previousStreamRef = useRef({ key: '', generating: false });
+  const scrollLayoutKey = JSON.stringify([currentChatId, activePath]);
   const pendingEditStateSyncRef = useRef<number | null>(null);
   const saveAnchorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const explicitScrollNavigationRef = useRef(false);
@@ -347,15 +353,40 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
     };
   }, [saveCurrentAnchor]);
 
+  useLayoutEffect(() => {
+    const previous = previousStreamRef.current;
+    previousStreamRef.current = { key: scrollLayoutKey, generating: isCurrentChatGenerating };
+    const content = scrollContentRef.current;
+    const scroller = scrollerElement;
+    if (!content || !scroller) return;
+    if (previous.key !== scrollLayoutKey || isCurrentChatGenerating) {
+      content.style.minHeight = '';
+      return;
+    }
+    if (!previous.generating) return;
+
+    streamFollowRef.current = false;
+    const top = streamScrollTopRef.current;
+    // Keep the old position reachable even while lazy Markdown temporarily shrinks.
+    content.style.minHeight = `${top + scroller.clientHeight}px`;
+    scroller.scrollTop = top;
+    streamScrollTopRef.current = scroller.scrollTop;
+  }, [isCurrentChatGenerating, scrollLayoutKey, scrollerElement]);
+
   // --- Scroll event: atBottom + anchor tracking ---
   useEffect(() => {
     const scroller = scrollerElement;
     if (!scroller) return;
 
-    const onScroll = () => {
+    const onScroll = (event?: Event) => {
       if (scroller.clientHeight === 0) {
         setBubbleNavigationState({ canMoveUp: false, canMoveDown: false });
         return;
+      }
+      const content = scrollContentRef.current;
+      if (event && content?.style.minHeight) {
+        // Release spare space as the user scrolls up, without moving their viewport.
+        content.style.minHeight = `${scroller.scrollTop + scroller.clientHeight}px`;
       }
       const isBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < BOTTOM_THRESHOLD;
       const isTop = scroller.scrollTop < BOTTOM_THRESHOLD;
@@ -368,6 +399,16 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
       const nodeItems = scroller.querySelectorAll<HTMLElement>(MESSAGE_ITEM_SELECTOR);
       anchorRef.current.scrollTop = scroller.scrollTop;
       anchorRef.current.wasAtBottom = scroller.scrollTop >= scroller.scrollHeight - scroller.clientHeight - SCROLL_ALIGN_TOLERANCE;
+      // Layout measurements must not change the user's streaming follow choice.
+      if (event || streamScrollerRef.current !== scroller) {
+        if (scroller.scrollTop !== streamScrollTopRef.current || streamScrollerRef.current !== scroller) {
+          // Fitting in the viewport does not mean the user chose to follow the end.
+          streamFollowRef.current = scroller.scrollHeight > scroller.clientHeight + SCROLL_ALIGN_TOLERANCE
+            && anchorRef.current.wasAtBottom;
+        }
+        streamScrollerRef.current = scroller;
+        streamScrollTopRef.current = scroller.scrollTop;
+      }
       let foundAnchorItem = false;
       for (const item of nodeItems) {
         const rect = item.getBoundingClientRect();
@@ -446,14 +487,8 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
   }, [scrollerElement, updateBubbleNavigationState, activePath, items, currentChatId, pushNavigationEntry, updateCurrentNavigationEntryAnchor]);
 
   // --- Streaming auto-follow via ResizeObserver ---
-  // Track atBottom via ref so the observer can read it without being a dependency.
-  // This prevents the observer from tearing down when content growth momentarily
-  // sets atBottom=false before the scroll-to-end callback fires.
-  const atBottomForAutoScrollRef = useRef(atBottom);
-  atBottomForAutoScrollRef.current = atBottom;
   const syncAtBottomState = useCallback((isBottom: boolean) => {
     atBottomRef.current = isBottom;
-    atBottomForAutoScrollRef.current = isBottom;
     setAtBottom(isBottom);
   }, []);
 
@@ -461,20 +496,17 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
     if (!isCurrentChatGenerating) return;
     if (isEditingInScroller) return;
 
-    const scroller = scrollerRef.current;
+    const scroller = scrollerElement;
     const messageList = scroller?.querySelector('[data-message-list]');
     if (!scroller || !messageList) return;
 
-    // Only start auto-follow if already at the bottom when generation begins
-    if (!atBottomForAutoScrollRef.current) return;
-
     const scrollToEnd = () => {
       if (scroller.dataset.branchSwiping) return;
+      if (!Object.values(useStore.getState().generatingSessions).some(session => session.chatId === currentChatId)) return;
       // Stop following if user scrolled away manually
-      if (!atBottomForAutoScrollRef.current) return;
-      // Eagerly keep both state and refs pinned to "at bottom" so content growth
-      // during streaming cannot temporarily break the auto-follow loop.
+      if (!streamFollowRef.current) return;
       scrollViewportToBottom(scroller, syncAtBottomState);
+      streamScrollTopRef.current = scroller.scrollTop;
     };
 
     // Scroll to end immediately
@@ -482,7 +514,10 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
 
     // ResizeObserver to follow content height changes
     const observer = new ResizeObserver(scrollToEnd);
+    observer.observe(scroller);
     observer.observe(messageList);
+    const footer = messageList.nextElementSibling;
+    if (footer) observer.observe(footer);
 
     // Also observe individual message elements for streaming text growth
     const observeMessages = () => {
@@ -502,7 +537,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
       observer.disconnect();
       mutationObserver.disconnect();
     };
-  }, [isCurrentChatGenerating, isEditingInScroller, syncAtBottomState]);
+  }, [isCurrentChatGenerating, isEditingInScroller, scrollerElement, currentChatId, syncAtBottomState, useStore]);
 
   // Restore scroll anchor on mount
   const pendingChatFocus = useStore((state) => state.pendingChatFocus);
@@ -821,13 +856,16 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
           <ChatFindBar scrollerRef={scrollerRef} onClose={onChatFindClose} />
         )}
 
+        {/* Follow/navigation owns scroll position, including stream finalization. */}
         <div
           ref={scrollerCallbackRef}
           key={currentChatIndex}
           className='h-full overflow-y-auto overflow-x-hidden overscroll-contain'
+          style={{ overflowAnchor: 'none' }}
           data-chat-scroller
           data-chat-id={currentChatId}
         >
+          <div ref={scrollContentRef} data-scroll-content>
           {syncChanged && <div role='status' className='flex items-center justify-between gap-3 px-7 py-2 text-sm text-amber-800 bg-amber-50 dark:bg-gray-700 dark:text-amber-200'><span>{t('drive:review.description')}</span><button type='button' className='shrink-0 underline' onClick={() => acknowledgeSyncChat(reviewChatId)}>{t('drive:review.chatDone')}</button></div>}
           <div className='relative' data-message-list>
             {items.map((item, index) => (
@@ -892,6 +930,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
               </div>
             )}
             <div className='w-full h-36'></div>
+          </div>
           </div>
         </div>
       </div>

@@ -9,6 +9,7 @@ export type SyncChange = {
 };
 
 export class SyncFileNotFoundError extends Error {}
+export class InvalidSyncFileIdError extends Error {}
 
 export interface SyncTransport<T extends SyncDataset = SyncDataset> {
   readonly supportsCompaction?: boolean;
