@@ -1,6 +1,17 @@
 # Web / 新iOSの完成条件と証拠
 
 
+## 表示言語の共有データとnative切替の初期接続（2026-10-21・多言語化全体は未完了）
+
+実Web LanguageSelector/SettingsMenu/i18nの選択集合16・locale資源20・名称・fallback enを確認し、値と順序を変えずlanguageData.jsonへ移した。Webのtyped exportとi18nが同じデータを使う。nativeは生成したWebLanguagesとApple標準xcstringsを同梱し、既存Web localeの文言を再利用する。native独自の翻訳parser/libraryは追加しない。標準Bundleの言語交渉とSwiftUI localeを使用し、端末内専用UserDefaultsのnative.displayLanguageへ選択だけを保存する。「自動」は端末言語、明示選択はWebと同じ16言語。会話/同期のrootや外部I/O形式には追加しない。View identityをリセットせず、モデル名・本文等の動的ユーザーデータを翻訳keyにしない。
+
+scripts/generate-native-localizations.mjsは静的UI literalと既存Web日本語値の一意対応、および明示aliasだけから52キーを生成する。locale/base/enのfallbackを使用する。字面が同じでも意味が違うdebug状態語（完了等）は自動対応から除外した。現在の機械抽出では423静的literalが未解決であり、この件数には技術名・mock等も含むため、そのまま要翻訳件数とはしない。エラー文、補間/動的ラベル、本文表示設定等の全画面翻訳は未完了。切替pickerのみの完成ではなく、設定・一般・会話設定・新規会話・検索・編集・評価・prompt等の実際の表示へ接続した初期範囲である。未対応部分は従来日本語を保持する。generator鮮度確認は--checkで行い、build時の自動再生成機構は追加していない。
+
+Web型/Vite build成功。Catalystの設定保存/再読込・未知選択拒否/OS言語fallback・実compiled en/ja/de資源の3件が成功した。実UIで初期の設定navigationTitleがlocale変更中に古い文字列を保持することを確認し、Text指定だけでは解消しなかった。画面identityを変えず、設定titleだけ標準Bundleの対象lproj検索結果を渡して更新する。en/deのtitle lookup確認を既存testへ加え、当該3件が最終sourceで成功した（初回・中間もtest失敗なし、ただしUIでtitle未反映を検出）。独立Astraの初回およびdebug語除外/title限定再監査は新規P1/P2なし。共有bundle鮮度確認はi18n.tsのprovenance変更を検出したため再生成し、bundle本体bytesは不変、provenanceだけ更新した。最終両generator --check/diff check成功。未変更の全項目I/O・暗号化wire成功を再利用し、会話操作/同期全suiteの反復は省略する。ログ/private/tmp/weavelet-language-{types,web-build,bundle,native,native-final,native-title}.log。
+
+隔離Catalystで16候補+自動、ja→en/de表示、同一sessionの入力草稿保持、モデル名/会話本文の不変、de選択の再起動保持を確認した。最初のAX click/typeでは入力欄がfocusせず、見える入力欄の座標操作で実入力Valueを確認後に草稿保持を判定した。AX setValue拒否も製品の失敗/成功には数えない。最終buildで設定を開いたままja→enの見出しSettings即時更新を確認した。終了後process不在、各UI runのfixture state/built Infoのbyte一致復元、元UserDefaults選択の復元を確認。全native文言の翻訳・各言語の文字幅/AX/OS chrome・実cloud相互運用は未完了のまま。iPhone照会/導入、push/main統合は行っていない。
+
+
 ## 単一・分割モデル取得後の共有重複採用（2026-10-21）
 
 前群で確認した実Webの取得後処理に合わせ、native分割downloadも共有selectionDuplicateへ全必須file順の全量SHA/容量を渡し、別IDの完全一致モデルを再利用する。単一downloadで既に使っていたcatalogDuplicateCommitのopaque投影をprivate helperへ移し、両経路が同じ共有関数を使う。採用先metadata/定義の未知属性は保持し、取得元IDの定義/役割/favorite/metadataの処理は共有規則へ委譲する。新規の単一・分割metadataには既存Web互換fingerprintを保存し、全量SHAはコピー/照合に使い分ける。候補の全file revision、定義・実行状態、job tokenをawait後に確認し、採用先IDを既存予約へ加える。

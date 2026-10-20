@@ -4,6 +4,8 @@ import { initReactI18next } from 'react-i18next';
 import Backend from 'i18next-http-backend';
 import LanguageDetector from 'i18next-browser-languagedetector';
 
+import { fallbackLanguage } from './constants/language';
+
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || undefined;
 const cloudKitContainerId = import.meta.env.VITE_CLOUDKIT_CONTAINER_ID || undefined;
 
@@ -19,9 +21,7 @@ i18n
     backend: {
       loadPath: 'locales/{{lng}}/{{ns}}.json',
     },
-    fallbackLng: {
-      default: ['en'],
-    },
+    fallbackLng: fallbackLanguage,
     ns: namespace,
     defaultNS: 'main',
   });

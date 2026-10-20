@@ -5,8 +5,10 @@ import UIKit
 @main
 struct WeaveletPilotApp: App {
     @StateObject private var live = LiveApplicationState()
+    @StateObject private var language = NativeLanguageSettings()
     var body: some Scene {
         WindowGroup {
+            Group {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--ui-mockup") || Bundle.main.object(forInfoDictionaryKey: "WeaveletLaunchMode") as? String == "ui-mockup" {
                 IOSLayoutMockupView()
@@ -22,11 +24,14 @@ struct WeaveletPilotApp: App {
             #else
             ChatView(state: live.state)
             #endif
+            }
+            .environmentObject(language)
+            .environment(\.locale,language.locale)
         }
     }
 }
 
-// Keep the mock route outside ChatState initialization and all persisted services.
+// Keep the mock route outside ChatState initialization and conversation persistence.
 @MainActor private final class LiveApplicationState: ObservableObject {
     lazy var state = ChatState(store: Self.stateStore)
     private static var stateStore: LocalStateStore? {
@@ -129,6 +134,7 @@ private struct RuntimeDiagnosticsPanel: View {
 }
 
 struct ChatView: View {
+    @EnvironmentObject private var language: NativeLanguageSettings
     @ObservedObject var state: ChatState
     @State private var titleSettingsDraft: ConversationTitleSettingsDraft?
     @State private var defaultConfigDraft: ChatConfigDraft?
@@ -424,9 +430,10 @@ struct ChatView: View {
             NavigationStack {
                 Form {
                     Section("一般") {
+                        NativeLanguagePicker()
                         NavigationLink("外観と本文の表示") { DisplaySettingsView(state: state) }
                         Picker("チャット表示", selection: $state.style) {
-                            ForEach(ChatStyle.allCases) { style in Text(style.rawValue).tag(style) }
+                            ForEach(ChatStyle.allCases) { style in Text(LocalizedStringKey(style.rawValue)).tag(style) }
                         }
                         .pickerStyle(.inline)
                         NavigationLink("利用量と費用") { UsageCostSettingsView(state:state) }
@@ -480,7 +487,7 @@ struct ChatView: View {
                 .alert("消去できませんでした",isPresented:Binding(get:{ clearConversationError != nil },set:{ if !$0 { clearConversationError = nil } })) {
                     Button("閉じる",role:.cancel) { clearConversationError = nil }
                 } message: { Text(clearConversationError ?? "") }
-                .navigationTitle("設定")
+                .navigationTitle(language.localized("設定"))
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完了") { showsSettings = false } } }
             }
         }
@@ -634,7 +641,7 @@ struct ChatView: View {
                         .disabled(state.generation != nil)
                     Divider()
                     ForEach(ChatActiveView.allCases) { mode in
-                        Button(mode.title, systemImage: state.chatActiveView == mode ? "checkmark" : "rectangle.split.2x1") {
+                        Button(LocalizedStringKey(mode.title), systemImage: state.chatActiveView == mode ? "checkmark" : "rectangle.split.2x1") {
                             do { try state.setChatActiveView(mode) } catch { errorMessage = error.localizedDescription }
                         }
                     }
@@ -706,7 +713,7 @@ struct ChatView: View {
                 .overlay(alignment:.bottom) { if state.chatActiveView == mode { Rectangle().fill(Color.accentColor).frame(height:2) } }
         }
         .foregroundStyle(state.chatActiveView == mode ? Color.accentColor : .secondary)
-        .accessibilityLabel(mode.title)
+        .accessibilityLabel(LocalizedStringKey(mode.title))
         .accessibilityAddTraits(state.chatActiveView == mode ? .isSelected : [])
     }
     @ViewBuilder private var activeContent: some View {
