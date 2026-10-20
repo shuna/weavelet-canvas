@@ -1,4 +1,5 @@
 import useStore from '@store/store';
+import { proxyStatusRequest, readProxyStatus, proxyDeleteRequest, readProxyDeletion, type ProxyDeletionState } from './proxyManagement';
 import type { ProxyStatus } from '../../proxy-worker/src/diagnostics';
 export type { ProxyStatus } from '../../proxy-worker/src/diagnostics';
 /**
@@ -27,56 +28,31 @@ function authHeaders(config: ProxyConfig): Record<string, string> {
 }
 
 export async function fetchProxyStatus(config: ProxyConfig, sessionIds: string[], signal?: AbortSignal, page?: { all: true; cursor?: string }): Promise<ProxyStatus> {
-  const query = new URLSearchParams();
-  for (const id of sessionIds) query.append('sessionId', id);
-  if (page?.all) query.set('all', '1');
-  if (page?.cursor) query.set('cursor', page.cursor);
-  const response = await fetch(`${config.endpoint.trim().replace(/\/+$/, '')}/api/status?${query}`, {
+  const request = proxyStatusRequest({ sessionIds, ...page });
+  const response = await fetch(`${config.endpoint.trim().replace(/\/+$/, '')}${request.path}?${new URLSearchParams(request.query)}`, {
     headers: authHeaders(config), cache: 'no-store', signal,
   });
-  if (!response.ok) {
-    await response.body?.cancel().catch(() => {});
-    throw new Error(response.status === 401 ? '認証に失敗しました。プロキシの認証トークンを確認してください。'
-      : response.status === 403 ? '全実行環境の記録を見るには、プロキシの認証設定と認証トークンが必要です。'
-      : response.status === 404 || response.status === 501 ? 'このプロキシは状態APIに対応していません。Workerを更新してください。' : `状態の取得に失敗しました（HTTP ${response.status}）`);
-  }
-  const status = await response.json() as ProxyStatus;
-  if (!Array.isArray(status.sessions) || (status.nextCursor !== undefined && status.nextCursor !== null && (typeof status.nextCursor !== 'string' || !/^session:[a-f0-9]{64}$/.test(status.nextCursor)))) throw new Error('プロキシからの状態応答が不正です');
-  if (page?.all && status.scope !== 'all-sessions') throw new Error('このプロキシは全実行環境の一覧に対応していません。Workerを更新してください。');
-  return status;
+  if (!response.ok) await response.body?.cancel().catch(() => {});
+  return readProxyStatus(response.status, response.ok ? await response.json() : undefined, page?.all);
 }
 
 export async function deleteProxyStorage(config: ProxyConfig, sessionId?: string): Promise<number> {
   const base = config.endpoint.trim().replace(/\/+$/, '');
-  let deleted = 0, before: number | undefined, cursor: string | null = null, failed = 0;
+  let state: ProxyDeletionState | undefined;
   do {
-    const query = new URLSearchParams();
-    if (before !== undefined) query.set('before', String(before));
-    if (cursor) query.set('cursor', cursor);
+    const request = proxyDeleteRequest(sessionId, state);
+    const query = new URLSearchParams(request.query);
     const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(), 30_000);
+    const timer = setTimeout(() => abort.abort(), request.timeout * 1000);
     try {
-    const response = await fetch(`${base}/api/storage${sessionId === undefined ? `?${query}` : `/${encodeURIComponent(sessionId)}`}`, {
-      method: 'DELETE', headers: authHeaders(config), cache: 'no-store', signal: abort.signal,
-    });
-    if (!response.ok) {
-      await response.body?.cancel().catch(() => {});
-      throw new Error(response.status === 401 || response.status === 403 ? '削除する権限がありません。プロキシの認証トークンを確認してください。'
-        : response.status === 404 || response.status === 501 ? 'このプロキシは保存データの削除に対応していません。' : `保存データの削除に失敗しました（HTTP ${response.status}）。再度実行してください。`);
-    }
-    const result = await response.json();
-    if (sessionId !== undefined) {
-      if (result.deleted !== true) throw new Error('削除結果を確認できませんでした');
-      return 1;
-    }
-    if (!Number.isSafeInteger(result.deleted) || result.deleted < 0 || !Number.isSafeInteger(result.failed) || result.failed < 0 || !Number.isSafeInteger(result.before) || (before !== undefined && before !== result.before) || (result.cursor !== null && (typeof result.cursor !== 'string' || !/^session:[a-f0-9]{64}$/.test(result.cursor) || (cursor !== null && result.cursor <= cursor))))
-      throw new Error('プロキシからの削除応答が不正です');
-    deleted += result.deleted; failed += result.failed;
-    before = result.before; cursor = result.cursor;
+      const response = await fetch(`${base}${request.path}${sessionId === undefined ? `?${query}` : ''}`, {
+        method: request.method, headers: authHeaders(config), cache: 'no-store', signal: abort.signal,
+      });
+      if (!response.ok) await response.body?.cancel().catch(() => {});
+      state = readProxyDeletion(response.status, response.ok ? await response.json() : undefined, sessionId, state);
     } finally { clearTimeout(timer); }
-  } while (cursor);
-  if (failed) throw new Error(`${deleted}件を削除しましたが、${failed}件の削除に失敗しました。再度実行してください。`);
-  return deleted;
+  } while (state.cursor);
+  return state.deleted;
 }
 
 export function getProxyConfig(): ProxyConfig | undefined {

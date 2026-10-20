@@ -1254,6 +1254,7 @@ final class ChatState: ObservableObject {
     private var proxyRecoveryStore: NativeProxyRecoveryStore {
         NativeProxyRecoveryStore(libraryURL:(store ?? LocalStateStore.applicationStore).fileURL)
     }
+    @MainActor func proxyRecoveryRecords() throws -> [OrderedJSON] { try proxyRecoveryStore.records() }
     private func updatingProxyRecord(_ record: OrderedJSON, output: RemoteOutput) throws -> OrderedJSON {
         guard let receipt = output.proxyReceipt else { throw ExchangeError.invalid("プロキシの復旧情報がありません") }
         return record.replacing("checkpoint",with:output.proxyCheckpoint)
@@ -1284,6 +1285,7 @@ final class ChatState: ObservableObject {
             .init(key:"chat",value:boundary.chat(chat)),.init(key:"contentStore",value:boundary.store(source.required("contentStore"))),.init(key:"record",value:record)]))
         return result["status"] == .string("ready")
     }
+    @MainActor func canRecoverProxyRecord(_ record: OrderedJSON) -> Bool { (try? proxyRecoveryTarget(record)) == true }
     func runProxyRecovery() {
         guard streamRecoveryTask == nil else { return }
         streamRecoveryTask = Task { @MainActor [weak self] in
@@ -1296,7 +1298,7 @@ final class ChatState: ObservableObject {
     }
     func cancelProxyRecovery() { streamRecoveryTask?.cancel() }
 
-    @MainActor func recoverProxyStreams(record credential: RemoteCredentialRecord? = nil, client: RemoteClient? = nil) async throws {
+    @MainActor func recoverProxyStreams(record credential: RemoteCredentialRecord? = nil, client: RemoteClient? = nil, sessionID: String? = nil) async throws {
         guard generation == nil, !isRecoveringStream, !initialLoadFailed, exchange != nil else { return }
         let records = try proxyRecoveryStore.records()
         streamRecoveryError = nil
@@ -1308,6 +1310,7 @@ final class ChatState: ObservableObject {
         var retained = 0
         for original in records {
             try Task.checkCancellation()
+            if let sessionID, original["proxySessionId"] != .string(sessionID) { continue }
             guard try proxyRecoveryTarget(original) else { retained += 1; continue }
             let complete = original["proxyComplete"] == .bool(true), stopped = original["stopped"] == .bool(true)
             // Never send a token to an endpoint recovered from disk or imported data.

@@ -2259,6 +2259,7 @@ struct RemoteSettingsView: View {
     @State private var record = RemoteCredentialRecord()
     @State private var proxy = RemoteProxySettings()
     @State private var errorMessage: String?
+    @State private var didLoad = false
     var body: some View {
         NavigationStack {
             Form {
@@ -2272,18 +2273,211 @@ struct RemoteSettingsView: View {
                     Toggle("プロキシを使用",isOn:$proxy.enabled)
                     TextField("プロキシURL（HTTPS）",text:$proxy.endpoint).textInputAutocapitalization(.never).autocorrectionDisabled()
                     SecureField("プロキシ認証token",text:$proxy.authToken)
+                    NavigationLink("プロキシの状態を確認") { ProxyStatusView(state:state,settings:proxy) }
+                        .disabled(proxy.endpoint.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
                     Text("有効時は生成本文とAPIキーを指定したプロキシ経由で送信します。設定と認証情報はこの端末のKeychainに保存します。").font(.footnote).foregroundStyle(.secondary)
                 }
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }
             .navigationTitle("remote生成設定")
-            .task { do { record = try RemoteCredentials.load(); proxy = record.proxy ?? RemoteProxySettings() } catch { errorMessage = error.localizedDescription } }
+            .task {
+                guard !didLoad else { return }
+                do { record = try RemoteCredentials.load(); proxy = record.proxy ?? RemoteProxySettings(); didLoad = true }
+                catch { errorMessage = error.localizedDescription }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) { Button("保存") {
                     do { record.proxy = proxy; try state.saveRemoteSettings(record); dismiss() } catch { errorMessage = error.localizedDescription }
                 } }
             }
+        }
+    }
+}
+
+private struct ProxyStatusView: View {
+    @ObservedObject var state: ChatState
+    let settings: RemoteProxySettings
+    @State private var status: OrderedJSON?
+    @State private var labels: OrderedJSON?
+    @State private var records: [OrderedJSON] = []
+    @State private var recoveryGaps: OrderedJSON = .object([])
+    @State private var manualID = ""
+    @State private var selectedID = ""
+    @State private var pages = [""]
+    @State private var refresh = 0
+    @State private var loading = false
+    @State private var busy = false
+    @State private var error: String?
+    @State private var notice: String?
+    @State private var deletionID: String?
+    @State private var confirmsDeletion = false
+    @State private var action: Task<Void,Never>?
+    private var key: String { "\(settings.endpoint)\u{1f}\(settings.authToken)\u{1f}\(selectedID)\u{1f}\(pages.last ?? "")\u{1f}\(refresh)" }
+
+    private func string(_ value: OrderedJSON?) -> String? { value.flatMap { try? $0.string("status") } }
+    private func number(_ value: OrderedJSON?) -> Double? { value.flatMap { try? $0.number("status") } }
+    private func display(_ value: OrderedJSON?) -> String { string(value) ?? value.flatMap { try? $0.encoded() }.flatMap { String(data:$0,encoding:.utf8) } ?? "—" }
+    private func time(_ value: OrderedJSON?) -> String {
+        guard let millis = number(value), millis > 0 else { return "—" }
+        return Date(timeIntervalSince1970:millis / 1000).formatted(date:.omitted,time:.standard)
+    }
+    private func label(_ category: String, _ value: OrderedJSON?) -> String {
+        guard let code = string(value) else { return "—" }
+        return string(labels?[category]?[code]) ?? code
+    }
+    private func reason(_ value: OrderedJSON?) -> String {
+        guard let code = string(value) else { return "—" }
+        return "\(label("reason",value))（\(code)）"
+    }
+    private func local(_ id: String) -> OrderedJSON? { records.first { $0["proxySessionId"] == .string(id) } }
+
+    private func load(_ expected: String) async {
+        guard !loading, !busy else { return }
+        loading = true
+        defer { if key == expected { loading = false } }
+        do {
+            let local = try state.proxyRecoveryRecords()
+            let result = try await ProxyManagementClient().status(settings:settings,sessionID:selectedID.isEmpty ? nil : selectedID,cursor:selectedID.isEmpty ? pages.last.flatMap { $0.isEmpty ? nil : $0 } : nil)
+            try Task.checkCancellation()
+            guard key == expected else { return }
+            let matching = local.filter { $0["proxyEndpoint"] == .string(settings.endpoint.trimmingCharacters(in:.whitespacesAndNewlines).trimmingCharacters(in:CharacterSet(charactersIn:"/"))) }
+            let bridge = try SharedWebOperations.Session()
+            let gaps = try bridge.call("proxyManagement",.object([.init(key:"operation",value:.string("recoveryGaps")),
+                .init(key:"sessions",value:result.required("sessions")),.init(key:"records",value:.array(matching.map { record in
+                    .object([.init(key:"sessionId",value:record["proxySessionId"] ?? .null),
+                        .init(key:"cursor",value:record["checkpoint"]?["decoder"]?["lastEventId"] ?? .number("0"))])
+                }))]))
+            records = matching
+            recoveryGaps = gaps
+            status = result
+            labels = try bridge.call("proxyManagement",.object([.init(key:"operation",value:.string("labels"))]))
+            error = nil
+        } catch is CancellationError { }
+        catch { if key == expected { self.error = ProxyManagementClient.errorMessage(error) } }
+    }
+    private func poll(_ expected: String) async {
+        status = nil
+        loading = false
+        while !Task.isCancelled && key == expected {
+            await load(expected)
+            do { try await Task.sleep(nanoseconds:5_000_000_000) } catch { break }
+        }
+    }
+    private func delete() {
+        guard !busy else { return }
+        busy = true; error = nil; notice = nil
+        let id = deletionID
+        action = Task {
+            defer { busy = false; action = nil; refresh += 1 }
+            do {
+                let count = try await ProxyManagementClient().delete(settings:settings,sessionID:id)
+                try Task.checkCancellation()
+                notice = id == nil ? "\(count)件の保存データを削除しました。" : "このリクエストの保存データを削除しました。"
+            } catch is CancellationError { }
+            catch { self.error = ProxyManagementClient.errorMessage(error) }
+        }
+    }
+    private func recover(_ id: String) {
+        guard !busy else { return }
+        busy = true; error = nil
+        action = Task {
+            defer { busy = false; action = nil; refresh += 1 }
+            do { try await state.recoverProxyStreams(sessionID:id) }
+            catch is CancellationError { }
+            catch { self.error = ProxyManagementClient.errorMessage(error) }
+        }
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Text(settings.endpoint).font(.footnote).textSelection(.enabled)
+                Button("更新") { refresh += 1 }.disabled(loading || busy)
+                Text(loading ? "確認中…" : "5秒ごとに更新 · 最終確認 \(time(status?["checkedAt"]))").font(.footnote).foregroundStyle(.secondary)
+                HStack {
+                    TextField("セッションIDを指定して照会",text:$manualID).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    Button("照会") { selectedID = manualID.trimmingCharacters(in:.whitespacesAndNewlines); pages = [""]; refresh += 1 }
+                }
+                if !selectedID.isEmpty { Button("全記録に戻る") { selectedID = ""; manualID = ""; pages = [""] } }
+            }
+            if let notice { Text(notice) }
+            if let error { Text(error).foregroundStyle(.red) }
+            if let status {
+                Section("プロキシ") {
+                    Text("Worker \(display(status["version"])) · 接続拠点 \(display(status["colo"])) · 実行環境 \(String((string(status["instanceId"]) ?? "—").prefix(8)))")
+                    if let limits = status["limits"] {
+                        Text("保存上限 \(number(limits["cacheBytes"]).map { String(format:"%.0f",$0 / 1048576) } ?? "—") MiB · 保存期限 \(number(limits["retentionMs"]).map { String(format:"%.0f",$0 / 60000) } ?? "—")分 · 上流の無通信期限 \(number(limits["idleTimeoutMs"]).map { String(format:"%.0f",$0 / 1000) } ?? "—")秒")
+                    }
+                    Text(string(status["scope"]) == "all-sessions" ? "全端末・全実行環境の保存記録を20件ずつ表示します。応答は最終保存から5分、診断履歴は24時間保持します。" : string(status["scope"]) == "durable-session" ? "指定したIDの永続保存先を照会しています。" : "この実行環境で確認できる履歴を表示します。別の拠点の履歴は一覧に含まれません。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    if status["scope"] == .string("current-isolate"), status["recentSessionsVisible"] == .bool(false) {
+                        Text("プロキシ認証が未設定のため、既知のIDだけを照会します。").font(.footnote)
+                    }
+                    if status["storageDeletion"]?["all"] == .bool(true) {
+                        Button("プロキシの全保存データを削除",role:.destructive) { deletionID = nil; confirmsDeletion = true }.disabled(busy)
+                    } else if status["storageDeletion"]?["individual"] == .bool(true) {
+                        Text("全削除にはプロキシ側の認証設定が必要です。").font(.footnote)
+                    }
+                }
+                if let unavailable = number(status["unavailableSessions"]), unavailable > 0 {
+                    Text("\(Int(unavailable))件の記録を取得できませんでした。更新して再試行してください。").foregroundStyle(.red)
+                }
+                let sessions = (try? status.required("sessions").array("sessions")) ?? []
+                if sessions.isEmpty { Text("このページに保存記録はありません。IDを指定して個別に照会できます。") }
+                ForEach(Array(sessions.enumerated()),id:\.offset) { _, item in
+                    let id = string(item["sessionId"]) ?? ""
+                    let cache = item["cache"]
+                    let localState = item["local"]
+                    let record = local(id)
+                    Section(id.isEmpty ? "セッション" : id) {
+                        Text("中継: \(localState == nil || localState == .null ? "この実行環境では確認できません" : label("phase",localState?["phase"]))")
+                        Text("復旧データ: \(label("cache",cache?["state"])) · 最終保存状態: \(label("phase",cache?["terminal"]))")
+                        Text("端末の受信位置: \(record.map { display($0["checkpoint"]?["decoder"]?["lastEventId"]) } ?? "この端末に記録なし")")
+                        Text("保存イベント範囲: \(display(cache?["firstEventId"])) ～ \(display(cache?["lastEventId"]))")
+                        Text("最終受信 / 保存: \(time(localState?["lastChunkAt"])) / \(time(cache?["updatedAt"])) · 保存期限: \(time(cache?["expiresAt"]))")
+                        if localState != nil && localState != .null {
+                            Text("端末向け最終送信: \(time(localState?["lastClientWriteAt"])) · 切断検出: \(time(localState?["disconnectedAt"]))")
+                            Text("受信 / 保持バイト: \(display(localState?["receivedBytes"])) / \(display(localState?["bufferedBytes"]))")
+                            Text("保存試行 / 失敗: \(Int((number(localState?["cacheWrites"]) ?? 0) + (number(localState?["cacheFailures"]) ?? 0))) / \(display(localState?["cacheFailures"]))")
+                            Text("終了・切断理由: \(reason(localState?["reason"] ?? cache?["reason"])) · \(reason(localState?["disconnectReason"]))")
+                        } else if cache?["reason"] != nil { Text("保存時の理由: \(reason(cache?["reason"]))") }
+                        if cache?["state"] == .string("not-recorded") { Text("サーバーに受付記録がありません。この表示だけでは保存失敗と判断できません。").font(.footnote) }
+                        if let record {
+                            let recoverable = state.canRecoverProxyRecord(record)
+                            Text("端末の記録: \(display(record["requestId"]))").font(.footnote)
+                            if recoveryGaps[id] == .bool(true) { Text("受信位置と保存範囲が一致せず、欠落なく復旧できません。").foregroundStyle(.orange) }
+                            if !recoverable { Text("保存先のバブルまたは内容が変更されています。自動で上書きしません。").foregroundStyle(.orange) }
+                            if recoverable && recoveryGaps[id] != .bool(true) {
+                                Button("このリクエストを復旧") { recover(id) }
+                                    .disabled(busy || state.generation != nil || state.isRecoveringStream)
+                            }
+                        }
+                        if status["storageDeletion"]?["individual"] == .bool(true) {
+                            Button("この保存データを削除",role:.destructive) { deletionID = id; confirmsDeletion = true }.disabled(busy || id.isEmpty)
+                        }
+                    }
+                }
+                if selectedID.isEmpty {
+                    Section {
+                        HStack {
+                            Button("前の20件") { pages.removeLast() }.disabled(loading || pages.count == 1)
+                            Spacer()
+                            Text("\(pages.count)ページ目")
+                            Spacer()
+                            Button("次の20件") { if let cursor = string(status["nextCursor"]) { pages.append(cursor) } }.disabled(loading || string(status["nextCursor"]) == nil)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("プロキシの状態")
+        .task(id:key) { await poll(key) }
+        .onDisappear { action?.cancel() }
+        .confirmationDialog(deletionID == nil ? "プロキシの全保存データを削除しますか？" : "この保存データを削除しますか？",isPresented:$confirmsDeletion,titleVisibility:.visible) {
+            Button("削除",role:.destructive) { delete() }
+        } message: {
+            Text("プロキシの復旧データと診断履歴を削除し、中継中の場合は停止します。端末に保存済みの会話は残ります。プロキシからは復旧できなくなります。")
         }
     }
 }

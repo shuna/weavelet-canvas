@@ -11,6 +11,7 @@ private final class FakeRemoteProtocol: URLProtocol {
     static var releaseLast: (() -> Void)?
     static var onControl: ((URLRequest) -> Void)?
     static var recoveryResponses: [(status:Int,packets:[Packet],headers:[String:String])] = []
+    static var managementResponses: [(status:Int,body:String)] = []
     private let lock = NSLock()
     private var stopped = false
     override class func canInit(with request: URLRequest) -> Bool { ["fixture.invalid", "unit-fixture.openai.azure.com", "openrouter.ai"].contains(request.url?.host ?? "") }
@@ -23,6 +24,13 @@ private final class FakeRemoteProtocol: URLProtocol {
             Self.onControl?(captured)
             client?.urlProtocol(self,didReceive:HTTPURLResponse(url:captured.url!,statusCode:200,httpVersion:nil,headerFields:[:])!,cacheStoragePolicy:.notAllowed)
             client?.urlProtocol(self,didLoad:Data("{\"deleted\":true}".utf8))
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
+        if captured.url?.path.contains("/api/status") == true || captured.url?.path.contains("/api/storage") == true, !Self.managementResponses.isEmpty {
+            let result = Self.managementResponses.removeFirst()
+            client?.urlProtocol(self,didReceive:HTTPURLResponse(url:captured.url!,statusCode:result.status,httpVersion:nil,headerFields:[:])!,cacheStoragePolicy:.notAllowed)
+            client?.urlProtocol(self,didLoad:Data(result.body.utf8))
             client?.urlProtocolDidFinishLoading(self)
             return
         }
@@ -54,6 +62,7 @@ private final class FakeRemoteProtocol: URLProtocol {
         }
     }
     override func stopLoading() { lock.lock(); stopped = true; lock.unlock() }
+
 }
 
 @MainActor
@@ -275,7 +284,7 @@ final class RemoteGenerationTests: XCTestCase {
         return LocalStateStore(fileURL: directory.appendingPathComponent("local-state.json"))
     }
     private func client() -> RemoteClient {
-        FakeRemoteProtocol.requests = []; FakeRemoteProtocol.onControl = nil; FakeRemoteProtocol.recoveryResponses = []; FakeRemoteProtocol.holdLast = false; FakeRemoteProtocol.releaseLast = nil; FakeRemoteProtocol.status = 200; FakeRemoteProtocol.failure = nil; FakeRemoteProtocol.packets = []
+        FakeRemoteProtocol.requests = []; FakeRemoteProtocol.onControl = nil; FakeRemoteProtocol.recoveryResponses = []; FakeRemoteProtocol.managementResponses = []; FakeRemoteProtocol.holdLast = false; FakeRemoteProtocol.releaseLast = nil; FakeRemoteProtocol.status = 200; FakeRemoteProtocol.failure = nil; FakeRemoteProtocol.packets = []
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [FakeRemoteProtocol.self]
         return RemoteClient(session: URLSession(configuration: config))
@@ -1454,4 +1463,91 @@ final class RemoteGenerationTests: XCTestCase {
         XCTAssertEqual(ChatState(store: local).inputRole, "user")
     }
 
+    func testProxyManagementUsesSharedPlansAndKeepsLocalFilesUntouched() async throws {
+        let transport = client()
+        let management = ProxyManagementClient(client:transport)
+        let settings = RemoteProxySettings(enabled:false,endpoint:"https://fixture.invalid/relay",authToken:"FAKE-PROXY")
+        let local = try store()
+        let app = try state(local)
+        let journal = NativeProxyRecoveryStore(libraryURL:local.fileURL)
+        let retained = try OrderedJSON.decode(Data(#"{"requestId":"FAKE retained","proxySessionId":"other","future":{"big":9007199254740993,"text":"\ud800"}}"#.utf8))
+        try journal.upsert(retained)
+        let before = try Data(contentsOf:local.fileURL), beforeJournal = try Data(contentsOf:journal.fileURL)
+        let beforeSource = try XCTUnwrap(app.exchange).source
+        let cursor = "session:" + String(repeating:"a",count:64)
+        FakeRemoteProtocol.managementResponses = [
+            (200,#"{"sessions":[],"scope":"all-sessions","nextCursor":null}"#),
+            (200,#"{"sessions":[],"scope":"durable-session"}"#),
+            (200,"{\"deleted\":1,\"failed\":0,\"before\":123,\"cursor\":\"\(cursor)\"}"),
+            (200,#"{"deleted":2,"failed":0,"before":123,"cursor":null}"#)
+        ]
+        let all = try await management.status(settings:settings)
+        XCTAssertEqual(try all.required("sessions").array("sessions").count,0)
+        let gaps = try SharedWebOperations.call("proxyManagement",OrderedJSON.decode(Data(#"{"operation":"recoveryGaps","records":[{"sessionId":"known","cursor":1}],"sessions":[{"sessionId":"known","cache":{"state":"available","firstEventId":3,"lastEventId":5,"terminal":"complete"}}]}"#.utf8)))
+        XCTAssertEqual(gaps["known"],.bool(true))
+        let id = "known/one?#"
+        _ = try await management.status(settings:settings,sessionID:id)
+        let deleted = try await management.delete(settings:settings)
+        XCTAssertEqual(deleted,3)
+        XCTAssertEqual(FakeRemoteProtocol.requests.map(\.httpMethod),["GET","GET","DELETE","DELETE"])
+        XCTAssertEqual(FakeRemoteProtocol.requests[0].url?.path,"/relay/api/status")
+        XCTAssertEqual(URLComponents(url:FakeRemoteProtocol.requests[0].url!,resolvingAgainstBaseURL:false)?.queryItems?.first?.value,"1")
+        XCTAssertEqual(URLComponents(url:FakeRemoteProtocol.requests[1].url!,resolvingAgainstBaseURL:false)?.queryItems?.first?.value,id)
+        XCTAssertEqual(URLComponents(url:FakeRemoteProtocol.requests[3].url!,resolvingAgainstBaseURL:false)?.queryItems?.map(\.name),["before","cursor"])
+        XCTAssertTrue(FakeRemoteProtocol.requests.allSatisfy { $0.value(forHTTPHeaderField:"Authorization") == "Bearer FAKE-PROXY" && $0.httpBody == nil })
+        XCTAssertEqual(try Data(contentsOf:local.fileURL),before)
+        XCTAssertEqual(try Data(contentsOf:journal.fileURL),beforeJournal)
+        XCTAssertEqual(try app.exchange?.source.encoded(),try beforeSource.encoded())
+        XCTAssertEqual(try journal.records(),[retained])
+    }
+
+    func testProxyManagementFailureDoesNotReportDeletion() async throws {
+        let management = ProxyManagementClient(client:client())
+        let settings = RemoteProxySettings(endpoint:"https://fixture.invalid/relay",authToken:"FAKE-PROXY")
+        FakeRemoteProtocol.managementResponses = [(403,"{\"secret\":\"leak\"}")]
+        do { _ = try await management.delete(settings:settings,sessionID:"known"); XCTFail("Must fail") }
+        catch {
+            let message = ProxyManagementClient.errorMessage(error)
+            XCTAssertFalse(message.contains("leak"))
+            XCTAssertFalse(message.contains("V3 JSON"))
+            XCTAssertFalse(message.hasPrefix("Error: "))
+            XCTAssertTrue(message.contains("認証"))
+        }
+    }
+
+    func testProxyManagementSingleDeleteAndCancellationUseNativeTransportBoundaries() async throws {
+        let management = ProxyManagementClient(client:client())
+        let settings = RemoteProxySettings(endpoint:"https://fixture.invalid/relay",authToken:"FAKE-PROXY")
+        FakeRemoteProtocol.managementResponses = [(200,#"{"deleted":true}"#)]
+        let count = try await management.delete(settings:settings,sessionID:"known/one?#")
+        XCTAssertEqual(count,1)
+        let request = try XCTUnwrap(FakeRemoteProtocol.requests.last)
+        XCTAssertTrue(request.url!.absoluteString.contains("/api/storage/known%2Fone%3F%23"))
+        XCTAssertFalse(request.url!.absoluteString.contains("FAKE-PROXY"))
+        let before = FakeRemoteProtocol.requests.count
+        let task = Task { try await management.status(settings:settings) }
+        task.cancel()
+        do { _ = try await task.value; XCTFail("Must cancel before sending") }
+        catch is CancellationError { }
+        XCTAssertEqual(FakeRemoteProtocol.requests.count,before)
+    }
+
+    func testSelectedProxyRecoveryDoesNotTouchOtherJournalEntries() async throws {
+        let local = try store(), initial = try state(local), remote = client()
+        FakeRemoteProtocol.packets = [try proxyPacket(1,raw:"data: {\"choices\":[{\"delta\":{\"content\":\"Partial\"}}]}\n\n"),proxyDone]
+        try initial.startGeneration(input:"Recover one",record:proxyRecord(),client:remote)
+        try await wait { initial.generation == nil }
+        let journal = NativeProxyRecoveryStore(libraryURL:local.fileURL)
+        let selected = try XCTUnwrap(journal.records().first)
+        let other = selected.replacing("requestId",with:.string("FAKE other request"))
+            .replacing("proxySessionId",with:.string("FAKE other session"))
+            .replacing("future",with:try OrderedJSON.decode(Data(#"{"big":9007199254740993,"text":"\ud800"}"#.utf8)))
+        try journal.upsert(other)
+        let restarted = ChatState(store:local), recoveryClient = client()
+        FakeRemoteProtocol.packets = [try proxyPacket(2,raw:"data: {\"choices\":[{\"delta\":{\"content\":\" tail\"}}]}\n\ndata: [DONE]\n\n"),proxyDone]
+        try await restarted.recoverProxyStreams(record:proxyRecord(),client:recoveryClient,sessionID:selected.required("proxySessionId").string("session"))
+        XCTAssertEqual(try journal.records(),[other])
+        XCTAssertFalse(FakeRemoteProtocol.requests.contains { $0.url?.absoluteString.contains("FAKE%20other%20session") == true })
+        XCTAssertEqual(ChatState(store:local).exchange?.source,restarted.exchange?.source)
+    }
 }

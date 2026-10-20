@@ -66,6 +66,74 @@ struct RemoteProxySettings: Codable, Equatable {
     }
 }
 
+struct ProxyManagementClient {
+    let client: RemoteClient
+    init(client: RemoteClient = RemoteClient()) { self.client = client }
+
+    static func errorMessage(_ error: Error) -> String {
+        if case ExchangeError.invalid(let message) = error {
+            return message.hasPrefix("Error: ") ? String(message.dropFirst(7)) : message
+        }
+        return error.localizedDescription
+    }
+
+    private func perform(_ plan: OrderedJSON, settings: RemoteProxySettings) async throws -> (Int, OrderedJSON?) {
+        try Task.checkCancellation()
+        var enabled = settings; enabled.enabled = true
+        guard let checked = try enabled.validated(), let base = URL(string:checked.endpoint),
+              var components = URLComponents(url:base,resolvingAgainstBaseURL:false) else { throw ExchangeError.invalid("プロキシURL") }
+        components.percentEncodedPath += try plan.required("path").string("path")
+        components.queryItems = try plan.required("query").array("query").map { item in
+            let pair = try item.array("query item")
+            guard pair.count == 2 else { throw ExchangeError.invalid("query item") }
+            return URLQueryItem(name:try pair[0].string("query name"),value:try pair[1].string("query value"))
+        }
+        guard let url = components.url else { throw ExchangeError.invalid("プロキシURL") }
+        var request = URLRequest(url:url)
+        request.httpMethod = try plan.required("method").string("method")
+        request.timeoutInterval = try plan.required("timeout").number("timeout")
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        if !checked.authToken.isEmpty { request.setValue("Bearer " + checked.authToken,forHTTPHeaderField:"Authorization") }
+        let (data,response) = try await client.session.data(for:request)
+        try Task.checkCancellation()
+        guard let http = response as? HTTPURLResponse else { throw ExchangeError.invalid("プロキシ応答") }
+        return (http.statusCode,(200..<300).contains(http.statusCode) ? try OrderedJSON.decode(data) : nil)
+    }
+
+    func status(settings: RemoteProxySettings, sessionID: String? = nil, cursor: String? = nil) async throws -> OrderedJSON {
+        defer { client.closeIfOwned() }
+        let bridge = try SharedWebOperations.Session()
+        var fields: [JSONField] = [.init(key:"operation",value:.string("statusRequest"))]
+        if let sessionID { fields.append(.init(key:"sessionIds",value:.array([.string(sessionID)]))) }
+        else { fields.append(.init(key:"all",value:.bool(true))) }
+        if let cursor { fields.append(.init(key:"cursor",value:.string(cursor))) }
+        let plan = try bridge.call("proxyManagement",.object(fields))
+        let (code,body) = try await perform(plan,settings:settings)
+        var result: [JSONField] = [.init(key:"operation",value:.string("statusResponse")),.init(key:"httpStatus",value:.number(String(code))),.init(key:"all",value:.bool(sessionID == nil))]
+        if let body { result.append(.init(key:"body",value:body)) }
+        return try bridge.call("proxyManagement",.object(result))
+    }
+
+    func delete(settings: RemoteProxySettings, sessionID: String? = nil) async throws -> Int {
+        defer { client.closeIfOwned() }
+        let bridge = try SharedWebOperations.Session()
+        var state: OrderedJSON? = nil
+        repeat {
+            try Task.checkCancellation()
+            var fields: [JSONField] = [.init(key:"operation",value:.string("deleteRequest"))]
+            if let sessionID { fields.append(.init(key:"sessionId",value:.string(sessionID))) }
+            if let state { fields.append(.init(key:"state",value:state)) }
+            let plan = try bridge.call("proxyManagement",.object(fields))
+            let (code,body) = try await perform(plan,settings:settings)
+            fields[0] = .init(key:"operation",value:.string("deleteResponse"))
+            fields.append(.init(key:"httpStatus",value:.number(String(code))))
+            if let body { fields.append(.init(key:"body",value:body)) }
+            state = try bridge.call("proxyManagement",.object(fields))
+        } while state?["cursor"] != .null
+        return Int(try state!.required("deleted").number("deleted"))
+    }
+}
+
 struct RemoteProxyReceipt {
     let settings: RemoteProxySettings
     let sessionID: String
@@ -367,6 +435,7 @@ struct RemoteClient {
         }
     }
     func auxiliaryClient() -> RemoteClient { ownsSession ? RemoteClient() : self }
+    func closeIfOwned() { if ownsSession { session.invalidateAndCancel() } }
     func completeJSON(_ request: URLRequest) async throws -> OrderedJSON {
         defer { if ownsSession { session.invalidateAndCancel() } }
         let (data,response) = try await session.data(for:request)

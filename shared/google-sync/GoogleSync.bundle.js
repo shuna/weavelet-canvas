@@ -544,13 +544,13 @@ var WeaveletGoogleSync = (() => {
           return length ? baseSum(array, iteratee) / length : NAN;
         }
         function baseProperty(key) {
-          return function(object2) {
-            return object2 == null ? undefined2 : object2[key];
+          return function(object3) {
+            return object3 == null ? undefined2 : object3[key];
           };
         }
-        function basePropertyOf(object2) {
+        function basePropertyOf(object3) {
           return function(key) {
-            return object2 == null ? undefined2 : object2[key];
+            return object3 == null ? undefined2 : object3[key];
           };
         }
         function baseReduce(collection, iteratee, accumulator, initAccum, eachFunc) {
@@ -584,9 +584,9 @@ var WeaveletGoogleSync = (() => {
           }
           return result3;
         }
-        function baseToPairs(object2, props) {
+        function baseToPairs(object3, props) {
           return arrayMap(props, function(key) {
-            return [key, object2[key]];
+            return [key, object3[key]];
           });
         }
         function baseTrim(string) {
@@ -597,9 +597,9 @@ var WeaveletGoogleSync = (() => {
             return func(value);
           };
         }
-        function baseValues(object2, props) {
+        function baseValues(object3, props) {
           return arrayMap(props, function(key) {
-            return object2[key];
+            return object3[key];
           });
         }
         function cacheHas(cache2, key) {
@@ -631,8 +631,8 @@ var WeaveletGoogleSync = (() => {
         function escapeStringChar(chr) {
           return "\\" + stringEscapes[chr];
         }
-        function getValue(object2, key) {
-          return object2 == null ? undefined2 : object2[key];
+        function getValue(object3, key) {
+          return object3 == null ? undefined2 : object3[key];
         }
         function hasUnicode(string) {
           return reHasUnicode.test(string);
@@ -774,7 +774,7 @@ var WeaveletGoogleSync = (() => {
             return new LodashWrapper(value);
           }
           var baseCreate = function() {
-            function object2() {
+            function object3() {
             }
             return function(proto) {
               if (!isObject(proto)) {
@@ -783,9 +783,9 @@ var WeaveletGoogleSync = (() => {
               if (objectCreate) {
                 return objectCreate(proto);
               }
-              object2.prototype = proto;
-              var result4 = new object2();
-              object2.prototype = undefined2;
+              object3.prototype = proto;
+              var result4 = new object3();
+              object3.prototype = undefined2;
               return result4;
             };
           }();
@@ -1109,15 +1109,15 @@ var WeaveletGoogleSync = (() => {
           function arrayShuffle(array) {
             return shuffleSelf(copyArray(array));
           }
-          function assignMergeValue(object2, key, value) {
-            if (value !== undefined2 && !eq(object2[key], value) || value === undefined2 && !(key in object2)) {
-              baseAssignValue(object2, key, value);
+          function assignMergeValue(object3, key, value) {
+            if (value !== undefined2 && !eq(object3[key], value) || value === undefined2 && !(key in object3)) {
+              baseAssignValue(object3, key, value);
             }
           }
-          function assignValue(object2, key, value) {
-            var objValue = object2[key];
-            if (!(hasOwnProperty.call(object2, key) && eq(objValue, value)) || value === undefined2 && !(key in object2)) {
-              baseAssignValue(object2, key, value);
+          function assignValue(object3, key, value) {
+            var objValue = object3[key];
+            if (!(hasOwnProperty.call(object3, key) && eq(objValue, value)) || value === undefined2 && !(key in object3)) {
+              baseAssignValue(object3, key, value);
             }
           }
           function assocIndexOf(array, key) {
@@ -1135,28 +1135,28 @@ var WeaveletGoogleSync = (() => {
             });
             return accumulator;
           }
-          function baseAssign(object2, source) {
-            return object2 && copyObject(source, keys(source), object2);
+          function baseAssign(object3, source) {
+            return object3 && copyObject(source, keys(source), object3);
           }
-          function baseAssignIn(object2, source) {
-            return object2 && copyObject(source, keysIn(source), object2);
+          function baseAssignIn(object3, source) {
+            return object3 && copyObject(source, keysIn(source), object3);
           }
-          function baseAssignValue(object2, key, value) {
+          function baseAssignValue(object3, key, value) {
             if (key == "__proto__" && defineProperty) {
-              defineProperty(object2, key, {
+              defineProperty(object3, key, {
                 "configurable": true,
                 "enumerable": true,
                 "value": value,
                 "writable": true
               });
             } else {
-              object2[key] = value;
+              object3[key] = value;
             }
           }
-          function baseAt(object2, paths) {
-            var index = -1, length = paths.length, result4 = Array2(length), skip = object2 == null;
+          function baseAt(object3, paths) {
+            var index = -1, length = paths.length, result4 = Array2(length), skip = object3 == null;
             while (++index < length) {
-              result4[index] = skip ? undefined2 : get2(object2, paths[index]);
+              result4[index] = skip ? undefined2 : get2(object3, paths[index]);
             }
             return result4;
           }
@@ -1171,10 +1171,10 @@ var WeaveletGoogleSync = (() => {
             }
             return number;
           }
-          function baseClone(value, bitmask, customizer, key, object2, stack) {
+          function baseClone(value, bitmask, customizer, key, object3, stack) {
             var result4, isDeep = bitmask & CLONE_DEEP_FLAG, isFlat = bitmask & CLONE_FLAT_FLAG, isFull = bitmask & CLONE_SYMBOLS_FLAG;
             if (customizer) {
-              result4 = object2 ? customizer(value, key, object2, stack) : customizer(value);
+              result4 = object3 ? customizer(value, key, object3, stack) : customizer(value);
             }
             if (result4 !== undefined2) {
               return result4;
@@ -1193,14 +1193,14 @@ var WeaveletGoogleSync = (() => {
               if (isBuffer(value)) {
                 return cloneBuffer(value, isDeep);
               }
-              if (tag == objectTag || tag == argsTag || isFunc && !object2) {
+              if (tag == objectTag || tag == argsTag || isFunc && !object3) {
                 result4 = isFlat || isFunc ? {} : initCloneObject(value);
                 if (!isDeep) {
                   return isFlat ? copySymbolsIn(value, baseAssignIn(result4, value)) : copySymbols(value, baseAssign(result4, value));
                 }
               } else {
                 if (!cloneableTags[tag]) {
-                  return object2 ? value : {};
+                  return object3 ? value : {};
                 }
                 result4 = initCloneByTag(value, tag, isDeep);
               }
@@ -1233,19 +1233,19 @@ var WeaveletGoogleSync = (() => {
           }
           function baseConforms(source) {
             var props = keys(source);
-            return function(object2) {
-              return baseConformsTo(object2, source, props);
+            return function(object3) {
+              return baseConformsTo(object3, source, props);
             };
           }
-          function baseConformsTo(object2, source, props) {
+          function baseConformsTo(object3, source, props) {
             var length = props.length;
-            if (object2 == null) {
+            if (object3 == null) {
               return !length;
             }
-            object2 = Object2(object2);
+            object3 = Object2(object3);
             while (length--) {
-              var key = props[length], predicate = source[key], value = object2[key];
-              if (value === undefined2 && !(key in object2) || !predicate(value)) {
+              var key = props[length], predicate = source[key], value = object3[key];
+              if (value === undefined2 && !(key in object3) || !predicate(value)) {
                 return false;
               }
             }
@@ -1358,28 +1358,28 @@ var WeaveletGoogleSync = (() => {
           }
           var baseFor = createBaseFor();
           var baseForRight = createBaseFor(true);
-          function baseForOwn(object2, iteratee2) {
-            return object2 && baseFor(object2, iteratee2, keys);
+          function baseForOwn(object3, iteratee2) {
+            return object3 && baseFor(object3, iteratee2, keys);
           }
-          function baseForOwnRight(object2, iteratee2) {
-            return object2 && baseForRight(object2, iteratee2, keys);
+          function baseForOwnRight(object3, iteratee2) {
+            return object3 && baseForRight(object3, iteratee2, keys);
           }
-          function baseFunctions(object2, props) {
+          function baseFunctions(object3, props) {
             return arrayFilter(props, function(key) {
-              return isFunction(object2[key]);
+              return isFunction(object3[key]);
             });
           }
-          function baseGet(object2, path) {
-            path = castPath(path, object2);
+          function baseGet(object3, path) {
+            path = castPath(path, object3);
             var index = 0, length = path.length;
-            while (object2 != null && index < length) {
-              object2 = object2[toKey(path[index++])];
+            while (object3 != null && index < length) {
+              object3 = object3[toKey(path[index++])];
             }
-            return index && index == length ? object2 : undefined2;
+            return index && index == length ? object3 : undefined2;
           }
-          function baseGetAllKeys(object2, keysFunc, symbolsFunc) {
-            var result4 = keysFunc(object2);
-            return isArray(object2) ? result4 : arrayPush(result4, symbolsFunc(object2));
+          function baseGetAllKeys(object3, keysFunc, symbolsFunc) {
+            var result4 = keysFunc(object3);
+            return isArray(object3) ? result4 : arrayPush(result4, symbolsFunc(object3));
           }
           function baseGetTag(value) {
             if (value == null) {
@@ -1390,11 +1390,11 @@ var WeaveletGoogleSync = (() => {
           function baseGt(value, other) {
             return value > other;
           }
-          function baseHas(object2, key) {
-            return object2 != null && hasOwnProperty.call(object2, key);
+          function baseHas(object3, key) {
+            return object3 != null && hasOwnProperty.call(object3, key);
           }
-          function baseHasIn(object2, key) {
-            return object2 != null && key in Object2(object2);
+          function baseHasIn(object3, key) {
+            return object3 != null && key in Object2(object3);
           }
           function baseInRange(number, start2, end) {
             return number >= nativeMin(start2, end) && number < nativeMax(start2, end);
@@ -1431,17 +1431,17 @@ var WeaveletGoogleSync = (() => {
               }
             return result4;
           }
-          function baseInverter(object2, setter, iteratee2, accumulator) {
-            baseForOwn(object2, function(value, key, object3) {
-              setter(accumulator, iteratee2(value), key, object3);
+          function baseInverter(object3, setter, iteratee2, accumulator) {
+            baseForOwn(object3, function(value, key, object4) {
+              setter(accumulator, iteratee2(value), key, object4);
             });
             return accumulator;
           }
-          function baseInvoke(object2, path, args) {
-            path = castPath(path, object2);
-            object2 = parent(object2, path);
-            var func = object2 == null ? object2 : object2[toKey(last(path))];
-            return func == null ? undefined2 : apply(func, object2, args);
+          function baseInvoke(object3, path, args) {
+            path = castPath(path, object3);
+            object3 = parent(object3, path);
+            var func = object3 == null ? object3 : object3[toKey(last(path))];
+            return func == null ? undefined2 : apply(func, object3, args);
           }
           function baseIsArguments(value) {
             return isObjectLike(value) && baseGetTag(value) == argsTag;
@@ -1461,12 +1461,12 @@ var WeaveletGoogleSync = (() => {
             }
             return baseIsEqualDeep(value, other, bitmask, customizer, baseIsEqual, stack);
           }
-          function baseIsEqualDeep(object2, other, bitmask, customizer, equalFunc, stack) {
-            var objIsArr = isArray(object2), othIsArr = isArray(other), objTag = objIsArr ? arrayTag : getTag(object2), othTag = othIsArr ? arrayTag : getTag(other);
+          function baseIsEqualDeep(object3, other, bitmask, customizer, equalFunc, stack) {
+            var objIsArr = isArray(object3), othIsArr = isArray(other), objTag = objIsArr ? arrayTag : getTag(object3), othTag = othIsArr ? arrayTag : getTag(other);
             objTag = objTag == argsTag ? objectTag : objTag;
             othTag = othTag == argsTag ? objectTag : othTag;
             var objIsObj = objTag == objectTag, othIsObj = othTag == objectTag, isSameTag = objTag == othTag;
-            if (isSameTag && isBuffer(object2)) {
+            if (isSameTag && isBuffer(object3)) {
               if (!isBuffer(other)) {
                 return false;
               }
@@ -1475,12 +1475,12 @@ var WeaveletGoogleSync = (() => {
             }
             if (isSameTag && !objIsObj) {
               stack || (stack = new Stack());
-              return objIsArr || isTypedArray(object2) ? equalArrays(object2, other, bitmask, customizer, equalFunc, stack) : equalByTag(object2, other, objTag, bitmask, customizer, equalFunc, stack);
+              return objIsArr || isTypedArray(object3) ? equalArrays(object3, other, bitmask, customizer, equalFunc, stack) : equalByTag(object3, other, objTag, bitmask, customizer, equalFunc, stack);
             }
             if (!(bitmask & COMPARE_PARTIAL_FLAG)) {
-              var objIsWrapped = objIsObj && hasOwnProperty.call(object2, "__wrapped__"), othIsWrapped = othIsObj && hasOwnProperty.call(other, "__wrapped__");
+              var objIsWrapped = objIsObj && hasOwnProperty.call(object3, "__wrapped__"), othIsWrapped = othIsObj && hasOwnProperty.call(other, "__wrapped__");
               if (objIsWrapped || othIsWrapped) {
-                var objUnwrapped = objIsWrapped ? object2.value() : object2, othUnwrapped = othIsWrapped ? other.value() : other;
+                var objUnwrapped = objIsWrapped ? object3.value() : object3, othUnwrapped = othIsWrapped ? other.value() : other;
                 stack || (stack = new Stack());
                 return equalFunc(objUnwrapped, othUnwrapped, bitmask, customizer, stack);
               }
@@ -1489,34 +1489,34 @@ var WeaveletGoogleSync = (() => {
               return false;
             }
             stack || (stack = new Stack());
-            return equalObjects(object2, other, bitmask, customizer, equalFunc, stack);
+            return equalObjects(object3, other, bitmask, customizer, equalFunc, stack);
           }
           function baseIsMap(value) {
             return isObjectLike(value) && getTag(value) == mapTag;
           }
-          function baseIsMatch(object2, source, matchData, customizer) {
+          function baseIsMatch(object3, source, matchData, customizer) {
             var index = matchData.length, length = index, noCustomizer = !customizer;
-            if (object2 == null) {
+            if (object3 == null) {
               return !length;
             }
-            object2 = Object2(object2);
+            object3 = Object2(object3);
             while (index--) {
               var data = matchData[index];
-              if (noCustomizer && data[2] ? data[1] !== object2[data[0]] : !(data[0] in object2)) {
+              if (noCustomizer && data[2] ? data[1] !== object3[data[0]] : !(data[0] in object3)) {
                 return false;
               }
             }
             while (++index < length) {
               data = matchData[index];
-              var key = data[0], objValue = object2[key], srcValue = data[1];
+              var key = data[0], objValue = object3[key], srcValue = data[1];
               if (noCustomizer && data[2]) {
-                if (objValue === undefined2 && !(key in object2)) {
+                if (objValue === undefined2 && !(key in object3)) {
                   return false;
                 }
               } else {
                 var stack = new Stack();
                 if (customizer) {
-                  var result4 = customizer(objValue, srcValue, key, object2, source, stack);
+                  var result4 = customizer(objValue, srcValue, key, object3, source, stack);
                 }
                 if (!(result4 === undefined2 ? baseIsEqual(srcValue, objValue, COMPARE_PARTIAL_FLAG | COMPARE_UNORDERED_FLAG, customizer, stack) : result4)) {
                   return false;
@@ -1553,25 +1553,25 @@ var WeaveletGoogleSync = (() => {
             }
             return property(value);
           }
-          function baseKeys(object2) {
-            if (!isPrototype(object2)) {
-              return nativeKeys(object2);
+          function baseKeys(object3) {
+            if (!isPrototype(object3)) {
+              return nativeKeys(object3);
             }
             var result4 = [];
-            for (var key in Object2(object2)) {
-              if (hasOwnProperty.call(object2, key) && key != "constructor") {
+            for (var key in Object2(object3)) {
+              if (hasOwnProperty.call(object3, key) && key != "constructor") {
                 result4.push(key);
               }
             }
             return result4;
           }
-          function baseKeysIn(object2) {
-            if (!isObject(object2)) {
-              return nativeKeysIn(object2);
+          function baseKeysIn(object3) {
+            if (!isObject(object3)) {
+              return nativeKeysIn(object3);
             }
-            var isProto = isPrototype(object2), result4 = [];
-            for (var key in object2) {
-              if (!(key == "constructor" && (isProto || !hasOwnProperty.call(object2, key)))) {
+            var isProto = isPrototype(object3), result4 = [];
+            for (var key in object3) {
+              if (!(key == "constructor" && (isProto || !hasOwnProperty.call(object3, key)))) {
                 result4.push(key);
               }
             }
@@ -1592,43 +1592,43 @@ var WeaveletGoogleSync = (() => {
             if (matchData.length == 1 && matchData[0][2]) {
               return matchesStrictComparable(matchData[0][0], matchData[0][1]);
             }
-            return function(object2) {
-              return object2 === source || baseIsMatch(object2, source, matchData);
+            return function(object3) {
+              return object3 === source || baseIsMatch(object3, source, matchData);
             };
           }
           function baseMatchesProperty(path, srcValue) {
             if (isKey(path) && isStrictComparable(srcValue)) {
               return matchesStrictComparable(toKey(path), srcValue);
             }
-            return function(object2) {
-              var objValue = get2(object2, path);
-              return objValue === undefined2 && objValue === srcValue ? hasIn(object2, path) : baseIsEqual(srcValue, objValue, COMPARE_PARTIAL_FLAG | COMPARE_UNORDERED_FLAG);
+            return function(object3) {
+              var objValue = get2(object3, path);
+              return objValue === undefined2 && objValue === srcValue ? hasIn(object3, path) : baseIsEqual(srcValue, objValue, COMPARE_PARTIAL_FLAG | COMPARE_UNORDERED_FLAG);
             };
           }
-          function baseMerge(object2, source, srcIndex, customizer, stack) {
-            if (object2 === source) {
+          function baseMerge(object3, source, srcIndex, customizer, stack) {
+            if (object3 === source) {
               return;
             }
             baseFor(source, function(srcValue, key) {
               stack || (stack = new Stack());
               if (isObject(srcValue)) {
-                baseMergeDeep(object2, source, key, srcIndex, baseMerge, customizer, stack);
+                baseMergeDeep(object3, source, key, srcIndex, baseMerge, customizer, stack);
               } else {
-                var newValue = customizer ? customizer(safeGet(object2, key), srcValue, key + "", object2, source, stack) : undefined2;
+                var newValue = customizer ? customizer(safeGet(object3, key), srcValue, key + "", object3, source, stack) : undefined2;
                 if (newValue === undefined2) {
                   newValue = srcValue;
                 }
-                assignMergeValue(object2, key, newValue);
+                assignMergeValue(object3, key, newValue);
               }
             }, keysIn);
           }
-          function baseMergeDeep(object2, source, key, srcIndex, mergeFunc, customizer, stack) {
-            var objValue = safeGet(object2, key), srcValue = safeGet(source, key), stacked = stack.get(srcValue);
+          function baseMergeDeep(object3, source, key, srcIndex, mergeFunc, customizer, stack) {
+            var objValue = safeGet(object3, key), srcValue = safeGet(source, key), stacked = stack.get(srcValue);
             if (stacked) {
-              assignMergeValue(object2, key, stacked);
+              assignMergeValue(object3, key, stacked);
               return;
             }
-            var newValue = customizer ? customizer(objValue, srcValue, key + "", object2, source, stack) : undefined2;
+            var newValue = customizer ? customizer(objValue, srcValue, key + "", object3, source, stack) : undefined2;
             var isCommon = newValue === undefined2;
             if (isCommon) {
               var isArr = isArray(srcValue), isBuff = !isArr && isBuffer(srcValue), isTyped = !isArr && !isBuff && isTypedArray(srcValue);
@@ -1663,7 +1663,7 @@ var WeaveletGoogleSync = (() => {
               mergeFunc(newValue, srcValue, srcIndex, customizer, stack);
               stack["delete"](srcValue);
             }
-            assignMergeValue(object2, key, newValue);
+            assignMergeValue(object3, key, newValue);
           }
           function baseNth(array, n) {
             var length = array.length;
@@ -1694,28 +1694,28 @@ var WeaveletGoogleSync = (() => {
               });
               return { "criteria": criteria, "index": ++index, "value": value };
             });
-            return baseSortBy(result4, function(object2, other) {
-              return compareMultiple(object2, other, orders);
+            return baseSortBy(result4, function(object3, other) {
+              return compareMultiple(object3, other, orders);
             });
           }
-          function basePick(object2, paths) {
-            return basePickBy(object2, paths, function(value, path) {
-              return hasIn(object2, path);
+          function basePick(object3, paths) {
+            return basePickBy(object3, paths, function(value, path) {
+              return hasIn(object3, path);
             });
           }
-          function basePickBy(object2, paths, predicate) {
+          function basePickBy(object3, paths, predicate) {
             var index = -1, length = paths.length, result4 = {};
             while (++index < length) {
-              var path = paths[index], value = baseGet(object2, path);
+              var path = paths[index], value = baseGet(object3, path);
               if (predicate(value, path)) {
-                baseSet(result4, castPath(path, object2), value);
+                baseSet(result4, castPath(path, object3), value);
               }
             }
             return result4;
           }
           function basePropertyDeep(path) {
-            return function(object2) {
-              return baseGet(object2, path);
+            return function(object3) {
+              return baseGet(object3, path);
             };
           }
           function basePullAll(array, values2, iteratee2, comparator) {
@@ -1789,16 +1789,16 @@ var WeaveletGoogleSync = (() => {
             var array = values(collection);
             return shuffleSelf(array, baseClamp(n, 0, array.length));
           }
-          function baseSet(object2, path, value, customizer) {
-            if (!isObject(object2)) {
-              return object2;
+          function baseSet(object3, path, value, customizer) {
+            if (!isObject(object3)) {
+              return object3;
             }
-            path = castPath(path, object2);
-            var index = -1, length = path.length, lastIndex = length - 1, nested = object2;
+            path = castPath(path, object3);
+            var index = -1, length = path.length, lastIndex = length - 1, nested = object3;
             while (nested != null && ++index < length) {
               var key = toKey(path[index]), newValue = value;
               if (key === "__proto__" || key === "constructor" || key === "prototype") {
-                return object2;
+                return object3;
               }
               if (index != lastIndex) {
                 var objValue = nested[key];
@@ -1810,7 +1810,7 @@ var WeaveletGoogleSync = (() => {
               assignValue(nested, key, newValue);
               nested = nested[key];
             }
-            return object2;
+            return object3;
           }
           var baseSetData = !metaMap ? identity : function(func, data) {
             metaMap.set(func, data);
@@ -1970,26 +1970,26 @@ var WeaveletGoogleSync = (() => {
               }
             return result4;
           }
-          function baseUnset(object2, path) {
-            path = castPath(path, object2);
+          function baseUnset(object3, path) {
+            path = castPath(path, object3);
             var index = -1, length = path.length;
             if (!length) {
               return true;
             }
             while (++index < length) {
               var key = toKey(path[index]);
-              if (key === "__proto__" && !hasOwnProperty.call(object2, "__proto__")) {
+              if (key === "__proto__" && !hasOwnProperty.call(object3, "__proto__")) {
                 return false;
               }
               if ((key === "constructor" || key === "prototype") && index < length - 1) {
                 return false;
               }
             }
-            var obj = parent(object2, path);
+            var obj = parent(object3, path);
             return obj == null || delete obj[toKey(last(path))];
           }
-          function baseUpdate(object2, path, updater, customizer) {
-            return baseSet(object2, path, updater(baseGet(object2, path)), customizer);
+          function baseUpdate(object3, path, updater, customizer) {
+            return baseSet(object3, path, updater(baseGet(object3, path)), customizer);
           }
           function baseWhile(array, predicate, isDrop, fromRight) {
             var length = array.length, index = fromRight ? length : -1;
@@ -2036,11 +2036,11 @@ var WeaveletGoogleSync = (() => {
           function castFunction(value) {
             return typeof value == "function" ? value : identity;
           }
-          function castPath(value, object2) {
+          function castPath(value, object3) {
             if (isArray(value)) {
               return value;
             }
-            return isKey(value, object2) ? [value] : stringToPath(toString(value));
+            return isKey(value, object3) ? [value] : stringToPath(toString(value));
           }
           var castRest = baseRest;
           function castSlice(array, start2, end) {
@@ -2093,8 +2093,8 @@ var WeaveletGoogleSync = (() => {
             }
             return 0;
           }
-          function compareMultiple(object2, other, orders) {
-            var index = -1, objCriteria = object2.criteria, othCriteria = other.criteria, length = objCriteria.length, ordersLength = orders.length;
+          function compareMultiple(object3, other, orders) {
+            var index = -1, objCriteria = object3.criteria, othCriteria = other.criteria, length = objCriteria.length, ordersLength = orders.length;
             while (++index < length) {
               var result4 = compareAscending(objCriteria[index], othCriteria[index]);
               if (result4) {
@@ -2105,7 +2105,7 @@ var WeaveletGoogleSync = (() => {
                 return result4 * (order == "desc" ? -1 : 1);
               }
             }
-            return object2.index - other.index;
+            return object3.index - other.index;
           }
           function composeArgs(args, partials, holders, isCurried) {
             var argsIndex = -1, argsLength = args.length, holdersLength = holders.length, leftIndex = -1, leftLength = partials.length, rangeLength = nativeMax(argsLength - holdersLength, 0), result4 = Array2(leftLength + rangeLength), isUncurried = !isCurried;
@@ -2146,29 +2146,29 @@ var WeaveletGoogleSync = (() => {
             }
             return array;
           }
-          function copyObject(source, props, object2, customizer) {
-            var isNew = !object2;
-            object2 || (object2 = {});
+          function copyObject(source, props, object3, customizer) {
+            var isNew = !object3;
+            object3 || (object3 = {});
             var index = -1, length = props.length;
             while (++index < length) {
               var key = props[index];
-              var newValue = customizer ? customizer(object2[key], source[key], key, object2, source) : undefined2;
+              var newValue = customizer ? customizer(object3[key], source[key], key, object3, source) : undefined2;
               if (newValue === undefined2) {
                 newValue = source[key];
               }
               if (isNew) {
-                baseAssignValue(object2, key, newValue);
+                baseAssignValue(object3, key, newValue);
               } else {
-                assignValue(object2, key, newValue);
+                assignValue(object3, key, newValue);
               }
             }
-            return object2;
+            return object3;
           }
-          function copySymbols(source, object2) {
-            return copyObject(source, getSymbols(source), object2);
+          function copySymbols(source, object3) {
+            return copyObject(source, getSymbols(source), object3);
           }
-          function copySymbolsIn(source, object2) {
-            return copyObject(source, getSymbolsIn(source), object2);
+          function copySymbolsIn(source, object3) {
+            return copyObject(source, getSymbolsIn(source), object3);
           }
           function createAggregator(setter, initializer) {
             return function(collection, iteratee2) {
@@ -2177,21 +2177,21 @@ var WeaveletGoogleSync = (() => {
             };
           }
           function createAssigner(assigner) {
-            return baseRest(function(object2, sources) {
+            return baseRest(function(object3, sources) {
               var index = -1, length = sources.length, customizer = length > 1 ? sources[length - 1] : undefined2, guard = length > 2 ? sources[2] : undefined2;
               customizer = assigner.length > 3 && typeof customizer == "function" ? (length--, customizer) : undefined2;
               if (guard && isIterateeCall(sources[0], sources[1], guard)) {
                 customizer = length < 3 ? undefined2 : customizer;
                 length = 1;
               }
-              object2 = Object2(object2);
+              object3 = Object2(object3);
               while (++index < length) {
                 var source = sources[index];
                 if (source) {
-                  assigner(object2, source, index, customizer);
+                  assigner(object3, source, index, customizer);
                 }
               }
-              return object2;
+              return object3;
             });
           }
           function createBaseEach(eachFunc, fromRight) {
@@ -2212,15 +2212,15 @@ var WeaveletGoogleSync = (() => {
             };
           }
           function createBaseFor(fromRight) {
-            return function(object2, iteratee2, keysFunc) {
-              var index = -1, iterable = Object2(object2), props = keysFunc(object2), length = props.length;
+            return function(object3, iteratee2, keysFunc) {
+              var index = -1, iterable = Object2(object3), props = keysFunc(object3), length = props.length;
               while (length--) {
                 var key = props[fromRight ? length : ++index];
                 if (iteratee2(iterable[key], key, iterable) === false) {
                   break;
                 }
               }
-              return object2;
+              return object3;
             };
           }
           function createBind(func, bitmask, thisArg) {
@@ -2400,8 +2400,8 @@ var WeaveletGoogleSync = (() => {
             return wrapper;
           }
           function createInverter(setter, toIteratee) {
-            return function(object2, iteratee2) {
-              return baseInverter(object2, setter, toIteratee(iteratee2), {});
+            return function(object3, iteratee2) {
+              return baseInverter(object3, setter, toIteratee(iteratee2), {});
             };
           }
           function createMathOperation(operator, defaultValue) {
@@ -2531,15 +2531,15 @@ var WeaveletGoogleSync = (() => {
             return new Set2(values2);
           };
           function createToPairs(keysFunc) {
-            return function(object2) {
-              var tag = getTag(object2);
+            return function(object3) {
+              var tag = getTag(object3);
               if (tag == mapTag) {
-                return mapToArray(object2);
+                return mapToArray(object3);
               }
               if (tag == setTag) {
-                return setToPairs(object2);
+                return setToPairs(object3);
               }
-              return baseToPairs(object2, keysFunc(object2));
+              return baseToPairs(object3, keysFunc(object3));
             };
           }
           function createWrap(func, bitmask, thisArg, partials, holders, argPos, ary2, arity) {
@@ -2596,13 +2596,13 @@ var WeaveletGoogleSync = (() => {
             var setter = data ? baseSetData : setData;
             return setWrapToString(setter(result4, newData), func, bitmask);
           }
-          function customDefaultsAssignIn(objValue, srcValue, key, object2) {
-            if (objValue === undefined2 || eq(objValue, objectProto[key]) && !hasOwnProperty.call(object2, key)) {
+          function customDefaultsAssignIn(objValue, srcValue, key, object3) {
+            if (objValue === undefined2 || eq(objValue, objectProto[key]) && !hasOwnProperty.call(object3, key)) {
               return srcValue;
             }
             return objValue;
           }
-          function customDefaultsMerge(objValue, srcValue, key, object2, source, stack) {
+          function customDefaultsMerge(objValue, srcValue, key, object3, source, stack) {
             if (isObject(objValue) && isObject(srcValue)) {
               stack.set(srcValue, objValue);
               baseMerge(objValue, srcValue, undefined2, customDefaultsMerge, stack);
@@ -2656,54 +2656,54 @@ var WeaveletGoogleSync = (() => {
             stack["delete"](other);
             return result4;
           }
-          function equalByTag(object2, other, tag, bitmask, customizer, equalFunc, stack) {
+          function equalByTag(object3, other, tag, bitmask, customizer, equalFunc, stack) {
             switch (tag) {
               case dataViewTag:
-                if (object2.byteLength != other.byteLength || object2.byteOffset != other.byteOffset) {
+                if (object3.byteLength != other.byteLength || object3.byteOffset != other.byteOffset) {
                   return false;
                 }
-                object2 = object2.buffer;
+                object3 = object3.buffer;
                 other = other.buffer;
               case arrayBufferTag:
-                if (object2.byteLength != other.byteLength || !equalFunc(new Uint8Array2(object2), new Uint8Array2(other))) {
+                if (object3.byteLength != other.byteLength || !equalFunc(new Uint8Array2(object3), new Uint8Array2(other))) {
                   return false;
                 }
                 return true;
               case boolTag:
               case dateTag:
               case numberTag:
-                return eq(+object2, +other);
+                return eq(+object3, +other);
               case errorTag:
-                return object2.name == other.name && object2.message == other.message;
+                return object3.name == other.name && object3.message == other.message;
               case regexpTag:
               case stringTag:
-                return object2 == other + "";
+                return object3 == other + "";
               case mapTag:
                 var convert = mapToArray;
               case setTag:
                 var isPartial = bitmask & COMPARE_PARTIAL_FLAG;
                 convert || (convert = setToArray);
-                if (object2.size != other.size && !isPartial) {
+                if (object3.size != other.size && !isPartial) {
                   return false;
                 }
-                var stacked = stack.get(object2);
+                var stacked = stack.get(object3);
                 if (stacked) {
                   return stacked == other;
                 }
                 bitmask |= COMPARE_UNORDERED_FLAG;
-                stack.set(object2, other);
-                var result4 = equalArrays(convert(object2), convert(other), bitmask, customizer, equalFunc, stack);
-                stack["delete"](object2);
+                stack.set(object3, other);
+                var result4 = equalArrays(convert(object3), convert(other), bitmask, customizer, equalFunc, stack);
+                stack["delete"](object3);
                 return result4;
               case symbolTag:
                 if (symbolValueOf) {
-                  return symbolValueOf.call(object2) == symbolValueOf.call(other);
+                  return symbolValueOf.call(object3) == symbolValueOf.call(other);
                 }
             }
             return false;
           }
-          function equalObjects(object2, other, bitmask, customizer, equalFunc, stack) {
-            var isPartial = bitmask & COMPARE_PARTIAL_FLAG, objProps = getAllKeys(object2), objLength = objProps.length, othProps = getAllKeys(other), othLength = othProps.length;
+          function equalObjects(object3, other, bitmask, customizer, equalFunc, stack) {
+            var isPartial = bitmask & COMPARE_PARTIAL_FLAG, objProps = getAllKeys(object3), objLength = objProps.length, othProps = getAllKeys(other), othLength = othProps.length;
             if (objLength != othLength && !isPartial) {
               return false;
             }
@@ -2714,20 +2714,20 @@ var WeaveletGoogleSync = (() => {
                 return false;
               }
             }
-            var objStacked = stack.get(object2);
+            var objStacked = stack.get(object3);
             var othStacked = stack.get(other);
             if (objStacked && othStacked) {
-              return objStacked == other && othStacked == object2;
+              return objStacked == other && othStacked == object3;
             }
             var result4 = true;
-            stack.set(object2, other);
-            stack.set(other, object2);
+            stack.set(object3, other);
+            stack.set(other, object3);
             var skipCtor = isPartial;
             while (++index < objLength) {
               key = objProps[index];
-              var objValue = object2[key], othValue = other[key];
+              var objValue = object3[key], othValue = other[key];
               if (customizer) {
-                var compared = isPartial ? customizer(othValue, objValue, key, other, object2, stack) : customizer(objValue, othValue, key, object2, other, stack);
+                var compared = isPartial ? customizer(othValue, objValue, key, other, object3, stack) : customizer(objValue, othValue, key, object3, other, stack);
               }
               if (!(compared === undefined2 ? objValue === othValue || equalFunc(objValue, othValue, bitmask, customizer, stack) : compared)) {
                 result4 = false;
@@ -2736,23 +2736,23 @@ var WeaveletGoogleSync = (() => {
               skipCtor || (skipCtor = key == "constructor");
             }
             if (result4 && !skipCtor) {
-              var objCtor = object2.constructor, othCtor = other.constructor;
-              if (objCtor != othCtor && ("constructor" in object2 && "constructor" in other) && !(typeof objCtor == "function" && objCtor instanceof objCtor && typeof othCtor == "function" && othCtor instanceof othCtor)) {
+              var objCtor = object3.constructor, othCtor = other.constructor;
+              if (objCtor != othCtor && ("constructor" in object3 && "constructor" in other) && !(typeof objCtor == "function" && objCtor instanceof objCtor && typeof othCtor == "function" && othCtor instanceof othCtor)) {
                 result4 = false;
               }
             }
-            stack["delete"](object2);
+            stack["delete"](object3);
             stack["delete"](other);
             return result4;
           }
           function flatRest(func) {
             return setToString(overRest(func, undefined2, flatten), func + "");
           }
-          function getAllKeys(object2) {
-            return baseGetAllKeys(object2, keys, getSymbols);
+          function getAllKeys(object3) {
+            return baseGetAllKeys(object3, keys, getSymbols);
           }
-          function getAllKeysIn(object2) {
-            return baseGetAllKeys(object2, keysIn, getSymbolsIn);
+          function getAllKeysIn(object3) {
+            return baseGetAllKeys(object3, keysIn, getSymbolsIn);
           }
           var getData = !metaMap ? noop2 : function(func) {
             return metaMap.get(func);
@@ -2768,8 +2768,8 @@ var WeaveletGoogleSync = (() => {
             return result4;
           }
           function getHolder(func) {
-            var object2 = hasOwnProperty.call(lodash, "placeholder") ? lodash : func;
-            return object2.placeholder;
+            var object3 = hasOwnProperty.call(lodash, "placeholder") ? lodash : func;
+            return object3.placeholder;
           }
           function getIteratee() {
             var result4 = lodash.iteratee || iteratee;
@@ -2780,16 +2780,16 @@ var WeaveletGoogleSync = (() => {
             var data = map2.__data__;
             return isKeyable(key) ? data[typeof key == "string" ? "string" : "hash"] : data.map;
           }
-          function getMatchData(object2) {
-            var result4 = keys(object2), length = result4.length;
+          function getMatchData(object3) {
+            var result4 = keys(object3), length = result4.length;
             while (length--) {
-              var key = result4[length], value = object2[key];
+              var key = result4[length], value = object3[key];
               result4[length] = [key, value, isStrictComparable(value)];
             }
             return result4;
           }
-          function getNative(object2, key) {
-            var value = getValue(object2, key);
+          function getNative(object3, key) {
+            var value = getValue(object3, key);
             return baseIsNative(value) ? value : undefined2;
           }
           function getRawTag(value) {
@@ -2809,20 +2809,20 @@ var WeaveletGoogleSync = (() => {
             }
             return result4;
           }
-          var getSymbols = !nativeGetSymbols ? stubArray : function(object2) {
-            if (object2 == null) {
+          var getSymbols = !nativeGetSymbols ? stubArray : function(object3) {
+            if (object3 == null) {
               return [];
             }
-            object2 = Object2(object2);
-            return arrayFilter(nativeGetSymbols(object2), function(symbol) {
-              return propertyIsEnumerable.call(object2, symbol);
+            object3 = Object2(object3);
+            return arrayFilter(nativeGetSymbols(object3), function(symbol) {
+              return propertyIsEnumerable.call(object3, symbol);
             });
           };
-          var getSymbolsIn = !nativeGetSymbols ? stubArray : function(object2) {
+          var getSymbolsIn = !nativeGetSymbols ? stubArray : function(object3) {
             var result4 = [];
-            while (object2) {
-              arrayPush(result4, getSymbols(object2));
-              object2 = getPrototype(object2);
+            while (object3) {
+              arrayPush(result4, getSymbols(object3));
+              object3 = getPrototype(object3);
             }
             return result4;
           };
@@ -2872,21 +2872,21 @@ var WeaveletGoogleSync = (() => {
             var match = source.match(reWrapDetails);
             return match ? match[1].split(reSplitDetails) : [];
           }
-          function hasPath(object2, path, hasFunc) {
-            path = castPath(path, object2);
+          function hasPath(object3, path, hasFunc) {
+            path = castPath(path, object3);
             var index = -1, length = path.length, result4 = false;
             while (++index < length) {
               var key = toKey(path[index]);
-              if (!(result4 = object2 != null && hasFunc(object2, key))) {
+              if (!(result4 = object3 != null && hasFunc(object3, key))) {
                 break;
               }
-              object2 = object2[key];
+              object3 = object3[key];
             }
             if (result4 || ++index != length) {
               return result4;
             }
-            length = object2 == null ? 0 : object2.length;
-            return !!length && isLength(length) && isIndex(key, length) && (isArray(object2) || isArguments(object2));
+            length = object3 == null ? 0 : object3.length;
+            return !!length && isLength(length) && isIndex(key, length) && (isArray(object3) || isArguments(object3));
           }
           function initCloneArray(array) {
             var length = array.length, result4 = new array.constructor(length);
@@ -2896,19 +2896,19 @@ var WeaveletGoogleSync = (() => {
             }
             return result4;
           }
-          function initCloneObject(object2) {
-            return typeof object2.constructor == "function" && !isPrototype(object2) ? baseCreate(getPrototype(object2)) : {};
+          function initCloneObject(object3) {
+            return typeof object3.constructor == "function" && !isPrototype(object3) ? baseCreate(getPrototype(object3)) : {};
           }
-          function initCloneByTag(object2, tag, isDeep) {
-            var Ctor = object2.constructor;
+          function initCloneByTag(object3, tag, isDeep) {
+            var Ctor = object3.constructor;
             switch (tag) {
               case arrayBufferTag:
-                return cloneArrayBuffer(object2);
+                return cloneArrayBuffer(object3);
               case boolTag:
               case dateTag:
-                return new Ctor(+object2);
+                return new Ctor(+object3);
               case dataViewTag:
-                return cloneDataView(object2, isDeep);
+                return cloneDataView(object3, isDeep);
               case float32Tag:
               case float64Tag:
               case int8Tag:
@@ -2918,18 +2918,18 @@ var WeaveletGoogleSync = (() => {
               case uint8ClampedTag:
               case uint16Tag:
               case uint32Tag:
-                return cloneTypedArray(object2, isDeep);
+                return cloneTypedArray(object3, isDeep);
               case mapTag:
                 return new Ctor();
               case numberTag:
               case stringTag:
-                return new Ctor(object2);
+                return new Ctor(object3);
               case regexpTag:
-                return cloneRegExp(object2);
+                return cloneRegExp(object3);
               case setTag:
                 return new Ctor();
               case symbolTag:
-                return cloneSymbol(object2);
+                return cloneSymbol(object3);
             }
           }
           function insertWrapDetails(source, details) {
@@ -2950,17 +2950,17 @@ var WeaveletGoogleSync = (() => {
             length = length == null ? MAX_SAFE_INTEGER : length;
             return !!length && (type == "number" || type != "symbol" && reIsUint.test(value)) && (value > -1 && value % 1 == 0 && value < length);
           }
-          function isIterateeCall(value, index, object2) {
-            if (!isObject(object2)) {
+          function isIterateeCall(value, index, object3) {
+            if (!isObject(object3)) {
               return false;
             }
             var type = typeof index;
-            if (type == "number" ? isArrayLike(object2) && isIndex(index, object2.length) : type == "string" && index in object2) {
-              return eq(object2[index], value);
+            if (type == "number" ? isArrayLike(object3) && isIndex(index, object3.length) : type == "string" && index in object3) {
+              return eq(object3[index], value);
             }
             return false;
           }
-          function isKey(value, object2) {
+          function isKey(value, object3) {
             if (isArray(value)) {
               return false;
             }
@@ -2968,7 +2968,7 @@ var WeaveletGoogleSync = (() => {
             if (type == "number" || type == "symbol" || type == "boolean" || value == null || isSymbol(value)) {
               return true;
             }
-            return reIsPlainProp.test(value) || !reIsDeepProp.test(value) || object2 != null && value in Object2(object2);
+            return reIsPlainProp.test(value) || !reIsDeepProp.test(value) || object3 != null && value in Object2(object3);
           }
           function isKeyable(value) {
             var type = typeof value;
@@ -2997,11 +2997,11 @@ var WeaveletGoogleSync = (() => {
             return value === value && !isObject(value);
           }
           function matchesStrictComparable(key, srcValue) {
-            return function(object2) {
-              if (object2 == null) {
+            return function(object3) {
+              if (object3 == null) {
                 return false;
               }
-              return object2[key] === srcValue && (srcValue !== undefined2 || key in Object2(object2));
+              return object3[key] === srcValue && (srcValue !== undefined2 || key in Object2(object3));
             };
           }
           function memoizeCapped(func) {
@@ -3050,10 +3050,10 @@ var WeaveletGoogleSync = (() => {
             data[1] = newBitmask;
             return data;
           }
-          function nativeKeysIn(object2) {
+          function nativeKeysIn(object3) {
             var result4 = [];
-            if (object2 != null) {
-              for (var key in Object2(object2)) {
+            if (object3 != null) {
+              for (var key in Object2(object3)) {
                 result4.push(key);
               }
             }
@@ -3078,8 +3078,8 @@ var WeaveletGoogleSync = (() => {
               return apply(func, this, otherArgs);
             };
           }
-          function parent(object2, path) {
-            return path.length < 2 ? object2 : baseGet(object2, baseSlice(path, 0, -1));
+          function parent(object3, path) {
+            return path.length < 2 ? object3 : baseGet(object3, baseSlice(path, 0, -1));
           }
           function reorder(array, indexes) {
             var arrLength = array.length, length = nativeMin(indexes.length, arrLength), oldArray = copyArray(array);
@@ -3089,14 +3089,14 @@ var WeaveletGoogleSync = (() => {
             }
             return array;
           }
-          function safeGet(object2, key) {
-            if (key === "constructor" && typeof object2[key] === "function") {
+          function safeGet(object3, key) {
+            if (key === "constructor" && typeof object3[key] === "function") {
               return;
             }
             if (key == "__proto__") {
               return;
             }
-            return object2[key];
+            return object3[key];
           }
           var setData = shortOut(baseSetData);
           var setTimeout2 = ctxSetTimeout || function(func, wait) {
@@ -3588,8 +3588,8 @@ var WeaveletGoogleSync = (() => {
             return interceptor(value);
           }
           var wrapperAt = flatRest(function(paths) {
-            var length = paths.length, start2 = length ? paths[0] : 0, value = this.__wrapped__, interceptor = function(object2) {
-              return baseAt(object2, paths);
+            var length = paths.length, start2 = length ? paths[0] : 0, value = this.__wrapped__, interceptor = function(object3) {
+              return baseAt(object3, paths);
             };
             if (length > 1 || this.__actions__.length || !(value instanceof LazyWrapper) || !isIndex(start2)) {
               return this.thru(interceptor);
@@ -3850,13 +3850,13 @@ var WeaveletGoogleSync = (() => {
             }
             return createWrap(func, bitmask, thisArg, partials, holders);
           });
-          var bindKey = baseRest(function(object2, key, partials) {
+          var bindKey = baseRest(function(object3, key, partials) {
             var bitmask = WRAP_BIND_FLAG | WRAP_BIND_KEY_FLAG;
             if (partials.length) {
               var holders = replaceHolders(partials, getHolder(bindKey));
               bitmask |= WRAP_PARTIAL_FLAG;
             }
-            return createWrap(key, bitmask, object2, partials, holders);
+            return createWrap(key, bitmask, object3, partials, holders);
           });
           function curry(func, arity, guard) {
             arity = guard ? undefined2 : arity;
@@ -4083,8 +4083,8 @@ var WeaveletGoogleSync = (() => {
             customizer = typeof customizer == "function" ? customizer : undefined2;
             return baseClone(value, CLONE_DEEP_FLAG | CLONE_SYMBOLS_FLAG, customizer);
           }
-          function conformsTo(object2, source) {
-            return source == null || baseConformsTo(object2, source, keys(source));
+          function conformsTo(object3, source) {
+            return source == null || baseConformsTo(object3, source, keys(source));
           }
           function eq(value, other) {
             return value === other || value !== value && other !== other;
@@ -4174,12 +4174,12 @@ var WeaveletGoogleSync = (() => {
             return value != null && typeof value == "object";
           }
           var isMap = nodeIsMap ? baseUnary(nodeIsMap) : baseIsMap;
-          function isMatch(object2, source) {
-            return object2 === source || baseIsMatch(object2, source, getMatchData(source));
+          function isMatch(object3, source) {
+            return object3 === source || baseIsMatch(object3, source, getMatchData(source));
           }
-          function isMatchWith(object2, source, customizer) {
+          function isMatchWith(object3, source, customizer) {
             customizer = typeof customizer == "function" ? customizer : undefined2;
-            return baseIsMatch(object2, source, getMatchData(source), customizer);
+            return baseIsMatch(object3, source, getMatchData(source), customizer);
           }
           function isNaN2(value) {
             return isNumber(value) && value != +value;
@@ -4293,33 +4293,33 @@ var WeaveletGoogleSync = (() => {
           function toString(value) {
             return value == null ? "" : baseToString(value);
           }
-          var assign = createAssigner(function(object2, source) {
+          var assign = createAssigner(function(object3, source) {
             if (isPrototype(source) || isArrayLike(source)) {
-              copyObject(source, keys(source), object2);
+              copyObject(source, keys(source), object3);
               return;
             }
             for (var key in source) {
               if (hasOwnProperty.call(source, key)) {
-                assignValue(object2, key, source[key]);
+                assignValue(object3, key, source[key]);
               }
             }
           });
-          var assignIn = createAssigner(function(object2, source) {
-            copyObject(source, keysIn(source), object2);
+          var assignIn = createAssigner(function(object3, source) {
+            copyObject(source, keysIn(source), object3);
           });
-          var assignInWith = createAssigner(function(object2, source, srcIndex, customizer) {
-            copyObject(source, keysIn(source), object2, customizer);
+          var assignInWith = createAssigner(function(object3, source, srcIndex, customizer) {
+            copyObject(source, keysIn(source), object3, customizer);
           });
-          var assignWith = createAssigner(function(object2, source, srcIndex, customizer) {
-            copyObject(source, keys(source), object2, customizer);
+          var assignWith = createAssigner(function(object3, source, srcIndex, customizer) {
+            copyObject(source, keys(source), object3, customizer);
           });
           var at2 = flatRest(baseAt);
           function create(prototype, properties) {
             var result4 = baseCreate(prototype);
             return properties == null ? result4 : baseAssign(result4, properties);
           }
-          var defaults = baseRest(function(object2, sources) {
-            object2 = Object2(object2);
+          var defaults = baseRest(function(object3, sources) {
+            object3 = Object2(object3);
             var index = -1;
             var length = sources.length;
             var guard = length > 2 ? sources[2] : undefined2;
@@ -4333,51 +4333,51 @@ var WeaveletGoogleSync = (() => {
               var propsLength = props.length;
               while (++propsIndex < propsLength) {
                 var key = props[propsIndex];
-                var value = object2[key];
-                if (value === undefined2 || eq(value, objectProto[key]) && !hasOwnProperty.call(object2, key)) {
-                  object2[key] = source[key];
+                var value = object3[key];
+                if (value === undefined2 || eq(value, objectProto[key]) && !hasOwnProperty.call(object3, key)) {
+                  object3[key] = source[key];
                 }
               }
             }
-            return object2;
+            return object3;
           });
           var defaultsDeep = baseRest(function(args) {
             args.push(undefined2, customDefaultsMerge);
             return apply(mergeWith, undefined2, args);
           });
-          function findKey(object2, predicate) {
-            return baseFindKey(object2, getIteratee(predicate, 3), baseForOwn);
+          function findKey(object3, predicate) {
+            return baseFindKey(object3, getIteratee(predicate, 3), baseForOwn);
           }
-          function findLastKey(object2, predicate) {
-            return baseFindKey(object2, getIteratee(predicate, 3), baseForOwnRight);
+          function findLastKey(object3, predicate) {
+            return baseFindKey(object3, getIteratee(predicate, 3), baseForOwnRight);
           }
-          function forIn(object2, iteratee2) {
-            return object2 == null ? object2 : baseFor(object2, getIteratee(iteratee2, 3), keysIn);
+          function forIn(object3, iteratee2) {
+            return object3 == null ? object3 : baseFor(object3, getIteratee(iteratee2, 3), keysIn);
           }
-          function forInRight(object2, iteratee2) {
-            return object2 == null ? object2 : baseForRight(object2, getIteratee(iteratee2, 3), keysIn);
+          function forInRight(object3, iteratee2) {
+            return object3 == null ? object3 : baseForRight(object3, getIteratee(iteratee2, 3), keysIn);
           }
-          function forOwn(object2, iteratee2) {
-            return object2 && baseForOwn(object2, getIteratee(iteratee2, 3));
+          function forOwn(object3, iteratee2) {
+            return object3 && baseForOwn(object3, getIteratee(iteratee2, 3));
           }
-          function forOwnRight(object2, iteratee2) {
-            return object2 && baseForOwnRight(object2, getIteratee(iteratee2, 3));
+          function forOwnRight(object3, iteratee2) {
+            return object3 && baseForOwnRight(object3, getIteratee(iteratee2, 3));
           }
-          function functions(object2) {
-            return object2 == null ? [] : baseFunctions(object2, keys(object2));
+          function functions(object3) {
+            return object3 == null ? [] : baseFunctions(object3, keys(object3));
           }
-          function functionsIn(object2) {
-            return object2 == null ? [] : baseFunctions(object2, keysIn(object2));
+          function functionsIn(object3) {
+            return object3 == null ? [] : baseFunctions(object3, keysIn(object3));
           }
-          function get2(object2, path, defaultValue) {
-            var result4 = object2 == null ? undefined2 : baseGet(object2, path);
+          function get2(object3, path, defaultValue) {
+            var result4 = object3 == null ? undefined2 : baseGet(object3, path);
             return result4 === undefined2 ? defaultValue : result4;
           }
-          function has2(object2, path) {
-            return object2 != null && hasPath(object2, path, baseHas);
+          function has2(object3, path) {
+            return object3 != null && hasPath(object3, path, baseHas);
           }
-          function hasIn(object2, path) {
-            return object2 != null && hasPath(object2, path, baseHasIn);
+          function hasIn(object3, path) {
+            return object3 != null && hasPath(object3, path, baseHasIn);
           }
           var invert = createInverter(function(result4, value, key) {
             if (value != null && typeof value.toString != "function") {
@@ -4396,46 +4396,46 @@ var WeaveletGoogleSync = (() => {
             }
           }, getIteratee);
           var invoke = baseRest(baseInvoke);
-          function keys(object2) {
-            return isArrayLike(object2) ? arrayLikeKeys(object2) : baseKeys(object2);
+          function keys(object3) {
+            return isArrayLike(object3) ? arrayLikeKeys(object3) : baseKeys(object3);
           }
-          function keysIn(object2) {
-            return isArrayLike(object2) ? arrayLikeKeys(object2, true) : baseKeysIn(object2);
+          function keysIn(object3) {
+            return isArrayLike(object3) ? arrayLikeKeys(object3, true) : baseKeysIn(object3);
           }
-          function mapKeys(object2, iteratee2) {
+          function mapKeys(object3, iteratee2) {
             var result4 = {};
             iteratee2 = getIteratee(iteratee2, 3);
-            baseForOwn(object2, function(value, key, object3) {
-              baseAssignValue(result4, iteratee2(value, key, object3), value);
+            baseForOwn(object3, function(value, key, object4) {
+              baseAssignValue(result4, iteratee2(value, key, object4), value);
             });
             return result4;
           }
-          function mapValues(object2, iteratee2) {
+          function mapValues(object3, iteratee2) {
             var result4 = {};
             iteratee2 = getIteratee(iteratee2, 3);
-            baseForOwn(object2, function(value, key, object3) {
-              baseAssignValue(result4, key, iteratee2(value, key, object3));
+            baseForOwn(object3, function(value, key, object4) {
+              baseAssignValue(result4, key, iteratee2(value, key, object4));
             });
             return result4;
           }
-          var merge = createAssigner(function(object2, source, srcIndex) {
-            baseMerge(object2, source, srcIndex);
+          var merge = createAssigner(function(object3, source, srcIndex) {
+            baseMerge(object3, source, srcIndex);
           });
-          var mergeWith = createAssigner(function(object2, source, srcIndex, customizer) {
-            baseMerge(object2, source, srcIndex, customizer);
+          var mergeWith = createAssigner(function(object3, source, srcIndex, customizer) {
+            baseMerge(object3, source, srcIndex, customizer);
           });
-          var omit = flatRest(function(object2, paths) {
+          var omit = flatRest(function(object3, paths) {
             var result4 = {};
-            if (object2 == null) {
+            if (object3 == null) {
               return result4;
             }
             var isDeep = false;
             paths = arrayMap(paths, function(path) {
-              path = castPath(path, object2);
+              path = castPath(path, object3);
               isDeep || (isDeep = path.length > 1);
               return path;
             });
-            copyObject(object2, getAllKeysIn(object2), result4);
+            copyObject(object3, getAllKeysIn(object3), result4);
             if (isDeep) {
               result4 = baseClone(result4, CLONE_DEEP_FLAG | CLONE_FLAT_FLAG | CLONE_SYMBOLS_FLAG, customOmitClone);
             }
@@ -4445,83 +4445,83 @@ var WeaveletGoogleSync = (() => {
             }
             return result4;
           });
-          function omitBy(object2, predicate) {
-            return pickBy(object2, negate(getIteratee(predicate)));
+          function omitBy(object3, predicate) {
+            return pickBy(object3, negate(getIteratee(predicate)));
           }
-          var pick = flatRest(function(object2, paths) {
-            return object2 == null ? {} : basePick(object2, paths);
+          var pick = flatRest(function(object3, paths) {
+            return object3 == null ? {} : basePick(object3, paths);
           });
-          function pickBy(object2, predicate) {
-            if (object2 == null) {
+          function pickBy(object3, predicate) {
+            if (object3 == null) {
               return {};
             }
-            var props = arrayMap(getAllKeysIn(object2), function(prop) {
+            var props = arrayMap(getAllKeysIn(object3), function(prop) {
               return [prop];
             });
             predicate = getIteratee(predicate);
-            return basePickBy(object2, props, function(value, path) {
+            return basePickBy(object3, props, function(value, path) {
               return predicate(value, path[0]);
             });
           }
-          function result3(object2, path, defaultValue) {
-            path = castPath(path, object2);
+          function result3(object3, path, defaultValue) {
+            path = castPath(path, object3);
             var index = -1, length = path.length;
             if (!length) {
               length = 1;
-              object2 = undefined2;
+              object3 = undefined2;
             }
             while (++index < length) {
-              var value = object2 == null ? undefined2 : object2[toKey(path[index])];
+              var value = object3 == null ? undefined2 : object3[toKey(path[index])];
               if (value === undefined2) {
                 index = length;
                 value = defaultValue;
               }
-              object2 = isFunction(value) ? value.call(object2) : value;
+              object3 = isFunction(value) ? value.call(object3) : value;
             }
-            return object2;
+            return object3;
           }
-          function set(object2, path, value) {
-            return object2 == null ? object2 : baseSet(object2, path, value);
+          function set(object3, path, value) {
+            return object3 == null ? object3 : baseSet(object3, path, value);
           }
-          function setWith(object2, path, value, customizer) {
+          function setWith(object3, path, value, customizer) {
             customizer = typeof customizer == "function" ? customizer : undefined2;
-            return object2 == null ? object2 : baseSet(object2, path, value, customizer);
+            return object3 == null ? object3 : baseSet(object3, path, value, customizer);
           }
           var toPairs = createToPairs(keys);
           var toPairsIn = createToPairs(keysIn);
-          function transform(object2, iteratee2, accumulator) {
-            var isArr = isArray(object2), isArrLike = isArr || isBuffer(object2) || isTypedArray(object2);
+          function transform(object3, iteratee2, accumulator) {
+            var isArr = isArray(object3), isArrLike = isArr || isBuffer(object3) || isTypedArray(object3);
             iteratee2 = getIteratee(iteratee2, 4);
             if (accumulator == null) {
-              var Ctor = object2 && object2.constructor;
+              var Ctor = object3 && object3.constructor;
               if (isArrLike) {
                 accumulator = isArr ? new Ctor() : [];
-              } else if (isObject(object2)) {
-                accumulator = isFunction(Ctor) ? baseCreate(getPrototype(object2)) : {};
+              } else if (isObject(object3)) {
+                accumulator = isFunction(Ctor) ? baseCreate(getPrototype(object3)) : {};
               } else {
                 accumulator = {};
               }
             }
-            (isArrLike ? arrayEach : baseForOwn)(object2, function(value, index, object3) {
-              return iteratee2(accumulator, value, index, object3);
+            (isArrLike ? arrayEach : baseForOwn)(object3, function(value, index, object4) {
+              return iteratee2(accumulator, value, index, object4);
             });
             return accumulator;
           }
-          function unset(object2, path) {
-            return object2 == null ? true : baseUnset(object2, path);
+          function unset(object3, path) {
+            return object3 == null ? true : baseUnset(object3, path);
           }
-          function update(object2, path, updater) {
-            return object2 == null ? object2 : baseUpdate(object2, path, castFunction(updater));
+          function update(object3, path, updater) {
+            return object3 == null ? object3 : baseUpdate(object3, path, castFunction(updater));
           }
-          function updateWith(object2, path, updater, customizer) {
+          function updateWith(object3, path, updater, customizer) {
             customizer = typeof customizer == "function" ? customizer : undefined2;
-            return object2 == null ? object2 : baseUpdate(object2, path, castFunction(updater), customizer);
+            return object3 == null ? object3 : baseUpdate(object3, path, castFunction(updater), customizer);
           }
-          function values(object2) {
-            return object2 == null ? [] : baseValues(object2, keys(object2));
+          function values(object3) {
+            return object3 == null ? [] : baseValues(object3, keys(object3));
           }
-          function valuesIn(object2) {
-            return object2 == null ? [] : baseValues(object2, keysIn(object2));
+          function valuesIn(object3) {
+            return object3 == null ? [] : baseValues(object3, keysIn(object3));
           }
           function clamp(number, lower, upper) {
             if (upper === undefined2) {
@@ -4854,12 +4854,12 @@ var WeaveletGoogleSync = (() => {
               return isError(e) ? e : new Error2(e);
             }
           });
-          var bindAll = flatRest(function(object2, methodNames) {
+          var bindAll = flatRest(function(object3, methodNames) {
             arrayEach(methodNames, function(key) {
               key = toKey(key);
-              baseAssignValue(object2, key, bind(object2[key], object2));
+              baseAssignValue(object3, key, bind(object3[key], object3));
             });
-            return object2;
+            return object3;
           });
           function cond(pairs) {
             var length = pairs == null ? 0 : pairs.length, toIteratee = getIteratee();
@@ -4905,41 +4905,41 @@ var WeaveletGoogleSync = (() => {
             return baseMatchesProperty(path, baseClone(srcValue, CLONE_DEEP_FLAG));
           }
           var method = baseRest(function(path, args) {
-            return function(object2) {
-              return baseInvoke(object2, path, args);
+            return function(object3) {
+              return baseInvoke(object3, path, args);
             };
           });
-          var methodOf = baseRest(function(object2, args) {
+          var methodOf = baseRest(function(object3, args) {
             return function(path) {
-              return baseInvoke(object2, path, args);
+              return baseInvoke(object3, path, args);
             };
           });
-          function mixin(object2, source, options) {
+          function mixin(object3, source, options) {
             var props = keys(source), methodNames = baseFunctions(source, props);
             if (options == null && !(isObject(source) && (methodNames.length || !props.length))) {
               options = source;
-              source = object2;
-              object2 = this;
+              source = object3;
+              object3 = this;
               methodNames = baseFunctions(source, keys(source));
             }
-            var chain2 = !(isObject(options) && "chain" in options) || !!options.chain, isFunc = isFunction(object2);
+            var chain2 = !(isObject(options) && "chain" in options) || !!options.chain, isFunc = isFunction(object3);
             arrayEach(methodNames, function(methodName) {
               var func = source[methodName];
-              object2[methodName] = func;
+              object3[methodName] = func;
               if (isFunc) {
-                object2.prototype[methodName] = function() {
+                object3.prototype[methodName] = function() {
                   var chainAll = this.__chain__;
                   if (chain2 || chainAll) {
-                    var result4 = object2(this.__wrapped__), actions = result4.__actions__ = copyArray(this.__actions__);
-                    actions.push({ "func": func, "args": arguments, "thisArg": object2 });
+                    var result4 = object3(this.__wrapped__), actions = result4.__actions__ = copyArray(this.__actions__);
+                    actions.push({ "func": func, "args": arguments, "thisArg": object3 });
                     result4.__chain__ = chainAll;
                     return result4;
                   }
-                  return func.apply(object2, arrayPush([this.value()], arguments));
+                  return func.apply(object3, arrayPush([this.value()], arguments));
                 };
               }
             });
-            return object2;
+            return object3;
           }
           function noConflict() {
             if (root._ === this) {
@@ -4961,9 +4961,9 @@ var WeaveletGoogleSync = (() => {
           function property(path) {
             return isKey(path) ? baseProperty(toKey(path)) : basePropertyDeep(path);
           }
-          function propertyOf(object2) {
+          function propertyOf(object3) {
             return function(path) {
-              return object2 == null ? undefined2 : baseGet(object2, path);
+              return object3 == null ? undefined2 : baseGet(object3, path);
             };
           }
           var range = createRange();
@@ -8505,6 +8505,7 @@ var WeaveletGoogleSync = (() => {
     promptApplicationOperation: () => promptApplicationOperation,
     promptLibraryOperation: () => promptLibraryOperation,
     providerModelList: () => providerModelList,
+    proxyManagement: () => proxyManagement,
     proxyRecoveryRetry: () => proxyRecoveryRetry2,
     proxyRecoveryTarget: () => proxyRecoveryTarget,
     proxyStream: () => proxyStream,
@@ -10096,8 +10097,8 @@ var WeaveletGoogleSync = (() => {
     return entry?.value;
   }
   function remember(key, value) {
-    const strings = typeof value === "string" ? value.length : value.id.length + value.value.length + Object.entries(value.assets).reduce((total, [id, body]) => total + id.length + body.length, 0);
-    const size = 2 * (key.length + strings);
+    const strings2 = typeof value === "string" ? value.length : value.id.length + value.value.length + Object.entries(value.assets).reduce((total, [id, body]) => total + id.length + body.length, 0);
+    const size = 2 * (key.length + strings2);
     if (size > RECORD_CACHE_BYTES)
       return;
     const previous = cache.get(key);
@@ -11329,12 +11330,12 @@ ${value}`;
   }
 
   // node_modules/i18next/dist/esm/i18next.js
-  function ownKeys$6(object2, enumerableOnly) {
-    var keys = Object.keys(object2);
+  function ownKeys$6(object3, enumerableOnly) {
+    var keys = Object.keys(object3);
     if (Object.getOwnPropertySymbols) {
-      var symbols = Object.getOwnPropertySymbols(object2);
+      var symbols = Object.getOwnPropertySymbols(object3);
       enumerableOnly && (symbols = symbols.filter(function(sym) {
-        return Object.getOwnPropertyDescriptor(object2, sym).enumerable;
+        return Object.getOwnPropertyDescriptor(object3, sym).enumerable;
       })), keys.push.apply(keys, symbols);
     }
     return keys;
@@ -11506,10 +11507,10 @@ ${value}`;
     promise.reject = rej;
     return promise;
   }
-  function makeString(object2) {
-    if (object2 == null)
+  function makeString(object3) {
+    if (object3 == null)
       return "";
-    return "" + object2;
+    return "" + object3;
   }
   function copy(a, s, t2) {
     a.forEach(function(m) {
@@ -11517,47 +11518,47 @@ ${value}`;
         t2[m] = s[m];
     });
   }
-  function getLastOfPath(object2, path, Empty) {
+  function getLastOfPath(object3, path, Empty) {
     function cleanKey(key2) {
       return key2 && key2.indexOf("###") > -1 ? key2.replace(/###/g, ".") : key2;
     }
     function canNotTraverseDeeper() {
-      return !object2 || typeof object2 === "string";
+      return !object3 || typeof object3 === "string";
     }
     var stack = typeof path !== "string" ? [].concat(path) : path.split(".");
     while (stack.length > 1) {
       if (canNotTraverseDeeper())
         return {};
       var key = cleanKey(stack.shift());
-      if (!object2[key] && Empty)
-        object2[key] = new Empty();
-      if (Object.prototype.hasOwnProperty.call(object2, key)) {
-        object2 = object2[key];
+      if (!object3[key] && Empty)
+        object3[key] = new Empty();
+      if (Object.prototype.hasOwnProperty.call(object3, key)) {
+        object3 = object3[key];
       } else {
-        object2 = {};
+        object3 = {};
       }
     }
     if (canNotTraverseDeeper())
       return {};
     return {
-      obj: object2,
+      obj: object3,
       k: cleanKey(stack.shift())
     };
   }
-  function setPath(object2, path, newValue) {
-    var _getLastOfPath = getLastOfPath(object2, path, Object), obj = _getLastOfPath.obj, k = _getLastOfPath.k;
+  function setPath(object3, path, newValue) {
+    var _getLastOfPath = getLastOfPath(object3, path, Object), obj = _getLastOfPath.obj, k = _getLastOfPath.k;
     obj[k] = newValue;
   }
-  function pushPath(object2, path, newValue, concat) {
-    var _getLastOfPath2 = getLastOfPath(object2, path, Object), obj = _getLastOfPath2.obj, k = _getLastOfPath2.k;
+  function pushPath(object3, path, newValue, concat) {
+    var _getLastOfPath2 = getLastOfPath(object3, path, Object), obj = _getLastOfPath2.obj, k = _getLastOfPath2.k;
     obj[k] = obj[k] || [];
     if (concat)
       obj[k] = obj[k].concat(newValue);
     if (!concat)
       obj[k].push(newValue);
   }
-  function getPath(object2, path) {
-    var _getLastOfPath3 = getLastOfPath(object2, path), obj = _getLastOfPath3.obj, k = _getLastOfPath3.k;
+  function getPath(object3, path) {
+    var _getLastOfPath3 = getLastOfPath(object3, path), obj = _getLastOfPath3.obj, k = _getLastOfPath3.k;
     if (!obj)
       return void 0;
     return obj[k];
@@ -11627,12 +11628,12 @@ ${value}`;
     }
     return matched;
   }
-  function ownKeys$5(object2, enumerableOnly) {
-    var keys = Object.keys(object2);
+  function ownKeys$5(object3, enumerableOnly) {
+    var keys = Object.keys(object3);
     if (Object.getOwnPropertySymbols) {
-      var symbols = Object.getOwnPropertySymbols(object2);
+      var symbols = Object.getOwnPropertySymbols(object3);
       enumerableOnly && (symbols = symbols.filter(function(sym) {
-        return Object.getOwnPropertyDescriptor(object2, sym).enumerable;
+        return Object.getOwnPropertyDescriptor(object3, sym).enumerable;
       })), keys.push.apply(keys, symbols);
     }
     return keys;
@@ -11896,12 +11897,12 @@ ${value}`;
       return value;
     }
   };
-  function ownKeys$4(object2, enumerableOnly) {
-    var keys = Object.keys(object2);
+  function ownKeys$4(object3, enumerableOnly) {
+    var keys = Object.keys(object3);
     if (Object.getOwnPropertySymbols) {
-      var symbols = Object.getOwnPropertySymbols(object2);
+      var symbols = Object.getOwnPropertySymbols(object3);
       enumerableOnly && (symbols = symbols.filter(function(sym) {
-        return Object.getOwnPropertyDescriptor(object2, sym).enumerable;
+        return Object.getOwnPropertyDescriptor(object3, sym).enumerable;
       })), keys.push.apply(keys, symbols);
     }
     return keys;
@@ -12798,12 +12799,12 @@ ${value}`;
     }]);
     return PluralResolver2;
   }();
-  function ownKeys$3(object2, enumerableOnly) {
-    var keys = Object.keys(object2);
+  function ownKeys$3(object3, enumerableOnly) {
+    var keys = Object.keys(object3);
     if (Object.getOwnPropertySymbols) {
-      var symbols = Object.getOwnPropertySymbols(object2);
+      var symbols = Object.getOwnPropertySymbols(object3);
       enumerableOnly && (symbols = symbols.filter(function(sym) {
-        return Object.getOwnPropertyDescriptor(object2, sym).enumerable;
+        return Object.getOwnPropertyDescriptor(object3, sym).enumerable;
       })), keys.push.apply(keys, symbols);
     }
     return keys;
@@ -13017,12 +13018,12 @@ ${value}`;
     }]);
     return Interpolator2;
   }();
-  function ownKeys$2(object2, enumerableOnly) {
-    var keys = Object.keys(object2);
+  function ownKeys$2(object3, enumerableOnly) {
+    var keys = Object.keys(object3);
     if (Object.getOwnPropertySymbols) {
-      var symbols = Object.getOwnPropertySymbols(object2);
+      var symbols = Object.getOwnPropertySymbols(object3);
       enumerableOnly && (symbols = symbols.filter(function(sym) {
-        return Object.getOwnPropertyDescriptor(object2, sym).enumerable;
+        return Object.getOwnPropertyDescriptor(object3, sym).enumerable;
       })), keys.push.apply(keys, symbols);
     }
     return keys;
@@ -13175,12 +13176,12 @@ ${value}`;
     }]);
     return Formatter2;
   }();
-  function ownKeys$1(object2, enumerableOnly) {
-    var keys = Object.keys(object2);
+  function ownKeys$1(object3, enumerableOnly) {
+    var keys = Object.keys(object3);
     if (Object.getOwnPropertySymbols) {
-      var symbols = Object.getOwnPropertySymbols(object2);
+      var symbols = Object.getOwnPropertySymbols(object3);
       enumerableOnly && (symbols = symbols.filter(function(sym) {
-        return Object.getOwnPropertyDescriptor(object2, sym).enumerable;
+        return Object.getOwnPropertyDescriptor(object3, sym).enumerable;
       })), keys.push.apply(keys, symbols);
     }
     return keys;
@@ -13581,12 +13582,12 @@ ${value}`;
     }
     return options;
   }
-  function ownKeys(object2, enumerableOnly) {
-    var keys = Object.keys(object2);
+  function ownKeys(object3, enumerableOnly) {
+    var keys = Object.keys(object3);
     if (Object.getOwnPropertySymbols) {
-      var symbols = Object.getOwnPropertySymbols(object2);
+      var symbols = Object.getOwnPropertySymbols(object3);
       enumerableOnly && (symbols = symbols.filter(function(sym) {
-        return Object.getOwnPropertyDescriptor(object2, sym).enumerable;
+        return Object.getOwnPropertyDescriptor(object3, sym).enumerable;
       })), keys.push.apply(keys, symbols);
     }
     return keys;
@@ -14236,12 +14237,12 @@ ${value}`;
   function validateOpenRouterSettings(settings, model, responseCacheEnabled = true) {
     if (settings === void 0)
       return;
-    const object2 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
-    if (!object2(settings) || [settings.routing, settings.promptCache, ...responseCacheEnabled ? [settings.responseCache] : []].some((v) => v !== void 0 && !object2(v)))
+    const object3 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+    if (!object3(settings) || [settings.routing, settings.promptCache, ...responseCacheEnabled ? [settings.responseCache] : []].some((v) => v !== void 0 && !object3(v)))
       return "openRouter.errors.invalid";
     const r = settings.routing;
     if (r) {
-      if (r.max_price !== void 0 && !object2(r.max_price))
+      if (r.max_price !== void 0 && !object3(r.max_price))
         return "openRouter.errors.price";
       for (const list of [r.order, r.only, r.ignore]) {
         if (list !== void 0 && (!Array.isArray(list) || list.some((v) => typeof v !== "string" || !v.trim()) || new Set(list).size !== list.length))
@@ -17784,9 +17785,9 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   // src/utils/fileImportProjection.ts
   function importOpaquePaths(data) {
     const paths = [];
-    const object2 = (v) => v && typeof v === "object" && !Array.isArray(v);
+    const object3 = (v) => v && typeof v === "object" && !Array.isArray(v);
     const fields = (v, p, known) => {
-      if (object2(v)) {
+      if (object3(v)) {
         for (const key of Object.keys(v))
           if (!known.includes(key))
             paths.push([...p, key]);
@@ -17797,7 +17798,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         return;
       v.forEach((part, index) => {
         const at2 = [...p, index];
-        if (!object2(part))
+        if (!object3(part))
           return;
         const known = part.type === "text" || part.type === "reasoning" ? ["type", "text"] : part.type === "image_url" ? ["type", "image_url"] : part.type === "tool_call" ? ["type", "id", "name", "arguments"] : part.type === "tool_result" ? ["type", "tool_call_id", "content"] : ["type"];
         fields(part, at2, known);
@@ -17807,26 +17808,26 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     };
     const message = (v, p) => {
       fields(v, p, ["role", "content"]);
-      if (object2(v))
+      if (object3(v))
         parts(v.content, [...p, "content"]);
     };
     const node = (v, p) => {
       fields(v, p, ["id", "parentId", "role", "contentHash", "content"]);
-      if (object2(v))
+      if (object3(v))
         parts(v.content, [...p, "content"]);
     };
     const tree = (v, p, extra = []) => {
       fields(v, p, ["nodes", "rootId", "activePath", "messageAttributesV1", ...extra]);
-      if (object2(v?.nodes))
+      if (object3(v?.nodes))
         for (const [id, n] of Object.entries(v.nodes))
           node(n, [...p, "nodes", id]);
-      if (object2(v?.messageAttributesV1?.byNode))
+      if (object3(v?.messageAttributesV1?.byNode))
         for (const [id, attrs] of Object.entries(v.messageAttributesV1.byNode))
           fields(attrs, [...p, "messageAttributesV1", "byNode", id], []);
     };
     const chat = (v, p) => {
       fields(v, p, ["id", "title", "titleSet", "folder", "config", "messages", "branchTree", "collapsedNodes", "omittedNodes", "protectedNodes", "summaryTargets", "summaries"]);
-      if (!object2(v))
+      if (!object3(v))
         return;
       fields(v.config, [...p, "config"], ["model", "systemPrompt", "temperature", "presence_penalty", "top_p", "frequency_penalty"]);
       if (Array.isArray(v.messages))
@@ -17839,7 +17840,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
           if (Array.isArray(s?.sources))
             s.sources.forEach((item, i) => fields(item, [...at2, "sources", i], ["nodeId", "parentId", "role", "textParts"]));
           fields(s?.generation, [...at2, "generation"], ["model", "providerId", "settings", "createdAt"]);
-          if (object2(s?.generation?.settings))
+          if (object3(s?.generation?.settings))
             fields(s.generation.settings, [...at2, "generation", "settings"], ["temperature", "max_tokens", "reasoning_effort"]);
         });
     };
@@ -17847,16 +17848,16 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       fields(v, p, ["title", "mapping", "current_node", "messages", "model", "temperature", "max_tokens", "top_p", "frequency_penalty", "presence_penalty"]);
       if (Array.isArray(v?.messages))
         v.messages.forEach((m, i) => message(m, [...p, "messages", i]));
-      if (object2(v?.mapping))
+      if (object3(v?.mapping))
         for (const [id, n] of Object.entries(v.mapping)) {
           const at2 = [...p, "mapping", id];
           fields(n, at2, ["id", "parent", "children", "message"]);
           fields(n?.message, [...at2, "message"], ["author", "content"]);
           fields(n?.message?.author, [...at2, "message", "author"], ["role"]);
           const content = n?.message?.content;
-          if (object2(content) && Object.hasOwn(content, "parts"))
+          if (object3(content) && Object.hasOwn(content, "parts"))
             fields(content, [...at2, "message", "content"], ["parts"]);
-          else if (object2(content)) {
+          else if (object3(content)) {
             const offset = paths.length;
             parts([content], [...at2, "message", "content"]);
             for (let i = offset; i < paths.length; i++)
@@ -17869,33 +17870,33 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         v.forEach((item, index) => isOpenAIContent(item) ? openAI(item, [...p, index]) : chat(item, [...p, index]));
         return;
       }
-      if (!object2(v))
+      if (!object3(v))
         return;
-      if (object2(v.state)) {
+      if (object3(v.state)) {
         fields(v, p, ["version", "state"]);
         root(v.state, [...p, "state"]);
         return;
       }
-      if (Array.isArray(v.chats) || object2(v.contentStore) || object2(v.folders)) {
+      if (Array.isArray(v.chats) || object3(v.contentStore) || object3(v.folders)) {
         fields(v, p, ["version", "chats", "folders", "contentStore", "evaluationSettings", "evaluationResults", "recoveredContentCount", "unavailableContent", "extensions", "branchClipboard"]);
         v.chats?.forEach((c, i) => chat(c, [...p, "chats", i]));
-        if (object2(v.contentStore))
+        if (object3(v.contentStore))
           for (const [hash, e] of Object.entries(v.contentStore)) {
             fields(e, [...p, "contentStore", hash], ["content", "refCount", "delta"]);
             parts(e?.content, [...p, "contentStore", hash, "content"]);
             fields(e?.delta, [...p, "contentStore", hash, "delta"], ["baseHash", "patch"]);
           }
-        if (object2(v.folders))
+        if (object3(v.folders))
           for (const [id, f] of Object.entries(v.folders))
             fields(f, [...p, "folders", id], ["id", "name", "order", "expanded", "parentId"]);
         fields(v.evaluationSettings, [...p, "evaluationSettings"], ["safetyPreSend", "safetyPostReceive", "qualityPreSend", "qualityPostReceive"]);
-        if (object2(v.evaluationResults))
+        if (object3(v.evaluationResults))
           for (const [id, r] of Object.entries(v.evaluationResults))
             fields(r, [...p, "evaluationResults", id], ["phase"]);
-        if (object2(v.extensions))
+        if (object3(v.extensions))
           fields(v.extensions, [...p, "extensions"], []);
         const clip = v.branchClipboard;
-        if (object2(clip)) {
+        if (object3(clip)) {
           fields(clip, [...p, "branchClipboard"], ["nodes", "nodeIds", "sourceChat", "messageAttributesV1", "collapsedNodes", "omittedNodes", "protectedNodes"]);
           tree(clip, [...p, "branchClipboard"], ["nodeIds", "sourceChat", "collapsedNodes", "omittedNodes", "protectedNodes"]);
         }
@@ -19162,6 +19163,116 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     const input = JSON.parse(json);
     const target = resolveRecoveryTarget([input.chat], input.contentStore, input.record, input.expectedHash);
     return JSON.stringify(target ? { status: "ready", messageIndex: target.messageIndex, nodeID: input.record.nodeId } : { status: "stale" });
+  }
+
+  // src/utils/proxyManagement.ts
+  var validCursor = (value) => typeof value === "string" && /^session:[a-f0-9]{64}$/.test(value);
+  var object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+  var counters = (value, keys) => keys.every((key) => value[key] === void 0 || Number.isSafeInteger(value[key]) && value[key] >= 0);
+  var strings = (value, keys) => keys.every((key) => value[key] === void 0 || typeof value[key] === "string");
+  function validStatusSession(value) {
+    if (!object(value) || typeof value.sessionId !== "string" || !object(value.cache) || typeof value.cache.state !== "string")
+      return false;
+    if (!counters(value.cache, ["firstEventId", "lastEventId", "expiresAt", "updatedAt"]) || !strings(value.cache, ["terminal", "capability", "reason"]))
+      return false;
+    return value.local == null || object(value.local) && strings(value.local, ["sessionId", "phase", "reason", "disconnectReason"]) && counters(value.local, ["startedAt", "updatedAt", "lastEventId", "firstEventId", "lastChunkAt", "disconnectedAt", "lastClientWriteAt", "receivedBytes", "bufferedBytes", "cacheWrites", "cacheFailures", "lastCacheWriteAt"]);
+  }
+  function proxyStatusRequest(input) {
+    const query = (input.sessionIds ?? []).map((id) => ["sessionId", id]);
+    if (input.all)
+      query.push(["all", "1"]);
+    if (input.cursor)
+      query.push(["cursor", input.cursor]);
+    return { path: "/api/status", query, method: "GET", timeout: 8 };
+  }
+  function readProxyStatus(httpStatus, body, all = false) {
+    if (httpStatus < 200 || httpStatus >= 300)
+      throw new Error(httpStatus === 401 ? "\u8A8D\u8A3C\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002\u30D7\u30ED\u30AD\u30B7\u306E\u8A8D\u8A3C\u30C8\u30FC\u30AF\u30F3\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002" : httpStatus === 403 ? "\u5168\u5B9F\u884C\u74B0\u5883\u306E\u8A18\u9332\u3092\u898B\u308B\u306B\u306F\u3001\u30D7\u30ED\u30AD\u30B7\u306E\u8A8D\u8A3C\u8A2D\u5B9A\u3068\u8A8D\u8A3C\u30C8\u30FC\u30AF\u30F3\u304C\u5FC5\u8981\u3067\u3059\u3002" : httpStatus === 404 || httpStatus === 501 ? "\u3053\u306E\u30D7\u30ED\u30AD\u30B7\u306F\u72B6\u614BAPI\u306B\u5BFE\u5FDC\u3057\u3066\u3044\u307E\u305B\u3093\u3002Worker\u3092\u66F4\u65B0\u3057\u3066\u304F\u3060\u3055\u3044\u3002" : `\u72B6\u614B\u306E\u53D6\u5F97\u306B\u5931\u6557\u3057\u307E\u3057\u305F\uFF08HTTP ${httpStatus}\uFF09`);
+    const deletion = object(body) ? body.storageDeletion : void 0;
+    if (!object(body) || !Array.isArray(body.sessions) || !body.sessions.every(validStatusSession) || !strings(body, ["version", "colo", "instanceId", "scope"]) || !counters(body, ["checkedAt", "unavailableSessions"]) || body.limits !== void 0 && (!object(body.limits) || !counters(body.limits, ["cacheBytes", "retentionMs", "idleTimeoutMs"])) || deletion !== void 0 && (!object(deletion) || ["individual", "all"].some((key) => deletion[key] !== void 0 && typeof deletion[key] !== "boolean")) || body.nextCursor !== void 0 && body.nextCursor !== null && !validCursor(body.nextCursor))
+      throw new Error("\u30D7\u30ED\u30AD\u30B7\u304B\u3089\u306E\u72B6\u614B\u5FDC\u7B54\u304C\u4E0D\u6B63\u3067\u3059");
+    const status = body;
+    if (all && status.scope !== "all-sessions")
+      throw new Error("\u3053\u306E\u30D7\u30ED\u30AD\u30B7\u306F\u5168\u5B9F\u884C\u74B0\u5883\u306E\u4E00\u89A7\u306B\u5BFE\u5FDC\u3057\u3066\u3044\u307E\u305B\u3093\u3002Worker\u3092\u66F4\u65B0\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
+    return status;
+  }
+  function proxyDeleteRequest(sessionId, state) {
+    const query = [];
+    if (state?.before !== void 0)
+      query.push(["before", String(state.before)]);
+    if (state?.cursor)
+      query.push(["cursor", state.cursor]);
+    return {
+      path: `/api/storage${sessionId === void 0 ? "" : `/${encodeURIComponent(sessionId)}`}`,
+      query: sessionId === void 0 ? query : [],
+      method: "DELETE",
+      timeout: 30
+    };
+  }
+  function readProxyDeletion(httpStatus, body, sessionId, state) {
+    if (httpStatus < 200 || httpStatus >= 300)
+      throw new Error(httpStatus === 401 || httpStatus === 403 ? "\u524A\u9664\u3059\u308B\u6A29\u9650\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u30D7\u30ED\u30AD\u30B7\u306E\u8A8D\u8A3C\u30C8\u30FC\u30AF\u30F3\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002" : httpStatus === 404 || httpStatus === 501 ? "\u3053\u306E\u30D7\u30ED\u30AD\u30B7\u306F\u4FDD\u5B58\u30C7\u30FC\u30BF\u306E\u524A\u9664\u306B\u5BFE\u5FDC\u3057\u3066\u3044\u307E\u305B\u3093\u3002" : `\u4FDD\u5B58\u30C7\u30FC\u30BF\u306E\u524A\u9664\u306B\u5931\u6557\u3057\u307E\u3057\u305F\uFF08HTTP ${httpStatus}\uFF09\u3002\u518D\u5EA6\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002`);
+    const result3 = body;
+    if (sessionId !== void 0) {
+      if (result3?.deleted !== true)
+        throw new Error("\u524A\u9664\u7D50\u679C\u3092\u78BA\u8A8D\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F");
+      return { deleted: 1, failed: 0, cursor: null };
+    }
+    if (!result3 || !Number.isSafeInteger(result3.deleted) || result3.deleted < 0 || !Number.isSafeInteger(result3.failed) || result3.failed < 0 || !Number.isSafeInteger(result3.before) || state?.before !== void 0 && state.before !== result3.before || result3.cursor !== null && (!validCursor(result3.cursor) || state?.cursor != null && result3.cursor <= state.cursor))
+      throw new Error("\u30D7\u30ED\u30AD\u30B7\u304B\u3089\u306E\u524A\u9664\u5FDC\u7B54\u304C\u4E0D\u6B63\u3067\u3059");
+    const next = {
+      deleted: (state?.deleted ?? 0) + result3.deleted,
+      failed: (state?.failed ?? 0) + result3.failed,
+      before: result3.before,
+      cursor: result3.cursor
+    };
+    if (!Number.isSafeInteger(next.deleted) || !Number.isSafeInteger(next.failed))
+      throw new Error("\u30D7\u30ED\u30AD\u30B7\u304B\u3089\u306E\u524A\u9664\u5FDC\u7B54\u304C\u4E0D\u6B63\u3067\u3059");
+    if (!next.cursor && next.failed)
+      throw new Error(`${next.deleted}\u4EF6\u3092\u524A\u9664\u3057\u307E\u3057\u305F\u304C\u3001${next.failed}\u4EF6\u306E\u524A\u9664\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002\u518D\u5EA6\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002`);
+    return next;
+  }
+  var proxyStatusLabels = {
+    phase: { headers: "\u5FDC\u7B54\u30D8\u30C3\u30C0\u30FC\u5F85\u3061", streaming: "\u53D7\u4FE1\u4E2D", disconnected: "\u30AF\u30E9\u30A4\u30A2\u30F3\u30C8\u5207\u65AD", complete: "\u5B8C\u4E86", interrupted: "\u4E2D\u65AD", failed: "\u5931\u6557", acknowledged: "\u53D7\u4FE1\u78BA\u8A8D\u6E08\u307F" },
+    cache: { available: "\u4FDD\u5B58\u3042\u308A", missing: "\u4FDD\u5B58\u30C7\u30FC\u30BF\u306A\u3057", expired: "\u671F\u9650\u5207\u308C", error: "\u4FDD\u5B58\u72B6\u614B\u3092\u53D6\u5F97\u3067\u304D\u307E\u305B\u3093", acknowledged: "\u53D7\u4FE1\u78BA\u8A8D\u5F8C\u306B\u524A\u9664\u6E08\u307F", "not-saved": "\u53D7\u4ED8\u6E08\u307F\u30FB\u5FDC\u7B54\u306E\u4FDD\u5B58\u306A\u3057", "not-recorded": "\u30B5\u30FC\u30D0\u30FC\u8A18\u9332\u306A\u3057" },
+    reason: {
+      "runtime-ended": "\u4E2D\u7D99\u306E\u5B9F\u884C\u304C\u7D42\u4E86\u3057\u3066\u3044\u307E\u3059\u3002\u4FDD\u5B58\u6E08\u307F\u306E\u7BC4\u56F2\u307E\u3067\u78BA\u8A8D\u3067\u304D\u307E\u3059",
+      "upstream-idle-timeout": "\u4E0A\u6D41API\u304B\u308945\u79D2\u9593\u30C7\u30FC\u30BF\u304C\u5C4A\u304D\u307E\u305B\u3093\u3067\u3057\u305F",
+      "upstream-eof-before-done": "\u4E0A\u6D41API\u304C\u5B8C\u4E86\u901A\u77E5\u3088\u308A\u524D\u306B\u63A5\u7D9A\u3092\u7D42\u4E86\u3057\u307E\u3057\u305F",
+      "upstream-connection-error": "\u4E0A\u6D41API\u3078\u306E\u63A5\u7D9A\u306B\u5931\u6557\u3057\u307E\u3057\u305F",
+      "upstream-read-error": "\u4E0A\u6D41API\u304B\u3089\u306E\u8AAD\u307F\u53D6\u308A\u4E2D\u306B\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F",
+      "header-timeout": "\u4E0A\u6D41API\u306E\u521D\u56DE\u5FDC\u7B54\u304C45\u79D2\u4EE5\u5185\u306B\u5C4A\u304D\u307E\u305B\u3093\u3067\u3057\u305F",
+      "client-disconnected": "\u7AEF\u672B\u3068\u306E\u63A5\u7D9A\u304C\u5207\u308C\u307E\u3057\u305F",
+      "client-write-timeout": "\u7AEF\u672B\u3078\u306E\u9001\u4FE1\u304C15\u79D2\u9593\u9032\u307F\u307E\u305B\u3093\u3067\u3057\u305F",
+      "cancel-requested": "\u505C\u6B62\u8981\u6C42\u3092\u53D7\u4FE1\u3057\u307E\u3057\u305F",
+      complete: "\u5B8C\u4E86",
+      aborted: "\u4E2D\u6B62"
+    }
+  };
+  function proxyRecoveryHasGap(cursor, cache2) {
+    return cache2.state === "available" && (cursor < (cache2.firstEventId ?? 1) - 1 || cache2.terminal !== "streaming" && cursor > (cache2.lastEventId ?? 0));
+  }
+  function proxyManagement(json) {
+    const input = JSON.parse(json);
+    switch (input.operation) {
+      case "statusRequest":
+        return JSON.stringify(proxyStatusRequest(input));
+      case "statusResponse":
+        return JSON.stringify(readProxyStatus(input.httpStatus, input.body, input.all));
+      case "deleteRequest":
+        return JSON.stringify(proxyDeleteRequest(input.sessionId, input.state));
+      case "deleteResponse":
+        return JSON.stringify(readProxyDeletion(input.httpStatus, input.body, input.sessionId, input.state));
+      case "labels":
+        return JSON.stringify(proxyStatusLabels);
+      case "recoveryGaps":
+        return JSON.stringify(Object.fromEntries(input.sessions.map((session2) => {
+          const record2 = input.records.find((record3) => record3.sessionId === session2.sessionId);
+          return [session2.sessionId, !!record2 && proxyRecoveryHasGap(record2.cursor, session2.cache)];
+        })));
+      default:
+        throw new Error("Unknown proxy management operation");
+    }
   }
 
   // src/store/storage/google/datasetListing.ts
@@ -25390,7 +25501,7 @@ Do not attempt to edit, create, or delete files in these directories. If Claude 
   // src/utils/syncDocument.ts
   var DOCUMENT_SHARED_ROOTS = ["chats", "contentStore", "folders", "evaluationSettings", "evaluationResults"];
   var has = (value, key) => Object.hasOwn(value, key);
-  var object = (value, name) => {
+  var object2 = (value, name) => {
     if (!value || typeof value !== "object" || Array.isArray(value))
       throw new Error(`Invalid ${name}.`);
     return value;
@@ -25398,16 +25509,16 @@ Do not attempt to edit, create, or delete files in these directories. If Claude 
   var shared = (key) => DOCUMENT_SHARED_ROOTS.some((root) => root === key);
   var sidecarOf = (v3) => Object.fromEntries(Object.entries(v3).filter(([key]) => key !== "version" && !shared(key)));
   function validate(document2) {
-    object(document2.snapshot, "snapshot");
-    object(document2.snapshot.state, "snapshot state");
-    object(document2.v3Sidecar, "V3 sidecar");
+    object2(document2.snapshot, "snapshot");
+    object2(document2.snapshot.state, "snapshot state");
+    object2(document2.v3Sidecar, "V3 sidecar");
     if (!Number.isInteger(document2.snapshot.version))
       throw new Error("Invalid snapshot version.");
     if (Object.keys(document2.v3Sidecar).some((key) => key === "version" || shared(key)))
       throw new Error("Invalid V3 sidecar roots.");
   }
   function v3Object(v3) {
-    object(v3, "V3 document");
+    object2(v3, "V3 document");
     if (v3.version !== 3)
       throw new Error("Unsupported V3 document version.");
   }
@@ -25430,7 +25541,7 @@ Do not attempt to edit, create, or delete files in these directories. If Claude 
   function projectSyncDocument(document2) {
     validate(document2);
     const state = document2.snapshot.state;
-    const store = object(state.contentStore ?? {}, "content store");
+    const store = object2(state.contentStore ?? {}, "content store");
     const expanded = Object.fromEntries(Object.entries(store).map(([hash, entry]) => {
       const { delta: _delta, ...metadata } = entry;
       return [hash, { ...structuredClone(metadata), content: structuredClone(resolveContent(store, hash)) }];
@@ -25468,11 +25579,11 @@ Do not attempt to edit, create, or delete files in these directories. If Claude 
         continue;
       }
       if (root === "contentStore" && edited[root] !== null) {
-        state[root] = Object.fromEntries(Object.entries(object(edited[root], root)).map(([hash, entry]) => {
+        state[root] = Object.fromEntries(Object.entries(object2(edited[root], root)).map(([hash, entry]) => {
           const original = document2.snapshot.state[root]?.[hash];
           if (original && orderedJSONEqual(before[root]?.[hash], entry))
             return [hash, structuredClone(original)];
-          const updated = structuredClone(object(entry, "content entry"));
+          const updated = structuredClone(object2(entry, "content entry"));
           if (original?.delta && orderedJSONEqual(before[root]?.[hash]?.content, updated.content)) {
             updated.content = structuredClone(original.content);
             updated.delta = structuredClone(original.delta);

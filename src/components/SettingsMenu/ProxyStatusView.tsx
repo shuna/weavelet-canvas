@@ -6,19 +6,8 @@ import { getAllPending, type StreamRecord } from '@utils/streamDb';
 import { recoverPending } from '@hooks/useStreamRecovery';
 import { resolveRecoveryTarget } from '@hooks/streamRecoveryHelpers';
 
-const phaseLabels: Record<string, string> = { headers: '応答ヘッダー待ち', streaming: '受信中', disconnected: 'クライアント切断', complete: '完了', interrupted: '中断', failed: '失敗', acknowledged: '受信確認済み' };
-const cacheLabels: Record<string, string> = { available: '保存あり', missing: '保存データなし', expired: '期限切れ', error: '保存状態を取得できません', acknowledged: '受信確認後に削除済み', 'not-saved': '受付済み・応答の保存なし', 'not-recorded': 'サーバー記録なし' };
-const reasonLabels: Record<string, string> = {
-  'runtime-ended': '中継の実行が終了しています。保存済みの範囲まで確認できます',
-  'upstream-idle-timeout': '上流APIから45秒間データが届きませんでした',
-  'upstream-eof-before-done': '上流APIが完了通知より前に接続を終了しました',
-  'upstream-connection-error': '上流APIへの接続に失敗しました',
-  'upstream-read-error': '上流APIからの読み取り中にエラーが発生しました',
-  'header-timeout': '上流APIの初回応答が45秒以内に届きませんでした',
-  'client-disconnected': '端末との接続が切れました',
-  'client-write-timeout': '端末への送信が15秒間進みませんでした',
-  'cancel-requested': '停止要求を受信しました', complete: '完了', aborted: '中止',
-};
+import { proxyStatusLabels, proxyRecoveryHasGap } from '@utils/proxyManagement';
+const { phase: phaseLabels, cache: cacheLabels, reason: reasonLabels } = proxyStatusLabels;
 const reason = (value?: string) => value ? `${reasonLabels[value] ?? value}（${value}）` : '—';
 const time = (value?: number) => value ? new Date(value).toLocaleTimeString() : '—';
 
@@ -108,7 +97,7 @@ export function ProxyStatusView({ config }: { config: ProxyConfig }) {
         {status.sessions.map(session => {
           const record = records.find(r => r.proxySessionId === session.sessionId);
           const cursor = record?.lastProxyEventId ?? 0;
-          const gap = record && session.cache.state === 'available' && (cursor < (session.cache.firstEventId ?? 1) - 1 || (session.cache.terminal !== 'streaming' && cursor > (session.cache.lastEventId ?? 0)));
+          const gap = record && proxyRecoveryHasGap(cursor, session.cache);
           const state = useStore.getState();
           const live = record && Object.values(state.generatingSessions).some(s => s.chatId === record.chatId && s.targetNodeId === record.nodeId);
           const target = record && resolveRecoveryTarget(state.chats, state.contentStore, record);

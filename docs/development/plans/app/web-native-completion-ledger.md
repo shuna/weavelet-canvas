@@ -1145,3 +1145,15 @@ mainの表示用resolveContentは破損deltaを空表示へ落とすため、取
 確認結果：初回Web関連242件中241件成功、残る破損取込の期待差は上記根拠で修正した。取込境界100件成功後、Astra指摘修正に関係する2files81件成功（前結果と重複、追加replace2件を含む）。proxy mergeのWeb79件とWorker43件成功。既存Catalyst同期25件、HTTP/ID回復境界2件、新wire境界2件成功を回収し、最終bundleではMarkdown接続1件と新wire境界2件が成功した。型検査・Vite build・共有bundle/Markdown再生成と鮮度確認成功。Markdownから不要になったWeb状態store依存が除去されたため、それらだけのnoticeも生成結果から除かれる。
 
 ログは /private/tmp/weavelet-main-{integration-web-test,import-boundary-test,import-final-test,proxy-merge-test,proxy-worker-test,integration-native-test,invalid-id-native-test,wire-delta-native-test,wire-delta-web-read,final-native-test,final-types,final-build,final-freshness,final-markdown-freshness}.log。未変更の全業務規則や旧移行suiteを一律再実行していない。実Google/CloudKit、ブラウザ実権限、実iCloud配信、手動UI/性能は未確認。mainへ追加されたproxy状態/保存データ管理と永続node状態のnative表示接続、旧Google保存の読取等は次の機能群として残す。feature→mainの統合・push・iPhone照会/導入は行っていない。
+
+## プロキシ状態・保存データ管理の共有接続（2026-10-20）
+
+Web proxyClientの状態要求/応答、単体/全削除要求、固定before・昇順cursorの継続、失敗件数の扱いをpure proxyManagementへ切り出した。Webとnative JSCは同じ処理を使う。表示labelと受信位置/保存範囲のgap判定もWebから共有し、Swiftで同じ業務規則を作らない。共有元は既知の診断fieldの型・counter安全整数と削除累積の安全整数を確認し、未知fieldを保持する。HTTP失敗本文は解釈/表示しない。
+
+nativeは既存remote設定から標準NavigationStack/Formへ接続し、全記録の20件ページ/前後移動、ID照会、5秒更新、能力に応じた確認付き単体/全削除を提供する。通信と資格情報は既存HTTPS検証・redirect拒否・ephemeral URLSessionへ置き、tokenを共有VMへ渡さない。owned sessionは終了し、注入sessionは保持する。解除/画面終了/照会先変更で取消し、古い結果を公開しない。loading flagの旧task残留を防ぐ。復旧は既存journalの対象変更判定・保存処理を使い、選択sessionだけを処理できるようにした。remote一覧をlocal journalへ自動登録せず、remote削除でlocal会話/journalを削除しない。
+
+共有Web20件成功（初回18→既知field検証19→gap追加20は重複、最後の累積超過assertは対象6件だけ再確認）。Catalyst固有4件が成功した。全一覧/個別ID/複数ページ削除、単体path escape/取消前未送信、HTTP失敗時非成功と秘密非露出、全削除後の実snapshot・未知数値/孤立UTF16を含むjournalのbytes/state不変、選択復旧後の他journal全情報保持と再起動を確認した。error整形修正の1件と共有gap接続追加の1件は限定再確認で重複。型・Vite build・最終Catalyst build・共有bundle鮮度・差分確認成功。保存/同期schemaは変えておらず、全I/O/暗号化同期は直前の成功を再利用する。
+
+実Catalyst画面で設定→状態、ID欄、エラー表示、戻る経路を確認した。戻ると未保存設定が再読込で消える問題を発見し、初回読込成功時だけdidLoadを立てて修正。修正後のdraft保持と、誤ったV3 JSON文言が状態エラーに付かないことを再確認した。既存debug fixture storeとFAKE通信だけを使い、下書きは取消、正常終了後にprocess不在とbuilt Info.plistの原本復元を確認した。実proxyの正常一覧/削除、狭幅/VoiceOverの全行、実cloud、iPhoneは未確認。永続node状態のnative表示、旧Google保存のreadonly移行等の残件は維持する。
+
+独立Astraの機能一式監査と指摘外の実画面修正の限定確認は新規なし。ログは /private/tmp/weavelet-proxy-management-{web-test,web-final-test,shared-final-test,shared-check,native-test,native-final-test,ui-fix-native-test,shared-native-test,final-types,final-build,final-catalyst-build,freshness}.log。main統合・push・iPhone照会/導入は行っていない。

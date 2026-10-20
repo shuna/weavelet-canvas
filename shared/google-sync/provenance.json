@@ -140,6 +140,7 @@
     "src/utils/proxyProtocol.ts": "1eec9e5c3fe646a189854160ff97afd933b56fb13f3961ae9a4f8f3b4665a6a2",
     "src/utils/streamRecovery.ts": "10ec126041618c3e3ba7328c9704154ddeab2caf8681d722e46ff73efc7bdcf0",
     "src/utils/proxyRecoveryPolicy.ts": "d7086398a8bdbd926f39b45d76f6b0eae159ef8cc9088661c95f800b078c2883",
+    "src/utils/proxyManagement.ts": "5003190fc078b752ccbda1345529f668a8cef4093c6430c643682da280627493",
     "src/store/storage/google/datasetListing.ts": "60e21120e61e955622decbaa7b6d5c3afc8dea072a68cd6d8aea55d5cad27d26",
     "src/store/storage/google/datasetHeader.ts": "e62a0cd0ecb2d29862377e848c9b0d904e0e2e00ead656e9794def1e946b3f3a",
     "src/store/storage/google/overview.ts": "2cf5c0d58e0d715d7a94e264f6ef075ecdf12a9f0a136d06acca33af38ecbb2c",
@@ -268,6 +269,7 @@
     "src/utils/streamRecovery.ts": "10ec126041618c3e3ba7328c9704154ddeab2caf8681d722e46ff73efc7bdcf0",
     "src/utils/proxyRecoveryPolicy.ts": "d7086398a8bdbd926f39b45d76f6b0eae159ef8cc9088661c95f800b078c2883",
     "shared/google-sync/proxy.ts": "17658ba2410c44b2dd2ea02d52250c791b0d4557583896ba203640f903623dd7",
+    "src/utils/proxyManagement.ts": "5003190fc078b752ccbda1345529f668a8cef4093c6430c643682da280627493",
     "src/store/storage/google/datasetListing.ts": "60e21120e61e955622decbaa7b6d5c3afc8dea072a68cd6d8aea55d5cad27d26",
     "src/store/storage/google/datasetHeader.ts": "e62a0cd0ecb2d29862377e848c9b0d904e0e2e00ead656e9794def1e946b3f3a",
     "src/store/storage/google/overview.ts": "2cf5c0d58e0d715d7a94e264f6ef075ecdf12a9f0a136d06acca33af38ecbb2c",
@@ -356,7 +358,7 @@
     "src/local-llm/ggufShardUtils.ts": "33845697477f6a02eab2bcc6ce94412ce34cea521400fe7dcac1ffb9823e6ef7",
     "src/local-llm/fileProvider.ts": "4046bf8b8036f227ee000132a829adfd95100e83826319dce5fadb840427d121",
     "shared/google-sync/localModelFiles.ts": "b677bf5a478483ecb3cc42e8d252de9e4456e12eb98fe64ffd528b9135b1edbe",
-    "shared/google-sync/entry.ts": "6cb310ed8dfd6e424087aba65e958cd23dd4c98d399e4f3050054c7b8cf0bade",
+    "shared/google-sync/entry.ts": "3c5cb10922bc3ea7d8b705226312a8cfca6869983227ea73b840a52b6a1775ee",
     "shared/google-sync/generate.mjs": "3b6c9ade9f1651fad5f4dfc1cce2b7e492d9be197fc8854ded1fbc553a058982",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
   },
@@ -408,5 +410,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "20c4711ac7141331812511bfaae51822a2d9a72bcf3384827fe26f30839c255b"
+  "bundleSHA256": "671ed8a70c879435654d42ce17e4fa3bb7b175c4f104822dfae75d014a2ee2f6"
 }

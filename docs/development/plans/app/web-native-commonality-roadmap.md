@@ -372,3 +372,5 @@ UIはWebの会話上部（左モデル・右表示）、役割見出し/本文/�
 main a4d83db6の新同期wireをWeb実engineの共有実行へ取り込んだ。Swiftは暗号/HTTP/保存境界を維持し、wire・履歴・ID回復を別実装しない。Web worker/nativeの結合処理を共有し、未知属性とremote保持entryの意味を維持する。新形式のWeb→native→Web往復、認証済み不正deltaの拒否、保存/再起動の証拠は完成ledgerの同日節に記録した。
 
 次はmainで増えたproxy状態/保存データ管理・永続node状態表示を実Web callerから接続し、業務規則は必要箇所だけ抽出する。旧Google保存のreadonly移行、実cloud互換性、狭幅/文字サイズ等のUI受入は引き続き残る。既存共有範囲の全面再設計やnativeへの再実装は行わず、機能群単位の検証と独立Astra監査を維持する。
+
+同日の次機能群でproxy状態/保存データ管理を共有接続した。要求/応答・削除継続・受信位置gap・labelをWebから共有し、nativeは通信/資格情報/標準画面と既存journal復旧の接続を担当する。証拠と実接続/UIの未確認範囲は完成ledgerへ追記した。次は永続node状態表示と旧Google保存のreadonly移行を扱う。実cloud/全UI受入の完成条件は維持する。
