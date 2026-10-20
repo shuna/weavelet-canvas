@@ -4,7 +4,12 @@
 [facebook/zstd v1.5.7](https://github.com/facebook/zstd/releases/tag/v1.5.7),
 commit `f8745da6ff1ad1e7bab384bd1f9d742439278e99`.
 `zstd.h` and `zstd_errors.h` are the original public headers. The bundled
-`LICENSE` selects upstream's BSD 3-Clause license.
+`LICENSE` selects upstream's BSD 3-Clause license. The WASM also statically
+links Emscripten runtime code, including emmalloc and libc support.
+`WASM-RUNTIME-LICENSES.txt` retains the full official Emscripten 4.0.20
+LICENSE and its musl, compiler-rt and llvm-libc notices. Distribute this text
+alongside the Zstandard BSD license when distributing `zstd.wasm`; the native
+C-only decoder does not use the Emscripten runtime.
 
 The source archive is pinned and verified before generation:
 

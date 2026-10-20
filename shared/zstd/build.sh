@@ -17,6 +17,15 @@ cp zstddeclib.c "$DEST/zstddeclib.c"
 cp ../../lib/zstd.h "$DEST/zstd.h"
 cp ../../lib/zstd_errors.h "$DEST/zstd_errors.h"
 cp ../../LICENSE "$DEST/LICENSE"
+EMCC_DIR=$(CDPATH= cd -- "$(dirname -- "$(command -v "$EMCC")")" && pwd)
+{
+  printf 'WASM runtime notices from official Emscripten 4.0.20.\n\n'
+  printf 'emmalloc.c: Copyright 2018 The Emscripten Authors. All rights reserved.\nThe Emscripten MIT / University of Illinois/NCSA licenses below apply.\n'
+  for NOTICE in LICENSE system/lib/libc/musl/COPYRIGHT system/lib/compiler-rt/LICENSE.TXT system/lib/llvm-libc/LICENSE.TXT; do
+    printf '\n===== Emscripten 4.0.20: %s =====\n\n' "$NOTICE"
+    cat "$EMCC_DIR/$NOTICE"
+  done
+} > "$DEST/WASM-RUNTIME-LICENSES.txt"
 cd "$DEST"
 "$EMCC" zstddeclib.c -Oz -DNDEBUG --no-entry \
   -sSTANDALONE_WASM=1 -sFILESYSTEM=0 -sALLOW_MEMORY_GROWTH=1 \
