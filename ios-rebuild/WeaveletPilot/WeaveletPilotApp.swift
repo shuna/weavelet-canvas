@@ -1639,6 +1639,7 @@ struct ConversationLibraryView<Footer: View>: View {
                     try state.navigate(chatID:result.chatID,nodeID:result.nodeID,source:mode == .grep ? .grep : .search)
                     onSelect()
                 }
+                .disabled(state.generation != nil)
                 .transition(reduceMotion ? .opacity : .move(edge:.top).combined(with:.opacity))
                 .zIndex(1)
             } else {
@@ -1663,7 +1664,6 @@ struct ConversationLibraryView<Footer: View>: View {
             }
             .animation(.easeInOut(duration:0.35),value:showsSearch)
             .clipped()
-            .disabled(state.generation != nil)
             .safeAreaInset(edge: .top, spacing: 0) {
                 if !showsSearch {
                 Button { showsSearch = true } label: {
@@ -1797,6 +1797,7 @@ struct ConversationLibraryView<Footer: View>: View {
     private func conversationRow(_ conversation: Conversation) -> some View {
         let active = state.selectedConversationID.utf8.elementsEqual(conversation.id.utf8)
         return HStack {
+            Group {
             if state.exchange != nil && isSelecting {
                 Button {
                     if !selected.insert(conversation.identity).inserted { selected.remove(conversation.identity) }
@@ -1852,6 +1853,20 @@ struct ConversationLibraryView<Footer: View>: View {
                 }
                 .accessibilityLabel("会話の操作: \(conversation.title)")
             }
+            }
+            .disabled(state.generation != nil)
+            if let generation = state.generation, generation.running,
+               generation.chatID.utf8.elementsEqual(conversation.id.utf8) {
+                Button {
+                    guard state.generation?.id == generation.id else { return }
+                    state.stopGeneration()
+                } label: {
+                    Image(systemName: "stop.circle").frame(minWidth: 44, minHeight: 44)
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("生成を停止: \(conversation.title)")
+            }
         }
         .background(active ? Color.primary.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius:8))
     }
@@ -1859,6 +1874,7 @@ struct ConversationLibraryView<Footer: View>: View {
     private func folderTree(_ folder: ChatFolderRow) -> AnyView {
         AnyView(Group {
             folderHeader(folder)
+                .disabled(state.generation != nil)
                 .padding(.leading, CGFloat(folder.depth) * 16)
             if folder.expanded {
                 ForEach(folders.filter { $0.displayParentID.utf8.elementsEqual(folder.id.utf8) }, id: \.identity) { child in

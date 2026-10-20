@@ -1199,3 +1199,14 @@ Catalyst関連11件が成功し、その後plain修正に対する新1件とPNG1
 ログ `/private/tmp/weavelet-png-export-{native-test,native-final-test,native-corrected-test,native-render-test,native-label-test,types-final,web-test,web-build,freshness,sync-freshness,ui-final-build,renderer-generate}.log`。確認画像 `/private/tmp/weavelet-png-export-proof.png` と `/private/tmp/weavelet-png-export-ui-proof.png`。外部HTTPS画像の実取得、狭幅/VoiceOver、実cloud、iPhoneは未確認。main統合・pushはしていない。
 
 残機能差の追加照合では、Cohere固有生成形式とtool実行は現Webにも実装がなく、provider選択肢だけを生成対応と数えないことを確認した（Web api/requestBody/submitRuntimeとshared generation/remoteOutput）。nativeだけの不足として無条件に機能追加しない。別途Web会話行にある生成停止はnative sidebarでは未接続であり、既存stopGenerationへの接続を次の限定範囲として残す。実オンライン相互運用・UI/OS/性能の受入も継続する。
+
+
+## サイドバー会話行からの生成停止（2026-10-20）
+
+Web ChatHistoryの対象会話行からの停止に合わせ、nativeの生成中会話行へ既存stopGenerationを接続した。全Listの一律disabledを、通常行操作・検索・フォルダheaderのdisabledへ移し、対象行の停止だけを有効にする。保存失敗でgenerationが残る場合も通常操作を無効のまま保つ。表示時のgeneration UUIDと現在値を照合し、古いボタンで後続の生成を止めない。停止・本文保存・失敗時再試行・同期protocol自体は変更しない。新しい業務rule/依存/テスト基盤は追加していない。
+
+独立Astra Lowの限定差分/接続先監査は新規P1/P2なし。Catalyst build成功（`/private/tmp/weavelet-sidebar-stop-build.log`）。変更のない既存serviceの成功結果は再利用し、RemoteGenerationTests.testStopKeepsPartialAndRejectsDelayedResult（`/private/tmp/weavelet-stream-state-native-final-test.log`）とLocalGenerationTests.testLocalStopKeepsPartialOutputOnSaveFailureThenRetries（`/private/tmp/weavelet-stream-state-local-test.log`）の成功ログを再確認した。停止処理の同じ単体試験・全I/O/暗号化同期suiteを反復していない。
+
+実Catalystでは既存debug fixtureに合成New Chat 3を作り、FAKE生成中の対象行に停止ボタンがあり、他行/検索/フォルダ操作がdisabledであることを確認。サイドバー停止→部分本文FAKE partial・中断caption・通常操作復帰を確認した。正常終了とprocess不在を確認して再起動し、部分本文/中断captionの保存を確認、再び正常終了してbuilt Info.plistを原本復元した。AXの入力focusが付かなかった初回操作は画面位置からpasteし直したもので、製品変更ではない。通常store/Keychain/実通信、iPhone、main統合/pushは使っていない。
+
+次の実機能差として、Webの別会話remote並行生成を確認した。Web useSubmit/isChatGeneratingは同一chatのみ拒否し、chat-slice.generatingSessionsとsubmitRuntimeのsession-id別Mapは別chatを保持する。nativeは単一ActiveGeneration/generationTaskで全体を拒否し、完了時の全source一致guardも別chat更新で失効する。この差はOS制約として除外せず未完了とする。単にdisabledやguardを外さず、既存Webの対象判定/要求/結果適用を共有し、nativeのTask・資格情報・保存接続をchat/session別にする範囲から続ける。local推論の資源排他はremote並列とは分けて扱う。実オンライン相互運用・全UI/OS/性能受入は引き続き未完了。
