@@ -1028,7 +1028,7 @@ struct ChatView: View {
             openBranchClipboard(node.id, operation: .paste)
         }, configure: state.exchange == nil || state.generation != nil ? nil : {
             configureNode(node.id)
-        }, toggleCollapse: state.exchange == nil || state.generation != nil ? nil : {
+        }, showsCollapseControl: state.exchange != nil, toggleCollapse: state.exchange == nil || state.generation != nil ? nil : {
             do {
                 var changed = try state.nodeOptionsDraft(nodeID: node.id)
                 changed.value.collapsed.toggle()
@@ -1182,6 +1182,7 @@ struct MessageView: View {
     var copyRange: (() -> Void)? = nil
     var pasteRange: (() -> Void)? = nil
     var configure: (() -> Void)? = nil
+    var showsCollapseControl = false
     var toggleCollapse: (() -> Void)? = nil
     var openEvaluation: (() -> Void)? = nil
     var toggleOmitted: (() -> Void)? = nil
@@ -1226,7 +1227,7 @@ struct MessageView: View {
     }
 
     private var hasMessageOperations: Bool {
-        edit != nil || insertBefore != nil || regenerate != nil || generateFromHere != nil || remove != nil || configure != nil || toggleCollapse != nil || moveUp != nil || moveDown != nil || replaceAndPrune != nil || deleteBranch != nil || copyRange != nil || pasteRange != nil
+        edit != nil || insertBefore != nil || regenerate != nil || generateFromHere != nil || remove != nil || configure != nil || moveUp != nil || moveDown != nil || replaceAndPrune != nil || deleteBranch != nil || copyRange != nil || pasteRange != nil
     }
 
     @ViewBuilder private var messageOperations: some View {
@@ -1245,7 +1246,6 @@ struct MessageView: View {
             Menu {
                 if let generateFromHere { Button("ここから生成",systemImage:"sparkles",action:generateFromHere) }
                 if let insertBefore { Button("前に挿入", systemImage: "text.insert", action: insertBefore) }
-                if let toggleCollapse { Button(node.options.collapsed ? "本文を展開" : "本文を折りたたむ", systemImage: node.options.collapsed ? "chevron.down" : "chevron.up", action: toggleCollapse) }
                 if let configure { Button("メッセージ設定", systemImage: "slider.horizontal.3", action: configure) }
                 if let moveUp { Button("上へ移動", systemImage: "arrow.up", action: moveUp) }
                 if let moveDown { Button("下へ移動", systemImage: "arrow.down", action: moveDown) }
@@ -1452,8 +1452,20 @@ struct MessageView: View {
 
     var body: some View {
         let isBubble = style == .bubbles
-        HStack(spacing: 0) {
+        HStack(alignment: .top, spacing: 0) {
             if isBubble && node.role == "user" { Spacer(minLength: 24) }
+            if showsCollapseControl {
+            Button { toggleCollapse?() } label: {
+                Image(systemName: node.options.collapsed ? "chevron.right" : "chevron.down")
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .foregroundStyle(.secondary)
+            .disabled(toggleCollapse == nil || inlineEditor != nil)
+            .accessibilityLabel("\(roleName)の本文を\(node.options.collapsed ? "展開" : "折りたたむ")")
+            .accessibilityValue(node.options.collapsed ? "折りたたみ中" : "展開中")
+            }
             VStack(alignment: .leading, spacing: 8) {
                 ViewThatFits(in:.horizontal) {
                     HStack(spacing:8) {
