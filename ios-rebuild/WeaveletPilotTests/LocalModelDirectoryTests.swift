@@ -1,5 +1,6 @@
 import XCTest
 import CryptoKit
+import Darwin
 @testable import WeaveletPilot
 
 @MainActor final class LocalModelDirectoryTests: XCTestCase {
@@ -185,6 +186,64 @@ import CryptoKit
         try Data("GGUFsingle".utf8).write(to:singleURL)
         try files.install(singleURL,modelID:"org/single")
         XCTAssertEqual(try files.installed(model:single),try files.installed(modelID:"org/single"))
+    }
+    func testSelectedGGUFsFollowSharedManifestOrderWithoutReorderingSelection() throws {
+        let (root,files) = try setup(), model = shardedModel(), source = try shardSource(root)
+        let first = source.appendingPathComponent("model-00001-of-00002.gguf")
+        let second = source.appendingPathComponent("model-00002-of-00002.gguf")
+        let inspected = try files.inspectSelectedGGUFs([second,first])
+        XCTAssertEqual(inspected.map(\.name),[second.lastPathComponent,first.lastPathComponent])
+
+        let staged = try files.stageSelectedGGUFs(inspected,model:model)
+        try files.publishDirectory(staged,model:model)
+        staged.discard()
+        let entries = Dictionary(uniqueKeysWithValues:try files.directoryEntries(model:model).map { ($0.path,$0.data) })
+        XCTAssertEqual(entries[first.lastPathComponent],Data("GGUFfirst-original".utf8))
+        XCTAssertEqual(entries[second.lastPathComponent],Data("GGUFsecond-original".utf8))
+    }
+    func testSelectedGGUFsRejectChangedSourceAndExistingTargetWithoutReplacingAssets() throws {
+        let (root,files) = try setup(), model = shardedModel(), source = try shardSource(root)
+        let first = source.appendingPathComponent("model-00001-of-00002.gguf")
+        let second = source.appendingPathComponent("model-00002-of-00002.gguf")
+        let inspected = try files.inspectSelectedGGUFs([first,second])
+        try Data("GGUFchanged".utf8).write(to:second)
+        XCTAssertThrowsError(try files.checkSelectedGGUFs(inspected))
+        XCTAssertThrowsError(try files.stageSelectedGGUFs(inspected,model:model))
+        XCTAssertFalse(try files.directoryIsPresent(modelID:"org/split"))
+
+        let original = try shardSource(root,name:"original",suffix:"kept")
+        try install(original,files,model)
+        let replacement = try shardSource(root,name:"replacement",suffix:"replacement")
+        let selected = try files.inspectSelectedGGUFs([
+            replacement.appendingPathComponent("model-00001-of-00002.gguf"),
+            replacement.appendingPathComponent("model-00002-of-00002.gguf")
+        ])
+        XCTAssertThrowsError(try files.stageSelectedGGUFs(selected,model:model))
+        XCTAssertEqual(try Data(contentsOf:try files.installed(model:model)),Data("GGUFfirst-kept".utf8))
+    }
+    func testSelectedGGUFsUseWebSampledFingerprintForLargeFiles() throws {
+        let (root,files) = try setup()
+        let size = 64 * 1024 * 1024 + 1
+        func sparseGGUF(_ name: String, middle: UInt8) throws -> URL {
+            let url = root.appendingPathComponent(name)
+            let descriptor = open(url.path,O_WRONLY | O_CREAT | O_TRUNC,0o600)
+            guard descriptor >= 0 else { throw POSIXError(.EIO) }
+            defer { close(descriptor) }
+            guard ftruncate(descriptor,off_t(size)) == 0 else { throw POSIXError(.EIO) }
+            let header = Array("GGUF".utf8)
+            guard header.withUnsafeBytes({ pwrite(descriptor,$0.baseAddress,$0.count,0) }) == header.count else { throw POSIXError(.EIO) }
+            var changed = middle
+            guard withUnsafeBytes(of:&changed,{ pwrite(descriptor,$0.baseAddress,1,off_t(32 * 1024 * 1024)) }) == 1 else { throw POSIXError(.EIO) }
+            return url
+        }
+        let first = try sparseGGUF("first.gguf",middle:1)
+        let second = try sparseGGUF("second.gguf",middle:2)
+        let inspected = try files.inspectSelectedGGUFs([first,second])
+        XCTAssertNotEqual(inspected[0].hash,inspected[1].hash)
+        XCTAssertEqual(inspected[0].fingerprint,inspected[1].fingerprint)
+
+        // Web's documented 64 MiB + 1 vector: 1 MiB GGUF head, 1 MiB zero tail, then the size suffix.
+        XCTAssertEqual(inspected[0].fingerprint,"74637616f096571c9a89ca82e8bcd2a8584c48883c6e16d5ba8e5268d073e92a")
     }
     func testDirectoryRollbackRestoresPreviousGenerationOrRemovesNewGeneration() throws {
         let (root,files) = try setup(), metadata = shardedModel(), old = try shardSource(root,suffix:"old")

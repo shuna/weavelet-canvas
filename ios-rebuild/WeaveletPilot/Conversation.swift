@@ -1841,7 +1841,7 @@ final class ChatState: ObservableObject {
                     guard oldPlan == newPlan else { throw ExchangeError.invalid("同じモデルIDの別の定義が登録されています") }
                 }
                 try storage.publishDirectory(staged,model:definition)
-                do { try self.commitCatalogModel(definition,current:current,storedFiles:paths,fileHashes:hashes,bytes:total,revision:revision) }
+                do { try self.commitStoredLocalModel(definition,current:current,storedFiles:paths,fileHashes:hashes,bytes:total,revision:revision) }
                 catch {
                     try storage.rollbackDirectory(staged,model:definition)
                     throw error
@@ -1981,7 +1981,7 @@ final class ChatState: ObservableObject {
                 let updated = try OrderedJSONChanges.apply(result.required("changes"),to:current,opaque:boundary.opaque)
                 try applyGlobalState(updated)
             } else {
-                try commitCatalogModel(definition,current:current,storedFiles:[fileName],fileHashes:[.init(key:fileName,value:.string(inspected.hash))],bytes:inspected.size,revision:revision)
+                try commitStoredLocalModel(definition,current:current,storedFiles:[fileName],fileHashes:[.init(key:fileName,value:.string(inspected.hash))],bytes:inspected.size,revision:revision)
             }
         } catch {
             if !duplicate, !existed, let installedRevision, (try? files.revision(target)) == installedRevision { try? FileManager.default.removeItem(at:target) }
@@ -1996,19 +1996,24 @@ final class ChatState: ObservableObject {
         diagnostics.report(id:"model-" + id,label:"モデル取得",status:"done")
     }
 
-    private func commitCatalogModel(_ definition: OrderedJSON, current: OrderedJSON, storedFiles: [String], fileHashes: [JSONField], bytes: Int64, revision: String) throws {
+    private func commitStoredLocalModel(_ definition: OrderedJSON, current: OrderedJSON, storedFiles: [String], fileHashes: [JSONField], bytes: Int64, revision: String? = nil, operation: String = "catalogCommit", preserveMetadata: Bool = false) throws {
         let modelID = try definition.required("id").string("model ID")
         let models = try current["localModels"]?.array("local models") ?? []
         let active = current["activeLocalModels"] ?? .object([])
         var boundary = SharedWebProjection()
-        let projected = OrderedJSON.object([
+        var projected = OrderedJSON.object([
             .init(key:"localModels",value:.array(try models.map { try boundary.reference($0) })),
             .init(key:"activeLocalModels",value:.object(try active.object("active models").map { field in
                 JSONField(key:field.key,value:field.value == .null || (try? field.value.string("model ID")) != nil ? field.value : try boundary.reference(field.value))
             }))
         ])
+        if operation == "selectionCommit" {
+            projected = projected.replacing("favoriteLocalModelIds",with:.array(try (current["favoriteLocalModelIds"] ?? .array([])).array("favorites").map { value in
+                (try? value.stringKey("model ID")) != nil ? value : try boundary.reference(value)
+            }))
+        }
         let result = try SharedWebOperations.call("localModelImport",.object([
-            .init(key:"operation",value:.string("catalogCommit")),.init(key:"state",value:projected),.init(key:"model",value:definition),
+            .init(key:"operation",value:.string(operation)),.init(key:"state",value:projected),.init(key:"model",value:definition),
             .init(key:"existingIDs",value:.array(try models.map { .string(try $0.required("id").string("model ID")) }))
         ]))
         var metadata = current["savedModelMeta"] ?? .object([])
@@ -2018,10 +2023,13 @@ final class ChatState: ObservableObject {
             .replacing("storedFiles",with:.array(storedFiles.map(OrderedJSON.string)))
             .replacing("fileHashes",with:.object(fileHashes))
             .replacing("lastVerifiedAt",with:.number(String(Int(Date().timeIntervalSince1970 * 1000))))
-            .replacing("downloadRevision",with:.string(revision))
+        if let revision { entry = entry.replacing("downloadRevision",with:.string(revision)) }
+        if operation == "selectionCommit" { entry = .object(try entry.object("metadata").filter { !$0.key.matches("lastError") }) }
         metadata = metadata.replacing(modelID,with:entry)
-        let updated = try OrderedJSONChanges.apply(result.required("changes"),to:current.replacing("localModels",with:current["localModels"] ?? .array([])).replacing("activeLocalModels",with:current["activeLocalModels"] ?? .object([])),opaque:boundary.opaque)
-        try applyGlobalState(updated.replacing("savedModelMeta",with:metadata))
+        var base = current.replacing("localModels",with:current["localModels"] ?? .array([])).replacing("activeLocalModels",with:current["activeLocalModels"] ?? .object([]))
+        if operation == "selectionCommit" { base = base.replacing("favoriteLocalModelIds",with:base["favoriteLocalModelIds"] ?? .array([])) }
+        let updated = try OrderedJSONChanges.apply(result.required("changes"),to:base,opaque:boundary.opaque)
+        try applyGlobalState(preserveMetadata ? updated : updated.replacing("savedModelMeta",with:metadata))
     }
 
     private var catalogResumeStore: NativeCatalogResumeStore { NativeCatalogResumeStore(libraryURL:(store ?? LocalStateStore.applicationStore).fileURL) }
@@ -2154,19 +2162,19 @@ final class ChatState: ObservableObject {
     }
 
     @MainActor func importSingleGGUF(_ source: URL) async throws -> String {
-        guard !hasGenerations else { throw ExchangeError.invalid("生成結果を保存してからモデルを登録してください") }
+        guard !hasGenerations, !evaluationJobs.values.contains(where:{ $0.busy }) else { throw ExchangeError.invalid("生成・評価の終了後にモデルを登録してください") }
         let roots = try syncInputSnapshot().required("state")
         let models = try roots["localModels"]?.array("local models") ?? []
         let active = roots["activeLocalModels"] ?? .object([])
         let files = localModelFiles
-        let inspected = try await Task.detached { try files.inspect(source) }.value
+        let inspected = try await Task.detached { try files.inspectSelectedGGUFs([source])[0] }.value
         try Task.checkCancellation()
         let candidates: [(id:String, value:OrderedJSON, revision:LocalModelFiles.Revision)] = await Task.detached {
             models.compactMap { model in
                 guard let id = try? model.required("id").string("id"),
                       model["engine"] == .string("wllama"), model["manifest"]?["kind"] == .string("single-file"),
                       let installed = try? files.installed(modelID:id), let revision = try? files.revision(installed),
-                      let fingerprint = try? files.inspect(installed), (try? files.revision(installed)) == revision else { return nil }
+                      let fingerprint = try? files.inspectSelectedGGUFs([installed])[0], (try? files.revision(installed)) == revision else { return nil }
                 let projectedModel = OrderedJSON.object([
                     .init(key:"id",value:.string(id)),.init(key:"engine",value:.string("wllama")),
                     .init(key:"manifest",value:.object([.init(key:"kind",value:.string("single-file"))]))
@@ -2177,10 +2185,19 @@ final class ChatState: ObservableObject {
         }.value
         try Task.checkCancellation()
         let ids = try models.map { try $0.required("id").string("id") }
-        let prepared = try SharedWebOperations.call("localModelImport",.object([
-            .init(key:"operation",value:.string("prepare")),.init(key:"name",value:.string(inspected.name)),
-            .init(key:"hash",value:.string(inspected.hash)),.init(key:"size",value:.number(String(inspected.size))),
-            .init(key:"candidates",value:.array(candidates.map(\.value))),.init(key:"existingIDs",value:.array(ids.map(OrderedJSON.string))) ]))
+        let duplicateID = try SharedWebOperations.call("localModelImport",.object([
+            .init(key:"operation",value:.string("selectionDuplicate")),
+            .init(key:"files",value:.array([.object([.init(key:"name",value:.string(inspected.name)),.init(key:"size",value:.number(String(inspected.size))),.init(key:"hash",value:.string(inspected.hash))])])),
+            .init(key:"candidates",value:.array(try candidates.map { candidate in
+                .object([.init(key:"id",value:.string(candidate.id)),.init(key:"engine",value:.string("wllama")),.init(key:"kind",value:.string("single-file")),
+                         .init(key:"hashes",value:.array([try candidate.value.required("hash")])),.init(key:"size",value:try candidate.value.required("size"))])
+            }))
+        ]))
+        var preparation: [JSONField] = [.init(key:"operation",value:.string("prepareSelection")),
+            .init(key:"files",value:.array([.object([.init(key:"name",value:.string(inspected.name)),.init(key:"size",value:.number(String(inspected.size)))])])),
+            .init(key:"hash",value:.string(inspected.fingerprint)),.init(key:"existingIDs",value:.array(ids.map(OrderedJSON.string)))]
+        if duplicateID != .null { preparation.append(.init(key:"existingModel",value:.object([.init(key:"id",value:duplicateID)]))) }
+        let prepared = try SharedWebOperations.call("localModelImport",.object(preparation))
         let proposed = try prepared.required("model")
         let modelID = try proposed.required("id").string("model ID")
         try requireLocalModelAssetAccess(id:modelID)
@@ -2199,6 +2216,7 @@ final class ChatState: ObservableObject {
         try Task.checkCancellation()
         if !existing { try await Task.detached { try files.installNew(source,modelID:modelID,hash:inspected.hash) }.value }
         try Task.checkCancellation()
+        guard !hasGenerations, !evaluationJobs.values.contains(where:{ $0.busy }) else { throw ExchangeError.invalid("生成・評価の終了後にモデルを登録してください") }
         let current = try syncInputSnapshot().required("state")
         guard try (current["localModels"] ?? .array([])).encoded() == (roots["localModels"] ?? .array([])).encoded(),
                   try (current["activeLocalModels"] ?? .object([])).encoded() == active.encoded() else {
@@ -2209,20 +2227,120 @@ final class ChatState: ObservableObject {
         let projectedActive = try OrderedJSON.object(try active.object("active models").map { field in
             JSONField(key:field.key,value:field.value == .null || (try? field.value.string("model ID")) != nil ? field.value : try boundary.reference(field.value))
         })
-        let projected = OrderedJSON.object([.init(key:"localModels",value:.array(opaqueModels)),.init(key:"activeLocalModels",value:projectedActive)])
+        let projected = OrderedJSON.object([.init(key:"localModels",value:.array(opaqueModels)),.init(key:"activeLocalModels",value:projectedActive),
+            .init(key:"favoriteLocalModelIds",value:.array(try (current["favoriteLocalModelIds"] ?? .array([])).array("favorites").map { value in
+                (try? value.stringKey("model ID")) != nil ? value : try boundary.reference(value)
+            }))])
         let commitModel = existing ? OrderedJSON.object([
             .init(key:"id",value:.string(modelID)),.init(key:"tasks",value:model["tasks"] ?? .array([]))
         ]) : model
-        let result = try SharedWebOperations.call("localModelImport",.object([
-            .init(key:"operation",value:.string("commit")),.init(key:"state",value:projected),
-            .init(key:"model",value:commitModel),.init(key:"existingIDs",value:.array(ids.map(OrderedJSON.string))) ]))
         try Task.checkCancellation()
+        try files.checkSelectedGGUFs([inspected])
         if existing {
             guard let selected else { throw ExchangeError.invalid("登録済みモデルのファイルを確認できません") }
             try files.checkRevision(files.installed(modelID:selected.id),expected:selected.revision)
         }
-        try applyGlobalState(OrderedJSONChanges.apply(result.required("changes"),to:current.replacing("localModels",with:current["localModels"] ?? .array([])).replacing("activeLocalModels",with:current["activeLocalModels"] ?? .object([])),opaque:boundary.opaque))
+        if existing {
+        let result = try SharedWebOperations.call("localModelImport",.object([
+            .init(key:"operation",value:.string("selectionCommit")),.init(key:"state",value:projected),
+            .init(key:"model",value:commitModel),.init(key:"existingIDs",value:.array(ids.map(OrderedJSON.string))) ]))
+            let base = current.replacing("localModels",with:current["localModels"] ?? .array([])).replacing("activeLocalModels",with:current["activeLocalModels"] ?? .object([]))
+                .replacing("favoriteLocalModelIds",with:current["favoriteLocalModelIds"] ?? .array([]))
+            try applyGlobalState(OrderedJSONChanges.apply(result.required("changes"),to:base,opaque:boundary.opaque))
+        } else {
+            try commitStoredLocalModel(model,current:current,storedFiles:[inspected.name],fileHashes:[.init(key:inspected.name,value:.string(inspected.fingerprint))],bytes:Int64(inspected.size),operation:"selectionCommit")
+        }
         return modelID
+    }
+
+    @MainActor func importGGUFFiles(_ sources: [URL]) async throws -> String {
+        if sources.count == 1 { return try await importSingleGGUF(sources[0]) }
+        guard !hasGenerations, !evaluationJobs.values.contains(where:{ $0.busy }) else {
+            throw ExchangeError.invalid("生成・評価の終了後にモデルを登録してください")
+        }
+        let original = try syncInputSnapshot().required("state"), models = try localModelDefinitions(), files = localModelFiles
+        let inspector = Task.detached { try files.inspectSelectedGGUFs(sources) }
+        let inspected = try await withTaskCancellationHandler { try await inspector.value } onCancel: { inspector.cancel() }
+        let declarations = OrderedJSON.array(inspected.map { .object([.init(key:"name",value:.string($0.name)),.init(key:"size",value:.number(String($0.size)))]) })
+        let selection = try SharedWebOperations.call("localModelImport",.object([.init(key:"operation",value:.string("selection")),.init(key:"files",value:declarations)]))
+        let ordered = try selection.required("files").array("files").map { entry -> LocalModelFiles.SelectedGGUF in
+            let name = try entry.required("name").string("file name")
+            guard let selected = inspected.first(where:{ $0.name.utf8.elementsEqual(name.utf8) }) else { throw ExchangeError.invalid("選択したファイルがありません") }
+            return selected
+        }
+        guard let first = ordered.first else { throw ExchangeError.invalid("GGUFファイルを選択してください") }
+        let candidateWorker = Task.detached {
+            models.compactMap { model -> (model:OrderedJSON, paths:[String], files:[LocalModelFiles.SelectedGGUF])? in
+                guard model["engine"] == .string("wllama"), model["manifest"]?["kind"] == .string("gguf-sharded"),
+                      let id = try? model.required("id").string("id"), (try? files.installed(model:model)) != nil,
+                      let plan = try? SharedWebOperations.call("localModelFiles",.object([.init(key:"model",value:model)])),
+                      let paths = try? plan.required("requiredFiles").array("files").map({ try $0.string("file") }),
+                      let root = try? files.directoryURL(modelID:id),
+                      let existing = try? files.inspectSelectedGGUFs(paths.map { root.appendingPathComponent($0) }) else { return nil }
+                return (model,paths,existing)
+            }
+        }
+        let candidates = await withTaskCancellationHandler { await candidateWorker.value } onCancel: { candidateWorker.cancel() }
+        try Task.checkCancellation()
+        func matchingModel(_ candidates: [(model:OrderedJSON, paths:[String], files:[LocalModelFiles.SelectedGGUF])]) throws -> OrderedJSON {
+            try SharedWebOperations.call("localModelImport",.object([
+            .init(key:"operation",value:.string("selectionDuplicate")),
+            .init(key:"files",value:.array(ordered.map { .object([.init(key:"name",value:.string($0.name)),.init(key:"size",value:.number(String($0.size))),.init(key:"hash",value:.string($0.hash))]) })),
+            .init(key:"candidates",value:.array(try candidates.map { candidate in
+                .object([.init(key:"id",value:try candidate.model.required("id")),.init(key:"engine",value:.string("wllama")),.init(key:"kind",value:.string("gguf-sharded")),
+                         .init(key:"hashes",value:.array(candidate.files.map { .string($0.hash) })),.init(key:"size",value:.number(String(candidate.files.reduce(UInt64(0)) { $0 + $1.size })))])
+            }))
+        ]))
+        }
+        let duplicateID = try matchingModel(candidates)
+        let duplicate = candidates.first { $0.model["id"] == duplicateID }
+        var prepare: [JSONField] = [.init(key:"operation",value:.string("prepareSelection")),.init(key:"files",value:declarations),.init(key:"hash",value:.string(first.fingerprint)),
+                                    .init(key:"existingIDs",value:.array(try models.map { try $0.required("id") }))]
+        if let duplicate { prepare.append(.init(key:"existingModel",value:.object([.init(key:"id",value:try duplicate.model.required("id"))]))) }
+        let prepared = try SharedWebOperations.call("localModelImport",.object(prepare))
+        let model = try duplicate?.model ?? prepared.required("model"), id = try model.required("id").string("model ID"), key = Data(id.utf8)
+        try requireLocalModelAssetAccess(id:id)
+        catalogInstallations.insert(key)
+        defer { catalogInstallations.remove(key) }
+        var reusable = duplicate
+        if reusable == nil, try files.directoryIsPresent(modelID:id) {
+            let existingRoot = try files.directoryURL(modelID:id)
+            let paths = ordered.map(\.name)
+            let worker = Task.detached {
+                _ = try files.installed(model:model)
+                return try files.inspectSelectedGGUFs(paths.map { existingRoot.appendingPathComponent($0) })
+            }
+            let existingFiles = try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
+            let orphan = (model:model,paths:paths,files:existingFiles)
+            guard try matchingModel([orphan]) == .string(id) else { throw ExchangeError.invalid("同じモデルIDの別ファイルがこの端末にあります") }
+            reusable = orphan
+        }
+        let staged: LocalModelFiles.DirectoryStage?
+        if reusable == nil {
+            let worker = Task.detached { try files.stageSelectedGGUFs(ordered,model:model) }
+            staged = try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
+        } else { staged = nil }
+        defer { if let staged { Task.detached { staged.discard() } } }
+        var published = false
+        do {
+            try Task.checkCancellation()
+            guard !hasGenerations, !evaluationJobs.values.contains(where:{ $0.busy }) else { throw ExchangeError.invalid("生成・評価の終了後にモデルを登録してください") }
+            let current = try syncInputSnapshot().required("state")
+            for root in ["localModels","activeLocalModels","favoriteLocalModelIds","savedModelMeta"] {
+                guard current[root] == original[root] else { throw ExchangeError.invalid("モデル設定が変更されました。もう一度登録してください") }
+            }
+            try files.checkSelectedGGUFs(ordered)
+            if let reusable { try files.checkSelectedGGUFs(reusable.files) }
+            if let staged { try files.publishDirectory(staged,model:model); published = true }
+            let stored = reusable?.files ?? ordered, paths = reusable?.paths ?? ordered.map(\.name)
+            let bytes = stored.reduce(UInt64(0)) { $0 + $1.size }
+            guard bytes <= UInt64(Int64.max) else { throw ExchangeError.invalid("モデルの容量が大きすぎます") }
+            try commitStoredLocalModel(model,current:current,storedFiles:paths,fileHashes:zip(paths,stored).map { .init(key:$0.0,value:.string($0.1.fingerprint)) },bytes:Int64(bytes),operation:"selectionCommit",preserveMetadata:duplicate != nil)
+        } catch {
+            if published, let staged { try await Task.detached { try files.rollbackDirectory(staged,model:model) }.value }
+            throw error
+        }
+        return id
     }
 
     private func beginLocalGeneration(source: OrderedJSON, chat: OrderedJSON, chatID: String, path: [String], history: MessageEditing.HistoryState?, plan: OrderedJSON?, now: Double,

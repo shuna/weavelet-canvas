@@ -28207,6 +28207,79 @@ ${text}`;
     return JSON.stringify({ changes: diffJSONChanges(before, mutateLocalModelRole(before, input)) });
   }
 
+  // src/local-llm/ggufShardUtils.ts
+  var SHARD_PATTERN = /^(.*)-(\d{5})-of-(\d{5})\.gguf$/;
+  function parseShardInfo(fileName) {
+    const m = fileName.match(SHARD_PATTERN);
+    if (!m)
+      return null;
+    return {
+      baseName: m[1],
+      current: parseInt(m[2], 10),
+      total: parseInt(m[3], 10)
+    };
+  }
+  function isShardGroupComplete(group) {
+    return group.files.length === group.expectedTotal;
+  }
+  function groupShardFiles(files) {
+    const groups = /* @__PURE__ */ new Map();
+    for (const f of files) {
+      const info = parseShardInfo(f.rfilename);
+      if (!info)
+        continue;
+      if (!groups.has(info.baseName)) {
+        groups.set(info.baseName, { shards: /* @__PURE__ */ new Map(), expectedTotal: info.total });
+      }
+      const group = groups.get(info.baseName);
+      if (group.expectedTotal !== info.total)
+        continue;
+      if (!group.shards.has(info.current)) {
+        group.shards.set(info.current, { name: f.rfilename, size: f.size });
+      }
+    }
+    const result3 = /* @__PURE__ */ new Map();
+    for (const [baseName, { shards: shardMap, expectedTotal }] of groups) {
+      const sorted = Array.from(shardMap.entries()).sort(([a], [b]) => a - b).map(([, v]) => v);
+      result3.set(baseName, {
+        files: sorted.map((s) => s.name),
+        totalSize: sorted.reduce((sum, s) => sum + s.size, 0),
+        expectedTotal
+      });
+    }
+    return result3;
+  }
+  function getManifestFiles(manifest) {
+    switch (manifest.kind) {
+      case "single-file":
+        return [manifest.entrypoint];
+      case "gguf-sharded":
+        return manifest.shards;
+      case "multi-file":
+        return manifest.requiredFiles;
+    }
+  }
+  function getManifestPrimaryFile(manifest) {
+    return manifest.entrypoint;
+  }
+
+  // src/local-llm/modelFingerprint.ts
+  var GGUF_FINGERPRINT_THRESHOLD = 64 * 1024 * 1024;
+  var GGUF_FINGERPRINT_CHUNK_BYTES = 1024 * 1024;
+  function ggufFingerprintPlan(size) {
+    if (!Number.isSafeInteger(size) || size < 0)
+      throw new Error("GGUF \u30D5\u30A1\u30A4\u30EB\u30B5\u30A4\u30BA\u304C\u4E0D\u6B63\u3067\u3059\u3002");
+    if (size <= GGUF_FINGERPRINT_THRESHOLD)
+      return { ranges: [{ offset: 0, length: size }], suffix: "" };
+    return {
+      ranges: [
+        { offset: 0, length: GGUF_FINGERPRINT_CHUNK_BYTES },
+        { offset: size - GGUF_FINGERPRINT_CHUNK_BYTES, length: GGUF_FINGERPRINT_CHUNK_BYTES }
+      ],
+      suffix: String(size)
+    };
+  }
+
   // src/utils/localModelImport.ts
   var sanitizeModelIdSegment = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "model";
   function singleGGUFDefinition(name, hash, size) {
@@ -28221,6 +28294,88 @@ ${text}`;
       fileSize: size,
       lastFileName: name
     };
+  }
+  function inspectSelectedGGUFs(files) {
+    if (files.some((file2) => !Number.isSafeInteger(file2.size) || file2.size < 0))
+      throw new Error("GGUF \u30D5\u30A1\u30A4\u30EB\u30B5\u30A4\u30BA\u304C\u4E0D\u6B63\u3067\u3059\u3002");
+    if (new Set(files.map((file2) => file2.name)).size !== files.length)
+      throw new Error("\u540C\u3058 GGUF \u30D5\u30A1\u30A4\u30EB\u304C\u91CD\u8907\u3057\u3066\u9078\u629E\u3055\u308C\u3066\u3044\u307E\u3059\u3002");
+    const selectedFiles = [...files].sort((left, right) => left.name.localeCompare(right.name));
+    if (selectedFiles.length === 0)
+      throw new Error("GGUF \u30D5\u30A1\u30A4\u30EB\u3092\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
+    const shards = selectedFiles.map((file2) => {
+      const info = parseShardInfo(file2.name);
+      return { file: file2, baseName: info?.baseName, current: info?.current, total: info?.total };
+    });
+    const isPossibleSet = selectedFiles.length > 1 && shards.every((shard) => shard.current !== void 0);
+    if (isPossibleSet) {
+      const baseNames = new Set(shards.map((shard) => shard.baseName));
+      const totals = new Set(shards.map((shard) => shard.total));
+      if (baseNames.size !== 1)
+        throw new Error(`\u9078\u629E\u3055\u308C\u305F\u30D5\u30A1\u30A4\u30EB\u306F\u7570\u306A\u308B\u30E2\u30C7\u30EB\u306E\u30B7\u30E3\u30FC\u30C9\u304C\u6DF7\u5728\u3057\u3066\u3044\u307E\u3059\uFF08\u30D9\u30FC\u30B9\u540D: ${[...baseNames].join(", ")}\uFF09\u3002\u540C\u3058\u30E2\u30C7\u30EB\u306E\u5168\u30B7\u30E3\u30FC\u30C9\u3060\u3051\u3092\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044\u3002`);
+      if (totals.size !== 1)
+        throw new Error("\u9078\u629E\u3055\u308C\u305F\u30D5\u30A1\u30A4\u30EB\u306E\u30B7\u30E3\u30FC\u30C9\u7DCF\u6570\u304C\u4E00\u81F4\u3057\u307E\u305B\u3093\u3002\u540C\u3058\u30E2\u30C7\u30EB\u306E\u5168\u30B7\u30E3\u30FC\u30C9\u3060\u3051\u3092\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
+      const total = [...totals][0];
+      if (selectedFiles.length !== total)
+        throw new Error(`\u30B7\u30E3\u30FC\u30C9\u30BB\u30C3\u30C8\u304C\u4E0D\u5B8C\u5168\u3067\u3059: ${total} \u500B\u4E2D ${selectedFiles.length} \u500B\u304C\u9078\u629E\u3055\u308C\u3066\u3044\u307E\u3059\u3002\u5168 ${total} \u30B7\u30E3\u30FC\u30C9\u3092\u307E\u3068\u3081\u3066\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044\u3002`);
+      const indices = new Set(shards.map((shard) => shard.current));
+      for (let index = 1; index <= total; index++) {
+        if (!indices.has(index))
+          throw new Error(`\u30B7\u30E3\u30FC\u30C9\u30BB\u30C3\u30C8\u306B\u6B20\u756A\u304C\u3042\u308A\u307E\u3059\uFF08${index} \u756A\u76EE\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\uFF09\u3002\u5168 ${total} \u30B7\u30E3\u30FC\u30C9\u3092\u307E\u3068\u3081\u3066\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044\u3002`);
+      }
+      const ordered = shards.sort((left, right) => left.current - right.current).map((shard) => shard.file);
+      const totalSize = ordered.reduce((sum, file2) => sum + file2.size, 0);
+      if (!Number.isSafeInteger(totalSize))
+        throw new Error("GGUF \u30D5\u30A1\u30A4\u30EB\u30B5\u30A4\u30BA\u304C\u4E0D\u6B63\u3067\u3059\u3002");
+      return {
+        files: ordered,
+        manifest: { kind: "gguf-sharded", entrypoint: ordered[0].name, shards: ordered.map((file2) => file2.name), totalSize },
+        primaryName: ordered[0].name,
+        displayLabel: `${ordered[0].name} (${ordered.length} shards)`,
+        totalSize
+      };
+    }
+    if (selectedFiles.length > 1)
+      throw new Error("\u8907\u6570\u30D5\u30A1\u30A4\u30EB\u304C\u9078\u629E\u3055\u308C\u307E\u3057\u305F\u304C\u3001\u6709\u52B9\u306A\u30B7\u30E3\u30FC\u30C9\u30BB\u30C3\u30C8\u3068\u3057\u3066\u8A8D\u8B58\u3067\u304D\u307E\u305B\u3093\u3002\u5358\u4E00\u306E .gguf \u30D5\u30A1\u30A4\u30EB\u3001\u307E\u305F\u306F\u540C\u4E00\u30E2\u30C7\u30EB\u306E\u5168\u30B7\u30E3\u30FC\u30C9\u3092\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
+    const [file] = selectedFiles;
+    return { files: [file], manifest: { kind: "single-file", entrypoint: file.name }, primaryName: file.name, displayLabel: file.name, totalSize: file.size };
+  }
+  function selectedGGUFDefinition(selection, firstHash) {
+    if (selection.manifest.kind === "single-file")
+      return singleGGUFDefinition(selection.manifest.entrypoint, firstHash, selection.totalSize);
+    const entrypoint = selection.manifest.entrypoint;
+    return {
+      id: `local-file--${firstHash.slice(0, 16)}--${sanitizeModelIdSegment(entrypoint)}`,
+      engine: "wllama",
+      tasks: ["generation", "analysis"],
+      label: selection.displayLabel,
+      origin: entrypoint,
+      source: "opfs",
+      manifest: selection.manifest,
+      fileSize: selection.totalSize,
+      lastFileName: entrypoint
+    };
+  }
+  function findSelectedGGUFDuplicate(selection, files, candidates) {
+    const kind = selection.manifest.kind;
+    if (kind !== "single-file" && kind !== "gguf-sharded")
+      return null;
+    const byName = new Map(files.map((file) => [file.name, file]));
+    const hashes = selection.files.map((file) => {
+      const inspected = byName.get(file.name);
+      if (!inspected || inspected.size !== file.size)
+        throw new Error("GGUF \u30D5\u30A1\u30A4\u30EB\u60C5\u5831\u304C\u9078\u629E\u5185\u5BB9\u3068\u4E00\u81F4\u3057\u307E\u305B\u3093\u3002");
+      return inspected.hash;
+    });
+    return candidates.find(
+      (candidate) => candidate.engine === "wllama" && candidate.kind === kind && (!candidate.size || candidate.size === selection.totalSize) && candidate.hashes.length === hashes.length && candidate.hashes.every((hash, index) => hash === hashes[index])
+    )?.id ?? null;
+  }
+  function prepareSelectedGGUFImport(selection, firstHash, existingModel, existingIDs) {
+    const proposed = selectedGGUFDefinition(selection, firstHash);
+    if (!existingModel && (existingIDs ?? []).includes(proposed.id))
+      throw new Error("A different model already uses this ID.");
+    return { model: existingModel ?? proposed, existing: !!existingModel };
   }
   function autoAssignImportedModel(active, model) {
     const next = { ...active };
@@ -28241,6 +28396,13 @@ ${text}`;
     return {
       ...next,
       activeLocalModels: autoAssignImportedModel(next.activeLocalModels, model)
+    };
+  }
+  function commitSelectedGGUFImport(state3, model, existingIDs) {
+    const next = commitSingleGGUFImport(state3, model, existingIDs);
+    return {
+      ...next,
+      favoriteLocalModelIds: next.favoriteLocalModelIds.includes(model.id) ? next.favoriteLocalModelIds : [...next.favoriteLocalModelIds, model.id]
     };
   }
   function commitLocalModel(state3, model, existingIDs) {
@@ -28312,6 +28474,16 @@ ${text}`;
     const input = JSON.parse(json);
     if (input.operation === "prepare")
       return JSON.stringify(prepareSingleGGUFImport(input.name, input.hash, input.size, input.candidates, input.existingModel, input.existingIDs));
+    if (input.operation === "selection")
+      return JSON.stringify(inspectSelectedGGUFs(input.files));
+    if (input.operation === "prepareSelection")
+      return JSON.stringify(prepareSelectedGGUFImport(inspectSelectedGGUFs(input.files), input.hash, input.existingModel, input.existingIDs));
+    if (input.operation === "selectionDuplicate") {
+      const selection = inspectSelectedGGUFs(input.files);
+      return JSON.stringify(findSelectedGGUFDuplicate(selection, input.files, input.candidates));
+    }
+    if (input.operation === "fingerprintPlan")
+      return JSON.stringify(ggufFingerprintPlan(input.size));
     if (input.operation === "catalog")
       return JSON.stringify(catalogModels());
     if (input.operation === "catalogPlan")
@@ -28323,6 +28495,8 @@ ${text}`;
     if (input.operation === "catalogDuplicateCommit")
       return JSON.stringify({ changes: diffJSONChanges(input.state, commitCatalogDuplicate(input.state, input.downloadedID, input.duplicate, input.localModelIDs)) });
     const before = { localModels: input.state.localModels, activeLocalModels: input.state.activeLocalModels };
+    if (input.operation === "selectionCommit")
+      return JSON.stringify({ changes: diffJSONChanges(input.state, commitSelectedGGUFImport(input.state, input.model, input.existingIDs)) });
     if (input.operation === "catalogCommit")
       return JSON.stringify({ changes: diffJSONChanges(before, commitLocalModel(before, input.model, input.existingIDs)) });
     return JSON.stringify({ changes: diffJSONChanges(before, commitSingleGGUFImport(before, input.model, input.existingIDs)) });
@@ -28361,62 +28535,6 @@ ${text}`;
     const input = JSON.parse(json);
     const next = input.operation === "remove" ? removeRegisteredLocalModel(input.state, input.id) : toggleRegisteredLocalModelFavorite(input.state, input.id);
     return JSON.stringify({ changes: diffJSONChanges(input.state, next) });
-  }
-
-  // src/local-llm/ggufShardUtils.ts
-  var SHARD_PATTERN = /^(.*)-(\d{5})-of-(\d{5})\.gguf$/;
-  function parseShardInfo(fileName) {
-    const m = fileName.match(SHARD_PATTERN);
-    if (!m)
-      return null;
-    return {
-      baseName: m[1],
-      current: parseInt(m[2], 10),
-      total: parseInt(m[3], 10)
-    };
-  }
-  function isShardGroupComplete(group) {
-    return group.files.length === group.expectedTotal;
-  }
-  function groupShardFiles(files) {
-    const groups = /* @__PURE__ */ new Map();
-    for (const f of files) {
-      const info = parseShardInfo(f.rfilename);
-      if (!info)
-        continue;
-      if (!groups.has(info.baseName)) {
-        groups.set(info.baseName, { shards: /* @__PURE__ */ new Map(), expectedTotal: info.total });
-      }
-      const group = groups.get(info.baseName);
-      if (group.expectedTotal !== info.total)
-        continue;
-      if (!group.shards.has(info.current)) {
-        group.shards.set(info.current, { name: f.rfilename, size: f.size });
-      }
-    }
-    const result3 = /* @__PURE__ */ new Map();
-    for (const [baseName, { shards: shardMap, expectedTotal }] of groups) {
-      const sorted = Array.from(shardMap.entries()).sort(([a], [b]) => a - b).map(([, v]) => v);
-      result3.set(baseName, {
-        files: sorted.map((s) => s.name),
-        totalSize: sorted.reduce((sum, s) => sum + s.size, 0),
-        expectedTotal
-      });
-    }
-    return result3;
-  }
-  function getManifestFiles(manifest) {
-    switch (manifest.kind) {
-      case "single-file":
-        return [manifest.entrypoint];
-      case "gguf-sharded":
-        return manifest.shards;
-      case "multi-file":
-        return manifest.requiredFiles;
-    }
-  }
-  function getManifestPrimaryFile(manifest) {
-    return manifest.entrypoint;
   }
 
   // src/local-llm/fileProvider.ts

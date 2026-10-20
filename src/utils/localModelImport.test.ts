@@ -75,6 +75,64 @@ describe('single GGUF import', () => {
   });
 });
 
+describe('selected GGUF import', () => {
+  const shards = [
+    {name:'model-00002-of-00002.gguf',size:7,hash:'second'},
+    {name:'model-00001-of-00002.gguf',size:5,hash:'first'},
+  ];
+
+  it('shares ordered shard validation, preparation, complete duplicate matching, and final registration', () => {
+    expect(run({operation:'fingerprintPlan',size:64 * 1024 * 1024 + 1})).toEqual({
+      ranges:[{offset:0,length:1024 * 1024},{offset:63 * 1024 * 1024 + 1,length:1024 * 1024}],
+      suffix:String(64 * 1024 * 1024 + 1),
+    });
+    const selection = run({operation:'selection',files:shards.map(({name,size}) => ({name,size}))});
+    expect(selection).toEqual({
+      files:[{name:'model-00001-of-00002.gguf',size:5},{name:'model-00002-of-00002.gguf',size:7}],
+      manifest:{kind:'gguf-sharded',entrypoint:'model-00001-of-00002.gguf',shards:['model-00001-of-00002.gguf','model-00002-of-00002.gguf'],totalSize:12},
+      primaryName:'model-00001-of-00002.gguf',displayLabel:'model-00001-of-00002.gguf (2 shards)',totalSize:12,
+    });
+    const preparedSelection = run({operation:'prepareSelection',files:shards.map(({name,size}) => ({name,size})),hash:'first'.repeat(16)});
+    expect(preparedSelection).toMatchObject({existing:false,model:{
+      id:'local-file--firstfirstfirstf--model-00001-of-00002-gguf', manifest:selection.manifest, label:selection.displayLabel, fileSize:12,
+    }});
+    expect(run({operation:'selectionDuplicate',files:shards,candidates:[{
+      id:'same',engine:'wllama',kind:'gguf-sharded',hashes:['first','second'],size:12,
+    }]})).toBe('same');
+    expect(run({operation:'selectionDuplicate',files:shards,candidates:[{
+      id:'different-later-shard',engine:'wllama',kind:'gguf-sharded',hashes:['first','different'],size:12,
+    }]})).toBeNull();
+    expect(() => run({operation:'prepareSelection',files:shards.map(({name,size}) => ({name,size})),hash:'first'.repeat(16),existingIDs:[preparedSelection.model.id]})).toThrow('A different model already uses this ID.');
+
+    const changes = run({operation:'selectionCommit',state:{
+      localModels:[],activeLocalModels:{generation:'occupied'},favoriteLocalModelIds:['other'],
+    },model:preparedSelection.model}).changes;
+    expect(changes).toEqual(expect.arrayContaining([
+      {op:'set',path:['localModels',0],value:preparedSelection.model},
+      {op:'set',path:['activeLocalModels','analysis'],value:preparedSelection.model.id},
+      {op:'set',path:['favoriteLocalModelIds',1],value:preparedSelection.model.id},
+    ]));
+  });
+
+  it('rejects mixed, incomplete, and gapped shard selections', () => {
+    expect(() => run({operation:'selection',files:[
+      {name:'one-00001-of-00002.gguf',size:1},{name:'two-00002-of-00002.gguf',size:1},
+    ]})).toThrow('異なるモデルのシャードが混在');
+    expect(() => run({operation:'selection',files:[
+      {name:'model-00001-of-00002.gguf',size:1},{name:'model-00002-of-00003.gguf',size:1},
+    ]})).toThrow('シャード総数が一致しません');
+    expect(() => run({operation:'selection',files:[
+      {name:'model-00001-of-00003.gguf',size:1},{name:'model-00003-of-00003.gguf',size:1},
+    ]})).toThrow('シャードセットが不完全');
+    expect(() => run({operation:'selection',files:[
+      {name:'model-00001-of-00003.gguf',size:1},{name:'model-00003-of-00003.gguf',size:1},{name:'model-00002-of-00003.gguf',size:-1},
+    ]})).toThrow('ファイルサイズが不正');
+    expect(() => run({operation:'selection',files:[
+      {name:'model-00001-of-00003.gguf',size:1},{name:'model-00003-of-00003.gguf',size:1},{name:'model-00001-of-00003.gguf',size:1},
+    ]})).toThrow('重複して選択');
+  });
+});
+
 describe('directory local model files', () => {
   it('keeps the manifest shard order for wllama GGUF files', () => {
     const manifest = {kind:'gguf-sharded' as const,entrypoint:'model-00001-of-00002.gguf',shards:[

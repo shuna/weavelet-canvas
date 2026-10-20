@@ -8,6 +8,7 @@ struct LocalModelSettingsView: View {
     @State private var importTask: Task<Void, Never>?
     @State private var showsImporter = false
     @State private var copying = false
+    @State private var importAllowsCancellation = false
     @State private var errorMessage: String?
     @State private var fileStatus: String?
     @State private var pendingRemoval: OrderedJSON?
@@ -69,9 +70,9 @@ struct LocalModelSettingsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("新しいモデル") {
-                    Button("単一GGUFを登録") { importingDirectoryModel = nil; importingModelID = nil; showsImporter = true }
+                    Button("GGUFファイルを登録") { importingDirectoryModel = nil; importingModelID = nil; showsImporter = true }
                         .frame(minHeight:44)
-                    Text("選択したファイルをこの端末に保存し、空いている生成・分析の役割に割り当てます。")
+                    Text("単一ファイル、または同じモデルの全分割ファイルを選択します。端末に保存し、空いている生成・分析の役割に割り当てます。")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("保存済みのモデル定義") {
@@ -148,10 +149,13 @@ struct LocalModelSettingsView: View {
             do { catalog = try state.localModelCatalog(); catalogLoaded = true }
             catch { errorMessage = error.localizedDescription }
         }
-        .fileImporter(isPresented:$showsImporter,allowedContentTypes:importingDirectoryModel == nil ? [UTType(filenameExtension:"gguf") ?? .data] : [.folder]) { result in
+        .fileImporter(isPresented:$showsImporter,allowedContentTypes:importingDirectoryModel == nil ? [UTType(filenameExtension:"gguf") ?? .data] : [.folder],allowsMultipleSelection:importingModelID == nil) { result in
             do {
-                let source = try result.get()
+                let sources = try result.get()
+                guard let source = sources.first else { return }
                 let modelID = importingModelID, model = importingDirectoryModel
+                guard importingModelID == nil || sources.count == 1 else { throw ExchangeError.invalid("置き換えるファイルまたはフォルダーを一つ選択してください") }
+                importAllowsCancellation = model != nil || (modelID == nil && sources.count > 1)
                 copying = true; errorMessage = nil; fileStatus = nil
                 importTask = Task { @MainActor in
                     defer { copying = false; importTask = nil }
@@ -163,20 +167,20 @@ struct LocalModelSettingsView: View {
                             try await state.replaceLocalModelFile(source,modelID:modelID)
                             fileStatus = "ファイルを保存しました（" + modelID + "）"
                         } else {
-                            let importedID = try await state.importSingleGGUF(source)
+                            let importedID = try await state.importGGUFFiles(sources)
                             fileStatus = "モデルを登録しました（" + importedID + "）"
                         }
-                    } catch is CancellationError { fileStatus = "フォルダーの保存を取り消しました" }
+                    } catch is CancellationError { fileStatus = "ファイルの保存を取り消しました" }
                     catch { errorMessage = error.localizedDescription }
                 }
             } catch { errorMessage = error.localizedDescription }
         }
         .toolbar {
-            if copying && importingDirectoryModel != nil {
+            if copying && importAllowsCancellation {
                 ToolbarItem(placement:.cancellationAction) { Button("取消") { importTask?.cancel() } }
             }
         }
-        .onDisappear { if importingDirectoryModel != nil { importTask?.cancel() } }
+        .onDisappear { if importAllowsCancellation { importTask?.cancel() } }
     }
 
     private var hfSearchSection: some View {
@@ -421,7 +425,7 @@ struct ChatConfigView: View {
                         importingModelID = values["model"] ?? ""
                         showsModelImporter = true
                     }.disabled(copyingModel || (values["model"] ?? "").trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
-                    Text("ファイルはこの端末にコピーします。ほかの端末では同じモデルIDにファイルを選択してください。現在は単一GGUFに対応しています。")
+                    Text("ファイルはこの端末にコピーします。ほかの端末では同じモデルIDにファイルを選択してください。ここでは単一GGUFを指定します。分割モデルはローカルモデル設定から登録してください。")
                         .font(.footnote).foregroundStyle(.secondary)
                     if let fileStatus { Text(fileStatus).font(.footnote) }
                 }
@@ -441,12 +445,12 @@ struct ChatConfigView: View {
             .navigationBarTitleDisplayMode(.inline)
             .fileImporter(isPresented:$showsModelImporter,allowedContentTypes:[UTType(filenameExtension:"gguf") ?? .data]) { result in
                 do {
-                    let source = try result.get(), modelID = importingModelID, files = state.localModelFiles
+                    let source = try result.get(), modelID = importingModelID
                     copyingModel = true; errorMessage = nil
                     Task { @MainActor in
                         defer { copyingModel = false }
                         do {
-                            try await Task.detached { try files.install(source,modelID:modelID) }.value
+                            try await state.replaceLocalModelFile(source,modelID:modelID)
                             fileStatus = "モデルファイルを保存しました（" + modelID + "）"
                         } catch { errorMessage = error.localizedDescription }
                     }

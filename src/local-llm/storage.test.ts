@@ -16,7 +16,9 @@ import {
   readFile, listFiles, getStoredSize, listSavedModelIds, getOPFSFileSize, hasTempFile, getTempFileSize,
   commitTempFile, removeTempFile, writeTempChunk, deleteModelFile, listAllOpfsEntries, getTotalStorageUsed,
   verifyStoredModel, OpfsFileProvider, createOPFSSyncWriter,
+  equalBlobBytes, sha256Blob,
 } from './storage';
+import { ggufFingerprintPlan } from './modelFingerprint';
 import { removeAssets } from './assetRemoval';
 import type { LocalModelManifest } from './types';
 
@@ -130,6 +132,30 @@ describe('OPFS writer and asset removal', () => {
     runtime.stopForAssetRemoval.mockResolvedValue('unloaded');
     runtime.endAssetRemoval.mockReset();
     vi.stubGlobal('navigator', { storage: { getDirectory: async () => root } });
+  });
+
+  it('compares matching large-file edges byte-for-byte instead of trusting fingerprints', async () => {
+    const megabyte = 1024 * 1024;
+    const head = new Uint8Array(megabyte).fill(1), tail = new Uint8Array(megabyte).fill(3);
+    const first = new Blob([head,new Uint8Array(megabyte).fill(2),tail]);
+    const changedMiddle = new Blob([head,new Uint8Array(megabyte).fill(4),tail]);
+    expect(await equalBlobBytes(first,changedMiddle)).toBe(false);
+    expect(await equalBlobBytes(first,new Blob([head,new Uint8Array(megabyte).fill(2),tail]))).toBe(true);
+  });
+
+  it('shares the whole-file and sampled fingerprint plans', () => {
+    expect(ggufFingerprintPlan(64 * 1024 * 1024)).toEqual({ranges:[{offset:0,length:64 * 1024 * 1024}],suffix:''});
+    expect(ggufFingerprintPlan(64 * 1024 * 1024 + 1)).toEqual({
+      ranges:[{offset:0,length:1024 * 1024},{offset:63 * 1024 * 1024 + 1,length:1024 * 1024}],
+      suffix:String(64 * 1024 * 1024 + 1),
+    });
+  });
+
+  it('matches the native large GGUF fingerprint vector', async () => {
+    const bytes = new Uint8Array(64 * 1024 * 1024 + 1);
+    bytes.set(new TextEncoder().encode('GGUF'));
+    bytes[32 * 1024 * 1024] = 1;
+    expect(await sha256Blob(new Blob([bytes]))).toBe('74637616f096571c9a89ca82e8bcd2a8584c48883c6e16d5ba8e5268d073e92a');
   });
 
   afterEach(() => vi.unstubAllGlobals());

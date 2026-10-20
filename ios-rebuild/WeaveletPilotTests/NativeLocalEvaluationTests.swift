@@ -40,6 +40,13 @@ final class NativeLocalEvaluationTests: XCTestCase {
         try app.applySnapshot(registrySnapshot())
         return app
     }
+    private func selectedShards(_ directory: URL, suffix: String = "original") throws -> (URL,URL) {
+        let first = directory.appendingPathComponent("model-00001-of-00002.gguf")
+        let second = directory.appendingPathComponent("model-00002-of-00002.gguf")
+        try Data("GGUF first \(suffix)".utf8).write(to:first)
+        try Data("GGUFsecond \(suffix)".utf8).write(to:second)
+        return (first,second)
+    }
 
     func testSharedRoleSettingsPreserveMetadataAndRestart() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("local-role-\(UUID())")
@@ -99,7 +106,13 @@ final class NativeLocalEvaluationTests: XCTestCase {
         let sourceHash = try app.localModelFiles.inspect(source).hash
         XCTAssertEqual(copiedHash,sourceHash)
         let after = try OrderedJSON.decode(app.exportWebData())
+        // syncDocument keeps imported non-chat V3 extras in its sidecar; live settings belong to the full snapshot.
         XCTAssertEqual(after["savedModelMeta"],before["savedModelMeta"])
+        let live = try app.publicationSnapshot().required("state")
+        XCTAssertEqual(live["savedModelMeta"]?["old"],before["savedModelMeta"]?["old"])
+        XCTAssertEqual(live["savedModelMeta"]?[id]?["storedFiles"],.array([.string(source.lastPathComponent)]))
+        XCTAssertEqual(live["savedModelMeta"]?[id]?["fileHashes"]?[source.lastPathComponent],.string(sourceHash))
+        XCTAssertTrue((try live.required("favoriteLocalModelIds").array("favorites")).contains(.string(id)))
         XCTAssertEqual(after["xRoot"],before["xRoot"])
         let repeated = try await app.importSingleGGUF(source)
         XCTAssertEqual(repeated,id)
@@ -132,6 +145,129 @@ final class NativeLocalEvaluationTests: XCTestCase {
         XCTAssertEqual(app.activeLocalModel("analysis"),"keep")
         XCTAssertEqual(app.activeLocalModel("generation"),id)
         XCTAssertEqual(try app.localModelDefinitions().count,1)
+    }
+
+    func testSelectedGGUFImportPreservesCorpusRootsAndRecords() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("selected-gguf-success-\(UUID())")
+        defer { try? FileManager.default.removeItem(at:directory) }
+        try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+        let store = LocalStateStore(fileURL:directory.appendingPathComponent("state.json")), app = try registryState(store)
+        let snapshot = try app.publicationSnapshot(), roots = try snapshot.required("state")
+        let active = (roots["activeLocalModels"] ?? .object([])).replacing("generation",with:.string("")).replacing("analysis",with:.string(""))
+        let cleared = roots.replacing("localModels",with:.array([])).replacing("activeLocalModels",with:active)
+            .replacing("favoriteLocalModelIds",with:.array([])).replacing("savedModelMeta",with:.object([]))
+        try app.applySnapshot(snapshot.replacing("state",with:cleared))
+        let before = try app.publicationSnapshot(), sources = try selectedShards(directory)
+        let selected = try app.localModelFiles.inspectSelectedGGUFs([sources.1,sources.0])
+
+        let id = try await app.importGGUFFiles([sources.1,sources.0])
+        let after = try app.publicationSnapshot(), updated = try after.required("state")
+        let model = try XCTUnwrap(app.localModelDefinitions().first { $0["id"] == .string(id) })
+        XCTAssertEqual(model["manifest"]?["kind"],.string("gguf-sharded"))
+        XCTAssertEqual(model["manifest"]?["shards"],.array([.string(sources.0.lastPathComponent),.string(sources.1.lastPathComponent)]))
+        XCTAssertEqual(app.activeLocalModel("generation"),id)
+        XCTAssertEqual(app.activeLocalModel("analysis"),id)
+        XCTAssertTrue((try updated.required("favoriteLocalModelIds").array("favorites")).contains(.string(id)))
+        XCTAssertEqual(updated["savedModelMeta"]?[id]?["storedFiles"],.array([.string(sources.0.lastPathComponent),.string(sources.1.lastPathComponent)]))
+        for item in selected {
+            XCTAssertEqual(updated["savedModelMeta"]?[id]?["fileHashes"]?[item.name],.string(item.hash))
+        }
+        let entries = Dictionary(uniqueKeysWithValues:try app.localModelFiles.directoryEntries(model:model).map { ($0.path,$0.data) })
+        XCTAssertEqual(entries[sources.0.lastPathComponent],try Data(contentsOf:sources.0))
+        XCTAssertEqual(entries[sources.1.lastPathComponent],try Data(contentsOf:sources.1))
+        let changedRoots = Set(["localModels","activeLocalModels","favoriteLocalModelIds","savedModelMeta"])
+        for field in try before.required("state").object("before roots") where !changedRoots.contains(field.key.text) {
+            XCTAssertEqual(updated[field.key],field.value,field.key.text)
+        }
+        XCTAssertEqual(try ChatState(store:store).publicationSnapshot(),after)
+        let received = try SyncRecords.fromRecords(SyncRecords.toRecords(after)).required("state")
+        for key in changedRoots {
+            XCTAssertEqual(try SyncRecords.canonical(received[key] ?? .null),try SyncRecords.canonical(updated[key] ?? .null),key)
+        }
+    }
+
+    func testSelectedGGUFImportSaveFailureRollsBackThenRetriesSameFiles() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("selected-gguf-failure-\(UUID())")
+        defer { try? FileManager.default.removeItem(at:directory) }
+        try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+        var reject = false
+        let store = LocalStateStore(fileURL:directory.appendingPathComponent("state.json"),write:{ bytes,url in
+            if reject { throw CocoaError(.fileWriteNoPermission) }
+            try bytes.write(to:url,options:.atomic)
+        })
+        let app = ChatState(store:store)
+        try app.importWebData(Data(#"{"version":3,"chats":[]}"#.utf8))
+        let sources = try selectedShards(directory), before = try app.publicationSnapshot(), disk = try Data(contentsOf:store.fileURL)
+        let cancelled = Task { try await app.importGGUFFiles([sources.0,sources.1]) }
+        cancelled.cancel()
+        do { _ = try await cancelled.value; XCTFail("cancelled import must not publish") } catch { }
+        XCTAssertEqual(try app.publicationSnapshot(),before)
+        XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+        reject = true
+        do { _ = try await app.importGGUFFiles([sources.0,sources.1]); XCTFail("save should fail") } catch { }
+        XCTAssertEqual(try app.publicationSnapshot(),before)
+        XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+        XCTAssertTrue(try app.localModelDefinitions().isEmpty)
+
+        reject = false
+        let id = try await app.importGGUFFiles([sources.0,sources.1])
+        let model = try XCTUnwrap(app.localModelDefinitions().first { $0["id"] == .string(id) })
+        XCTAssertEqual(try app.localModelFiles.directoryEntries(model:model).count,2)
+    }
+
+    func testSelectedGGUFImportReusesOnlyExactAllShardDuplicateAndRejectsIDCollision() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("selected-gguf-duplicate-\(UUID())")
+        defer { try? FileManager.default.removeItem(at:directory) }
+        try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+        let app = ChatState(store:LocalStateStore(fileURL:directory.appendingPathComponent("state.json")))
+        try app.importWebData(Data(#"{"version":3,"chats":[]}"#.utf8))
+        let sources = try selectedShards(directory), id = try await app.importGGUFFiles([sources.0,sources.1])
+        let model = try XCTUnwrap(app.localModelDefinitions().first { $0["id"] == .string(id) })
+        let before = try app.localModelFiles.directoryEntries(model:model)
+        let metadata = try app.publicationSnapshot().required("state")["savedModelMeta"]
+        let duplicate = try await app.importGGUFFiles([sources.1,sources.0])
+        XCTAssertEqual(duplicate,id)
+        XCTAssertEqual(try app.publicationSnapshot().required("state")["savedModelMeta"],metadata)
+        XCTAssertEqual(try app.localModelDefinitions().count,1)
+
+        let colliding = directory.appendingPathComponent("colliding")
+        try FileManager.default.createDirectory(at:colliding,withIntermediateDirectories:true)
+        let first = colliding.appendingPathComponent(sources.0.lastPathComponent), second = colliding.appendingPathComponent(sources.1.lastPathComponent)
+        try Data(contentsOf:sources.0).write(to:first)
+        try Data("GGUFsecond altered!".utf8).write(to:second)
+        XCTAssertEqual(try Data(contentsOf:second).count,try Data(contentsOf:sources.1).count)
+        do { _ = try await app.importGGUFFiles([first,second]); XCTFail("ID collision should fail") } catch { }
+        XCTAssertEqual(try app.localModelFiles.directoryEntries(model:model).map(\.data),before.map(\.data))
+        XCTAssertEqual(try app.localModelDefinitions().count,1)
+
+        let orphanRoot = directory.appendingPathComponent("orphan")
+        try FileManager.default.createDirectory(at:orphanRoot,withIntermediateDirectories:true)
+        let orphanStore = LocalStateStore(fileURL:orphanRoot.appendingPathComponent("state.json"))
+        let orphan = ChatState(store:orphanStore)
+        try orphan.importWebData(Data(#"{"version":3,"chats":[]}"#.utf8))
+        let orphanSelected = try orphan.localModelFiles.inspectSelectedGGUFs([sources.1,sources.0])
+        let declarations = OrderedJSON.array(orphanSelected.map { .object([
+            .init(key:"name",value:.string($0.name)),.init(key:"size",value:.number(String($0.size)))
+        ]) })
+        let selection = try SharedWebOperations.call("localModelImport",.object([
+            .init(key:"operation",value:.string("selection")),.init(key:"files",value:declarations)
+        ]))
+        let ordered = try selection.required("files").array("files").map { entry in
+            let name = try entry.required("name").string("name")
+            return try XCTUnwrap(orphanSelected.first { $0.name.utf8.elementsEqual(name.utf8) })
+        }
+        let prepared = try SharedWebOperations.call("localModelImport",.object([
+            .init(key:"operation",value:.string("prepareSelection")),.init(key:"files",value:declarations),
+            .init(key:"hash",value:.string(try XCTUnwrap(ordered.first).fingerprint)),.init(key:"existingIDs",value:.array([]))
+        ]))
+        let orphanModel = try prepared.required("model")
+        let stage = try orphan.localModelFiles.stageSelectedGGUFs(ordered,model:orphanModel)
+        try orphan.localModelFiles.publishDirectory(stage,model:orphanModel)
+        stage.discard()
+        let reused = try await orphan.importGGUFFiles([sources.0,sources.1])
+        XCTAssertEqual(reused,try orphanModel.required("id").string("id"))
+        XCTAssertEqual(try orphan.localModelDefinitions().count,1)
+        XCTAssertEqual(try orphan.localModelFiles.directoryEntries(model:orphanModel).map(\.data),before.map(\.data))
     }
 
     func testSingleGGUFImportUsesByteExactExistingID() async throws {

@@ -20,6 +20,7 @@ import type {
 import type { ModelFileProvider, CustomCacheAdapter } from './fileProvider';
 import { getFinalModelFiles, hasRequiredModelParts, resolveUrlToManifestKey } from './fileProvider';
 import { getManifestFiles } from './ggufShardUtils';
+import { GGUF_FINGERPRINT_CHUNK_BYTES, ggufFingerprintPlan } from './modelFingerprint';
 
 // ---------------------------------------------------------------------------
 // File System Access API augmentation (createWritable not in default DOM lib)
@@ -128,30 +129,41 @@ export async function hasGgufMagic(file: File | Blob): Promise<boolean> {
  * a single ArrayBuffer – the browser may throw NotReadableError or OOM.
  * For files above this threshold we hash head + tail + encoded size instead.
  */
-const PARTIAL_HASH_THRESHOLD = 64 * 1024 * 1024; // 64 MB
-const PARTIAL_HASH_CHUNK = 1024 * 1024; // 1 MB
-
 export async function sha256Blob(blob: Blob): Promise<string> {
-  let dataToHash: ArrayBuffer;
-
-  if (blob.size <= PARTIAL_HASH_THRESHOLD) {
-    dataToHash = await blob.arrayBuffer();
-  } else {
-    // Partial hash: first 1 MB + last 1 MB + file-size string
-    const head = await blob.slice(0, PARTIAL_HASH_CHUNK).arrayBuffer();
-    const tail = await blob.slice(blob.size - PARTIAL_HASH_CHUNK).arrayBuffer();
-    const sizeTag = new TextEncoder().encode(String(blob.size));
-    const combined = new Uint8Array(head.byteLength + tail.byteLength + sizeTag.byteLength);
-    combined.set(new Uint8Array(head), 0);
-    combined.set(new Uint8Array(tail), head.byteLength);
-    combined.set(sizeTag, head.byteLength + tail.byteLength);
-    dataToHash = combined.buffer as ArrayBuffer;
+  const plan = ggufFingerprintPlan(blob.size);
+  const ranges: ArrayBuffer[] = [];
+  for (const range of plan.ranges) ranges.push(await blob.slice(range.offset,range.offset + range.length).arrayBuffer());
+  if (ranges.length === 1 && plan.suffix === '') {
+    const hash = await crypto.subtle.digest('SHA-256', ranges[0]);
+    return Array.from(new Uint8Array(hash))
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('');
   }
+  const suffix = new TextEncoder().encode(plan.suffix);
+  const length = ranges.reduce((total, range) => total + range.byteLength, suffix.byteLength);
+  const combined = new Uint8Array(length);
+  let offset = 0;
+  for (const range of ranges) { combined.set(new Uint8Array(range),offset); offset += range.byteLength; }
+  combined.set(suffix,offset);
 
-  const hash = await crypto.subtle.digest('SHA-256', dataToHash);
+  const hash = await crypto.subtle.digest('SHA-256', combined.buffer as ArrayBuffer);
   return Array.from(new Uint8Array(hash))
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('');
+}
+
+export async function equalBlobBytes(left: Blob, right: Blob): Promise<boolean> {
+  if (left.size !== right.size) return false;
+  for (let offset = 0; offset < left.size; offset += GGUF_FINGERPRINT_CHUNK_BYTES) {
+    const length = Math.min(GGUF_FINGERPRINT_CHUNK_BYTES,left.size - offset);
+    const [leftBytes,rightBytes] = await Promise.all([
+      left.slice(offset,offset + length).arrayBuffer(),
+      right.slice(offset,offset + length).arrayBuffer(),
+    ]);
+    const a = new Uint8Array(leftBytes), b = new Uint8Array(rightBytes);
+    for (let index = 0; index < a.length; index++) if (a[index] !== b[index]) return false;
+  }
+  return true;
 }
 
 async function opfsRoot(): Promise<FileSystemDirectoryHandle> {

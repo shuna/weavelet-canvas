@@ -39,7 +39,8 @@
     "src/utils/localGenerationOutput.ts": "f262c91d052afbcc5e5452eaf3ce95d779b741461f2287ebeba8905e95b5e781",
     "src/local-llm/fileProvider.ts": "4046bf8b8036f227ee000132a829adfd95100e83826319dce5fadb840427d121",
     "src/local-llm/ggufShardUtils.ts": "33845697477f6a02eab2bcc6ce94412ce34cea521400fe7dcac1ffb9823e6ef7",
-    "src/local-llm/storage.ts": "6f49aa9837c0cb2ba895a0fb94b6ae3e18f91b2f4512a5dde0b8518af3cac72a",
+    "src/local-llm/modelFingerprint.ts": "eec63da7cee95d961d012eda10141d4bc6079eb93eb886ea34d4fdf915be3460",
+    "src/local-llm/storage.ts": "3776fe347c26d9ebadf4657a27c2342df7c2b4d30305fbb51af5ff5478d7175f",
     "src/local-llm/rehydrationState.ts": "7985e2ff220ca3add44f1b0974ac5d265566d27c2ac1cd941bde5174242c8df4",
     "src/local-llm/assetRemoval.ts": "f6f358148e9313ff826924aa32813385098249e5117b082f86f94263ebac7a63",
     "src/local-llm/lowbit-q/types.ts": "0b061561953b4df738befdd4103326bc73fb77ae897e0ab21ff9d292365921bf",
@@ -115,7 +116,7 @@
     "src/utils/evaluationState.ts": "9c515b6450fd0be91cd5ef624d490f38d024c3c37e67654ff0eab6bd691a25bb",
     "src/store/evaluation-slice.ts": "17ea8dac39f8f06cb02f1fbf1f6056cc96d4672256b80b42afb90f4443739ec8",
     "src/utils/localModelRole.ts": "29491f084ef6ce804a416749b115e6b63a772a735ec2d4fbea21c42e75367816",
-    "src/utils/localModelImport.ts": "3999961eacdeef845226904f9f86f876b111c38670ca991e6a18dca79f23f79a",
+    "src/utils/localModelImport.ts": "fb4051982d234b284c245113a618c894f22be7afc19c9da6d770b9f4adc9b155",
     "src/utils/localModelRegistry.ts": "b4f9a839dd1287d6f9b8ca41c6e459bcb5bd75709f1f4a534e838fdb86aa2a93",
     "src/store/local-model-slice.ts": "a7e5e3dbbaca2d6cc26597e6e9fd656c16e9549d14b10674694494e49d7d1eae",
     "src/store/store.ts": "debe9137fec89588382491a3a50673ae8a0635618b10a28103c7e8c26d497176",
@@ -378,12 +379,13 @@
     "shared/google-sync/evaluation.ts": "c4cd0770e8357666c663fd2a9e37911d2b6f696cacf23be576b8f0153de7ce96",
     "src/utils/localModelRole.ts": "29491f084ef6ce804a416749b115e6b63a772a735ec2d4fbea21c42e75367816",
     "shared/google-sync/localModelRole.ts": "8ce5bc1651e340c87134a35f4fbf149af159c296ca924a874c95b76b51dc96a5",
-    "src/utils/localModelImport.ts": "3999961eacdeef845226904f9f86f876b111c38670ca991e6a18dca79f23f79a",
+    "src/local-llm/ggufShardUtils.ts": "33845697477f6a02eab2bcc6ce94412ce34cea521400fe7dcac1ffb9823e6ef7",
+    "src/local-llm/modelFingerprint.ts": "eec63da7cee95d961d012eda10141d4bc6079eb93eb886ea34d4fdf915be3460",
+    "src/utils/localModelImport.ts": "fb4051982d234b284c245113a618c894f22be7afc19c9da6d770b9f4adc9b155",
     "src/local-llm/catalogPlan.ts": "b667fb74381650ec9df8ed01739ed547ab78dc49f91312e562fa6a68ef880cf8",
-    "shared/google-sync/localModelImport.ts": "cd0e9481a917aa64edc5fd955cb9625f327a8b9351bc6e36e2331310609a1da2",
+    "shared/google-sync/localModelImport.ts": "a39135cdd406d0fd692b74ea5410337bb5a997e47844d221031719c591108c9e",
     "src/utils/localModelRegistry.ts": "b4f9a839dd1287d6f9b8ca41c6e459bcb5bd75709f1f4a534e838fdb86aa2a93",
     "shared/google-sync/localModelRegistry.ts": "4d4aa70ed998addbd0a688be3957659aa470ce19fe83c07ed7b65e66c37b426c",
-    "src/local-llm/ggufShardUtils.ts": "33845697477f6a02eab2bcc6ce94412ce34cea521400fe7dcac1ffb9823e6ef7",
     "src/local-llm/fileProvider.ts": "4046bf8b8036f227ee000132a829adfd95100e83826319dce5fadb840427d121",
     "shared/google-sync/localModelFiles.ts": "1dd753d43e248ef74320cebac1f305bb2dcaf8465a129bba990d0e02560a82d0",
     "src/utils/debugState.ts": "fc315634962591e9e64ccd42e92b08e37bc4b6c597d887c5760ac30b06adc535",
@@ -443,5 +445,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "4465d6ec487a4ddd220443bb7eb9fe0e64391a302f770755e688ccbec06f13de"
+  "bundleSHA256": "79c1eb342e28341b1fb861e3a3987f5aab1d15b51e9e40cf716101da2e56b51b"
 }

@@ -15,6 +15,16 @@ extension LocalModelFiles {
         let size: UInt64
         fileprivate let revision: ModelFileRevision
     }
+    struct SelectedGGUF {
+        let url: URL
+        let name: String
+        // `hash` verifies every source byte before staging; `fingerprint` is the
+        // Web-compatible identity used when the selected model is registered.
+        let hash: String
+        let fingerprint: String
+        let size: UInt64
+        fileprivate let revision: ModelFileRevision
+    }
     final class DirectoryStage {
         fileprivate let pending: URL
         fileprivate let target: URL
@@ -463,6 +473,52 @@ extension LocalModelFiles {
         ]))
     }
 
+    private func ggufFingerprintPlan(size: UInt64) throws -> (ranges: [(offset: UInt64, length: UInt64)], suffix: String) {
+        let output = try SharedWebOperations.call("localModelImport",.object([
+            .init(key:"operation",value:.string("fingerprintPlan")),
+            .init(key:"size",value:.number(String(size)))
+        ]))
+        let ranges = try output.required("ranges").array("GGUF fingerprint ranges").map { item -> (offset: UInt64, length: UInt64) in
+            func integer(_ key: String) throws -> UInt64 {
+                let value = try item.required(key).number(key)
+                guard value >= 0, value.rounded(.towardZero) == value,
+                      let integer = UInt64(exactly:value) else {
+                    throw ExchangeError.invalid("GGUF fingerprint range is invalid")
+                }
+                return integer
+            }
+            let offset = try integer("offset"), length = try integer("length")
+            let (end,overflow) = offset.addingReportingOverflow(length)
+            guard !overflow, end <= size else { throw ExchangeError.invalid("GGUF fingerprint range is invalid") }
+            return (offset,length)
+        }
+        guard !ranges.isEmpty else { throw ExchangeError.invalid("GGUF fingerprint range is invalid") }
+        return (ranges,try output.required("suffix").string("GGUF fingerprint suffix"))
+    }
+
+    private func ggufFingerprint(_ file: FileHandle, size: UInt64, fullHash: String) throws -> String {
+        let plan = try ggufFingerprintPlan(size:size)
+        if plan.ranges.count == 1, plan.ranges[0].offset == 0, plan.ranges[0].length == size, plan.suffix.isEmpty {
+            return fullHash
+        }
+        var digest = SHA256()
+        for range in plan.ranges {
+            try file.seek(toOffset:range.offset)
+            var remaining = range.length
+            while remaining > 0 {
+                try Task.checkCancellation()
+                let count = Int(min(remaining,UInt64(1024 * 1024)))
+                guard let chunk = try file.read(upToCount:count), chunk.count == count else {
+                    throw ExchangeError.invalid("GGUF fingerprint read failed")
+                }
+                digest.update(data:chunk)
+                remaining -= UInt64(chunk.count)
+            }
+        }
+        digest.update(data:Data(plan.suffix.utf8))
+        return digest.finalize().map { String(format:"%02x",$0) }.joined()
+    }
+
     func inspectDirectory(_ source: URL, model: OrderedJSON) throws -> DirectoryInspection {
         try Task.checkCancellation()
         let scoped = source.startAccessingSecurityScopedResource()
@@ -500,6 +556,129 @@ extension LocalModelFiles {
         let staged = try stageDirectory(source,model:model,inspection:inspection)
         defer { staged.discard() }
         try publishDirectory(staged,model:model)
+    }
+
+    func inspectSelectedGGUFs(_ selected: [URL]) throws -> [SelectedGGUF] {
+        guard !selected.isEmpty else { throw ExchangeError.invalid("GGUFファイルを選択してください") }
+        var names = Set<Data>()
+        var identities = Set<ModelFileIdentity>()
+        return try selected.map { source in
+            try Task.checkCancellation()
+            let name = source.lastPathComponent
+            try ModelDirectoryAccess.validatePaths([name])
+            guard !name.contains("/") && names.insert(Data(name.utf8)).inserted else {
+                throw ExchangeError.invalid("同じGGUFファイルを重ねて選択できません")
+            }
+            let scoped = source.startAccessingSecurityScopedResource()
+            defer { if scoped { source.stopAccessingSecurityScopedResource() } }
+            let descriptor = open(source.path,O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+            guard descriptor >= 0 else { throw modelFilePOSIXError() }
+            let file = FileHandle(fileDescriptor:descriptor,closeOnDealloc:true)
+            defer { try? file.close() }
+            var info = stat()
+            guard fstat(descriptor,&info) == 0, info.st_mode & S_IFMT == S_IFREG else {
+                throw ExchangeError.invalid("通常のGGUFファイルを選択してください")
+            }
+            let revision = try ModelFileRevision(descriptor)
+            guard revision.size >= 4, identities.insert(revision.identity).inserted,
+                  try file.read(upToCount:4) == Data("GGUF".utf8) else {
+                throw ExchangeError.invalid("GGUFファイルではありません")
+            }
+            try file.seek(toOffset:0)
+            let hash = try ModelDirectoryAccess.transfer(file)
+            let fingerprint = try ggufFingerprint(file,size:revision.size,fullHash:hash)
+            guard try ModelFileRevision(descriptor) == revision else {
+                throw ExchangeError.invalid("確認中に選択したGGUFファイルが変わりました")
+            }
+            return .init(url:source,name:name,hash:hash,fingerprint:fingerprint,size:revision.size,revision:revision)
+        }
+    }
+
+    func checkSelectedGGUFs(_ selected: [SelectedGGUF]) throws {
+        guard !selected.isEmpty else { throw ExchangeError.invalid("GGUFファイルを選択してください") }
+        var names = Set<Data>(), identities = Set<ModelFileIdentity>()
+        for item in selected {
+            try Task.checkCancellation()
+            guard item.url.lastPathComponent == item.name else {
+                throw ExchangeError.invalid("選択したGGUFファイルの名前が変わりました")
+            }
+            try ModelDirectoryAccess.validatePaths([item.name])
+            guard !item.name.contains("/"), names.insert(Data(item.name.utf8)).inserted else {
+                throw ExchangeError.invalid("選択したGGUFファイルが不正です")
+            }
+            let scoped = item.url.startAccessingSecurityScopedResource()
+            defer { if scoped { item.url.stopAccessingSecurityScopedResource() } }
+            let descriptor = open(item.url.path,O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+            guard descriptor >= 0 else { throw modelFilePOSIXError() }
+            let file = FileHandle(fileDescriptor:descriptor,closeOnDealloc:true)
+            defer { try? file.close() }
+            var info = stat()
+            guard fstat(descriptor,&info) == 0, info.st_mode & S_IFMT == S_IFREG,
+                  try ModelFileRevision(descriptor) == item.revision,
+                  identities.insert(item.revision.identity).inserted,
+                  try file.read(upToCount:4) == Data("GGUF".utf8) else {
+                throw ExchangeError.invalid("選択したGGUFファイルが変わりました")
+            }
+        }
+    }
+
+    func stageSelectedGGUFs(_ selected: [SelectedGGUF], model: OrderedJSON) throws -> DirectoryStage {
+        try Task.checkCancellation()
+        try checkSelectedGGUFs(selected)
+        let names = selected.map(\.name)
+        let plan = try directoryPlan(model,files:names)
+        let required = try plan.required("requiredFiles").array("required files").map { try $0.string("file") }
+        guard required.count == selected.count else { throw ExchangeError.invalid("モデルの必須ファイルがありません") }
+        let ordered = try required.map { path -> SelectedGGUF in
+            guard let selected = selected.first(where: { Data($0.name.utf8) == Data(path.utf8) }) else {
+                throw ExchangeError.invalid("モデルの必須ファイルがありません")
+            }
+            return selected
+        }
+        let modelID = try model.required("id").string("model id")
+        let target = try directoryURL(modelID:modelID)
+        guard try directoryRevision(target) == nil else {
+            throw ExchangeError.invalid("同じモデルIDの端末内ファイルが既にあります")
+        }
+        try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+        let pending = directory.appendingPathComponent(".model-\(UUID().uuidString).part")
+        try FileManager.default.createDirectory(at:pending,withIntermediateDirectories:false)
+        var staged = false
+        defer { if !staged { try? FileManager.default.removeItem(at:pending) } }
+        var files: [DirectoryFile] = []
+        for selected in ordered {
+            try Task.checkCancellation()
+            let scoped = selected.url.startAccessingSecurityScopedResource()
+            defer { if scoped { selected.url.stopAccessingSecurityScopedResource() } }
+            let descriptor = open(selected.url.path,O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+            guard descriptor >= 0 else { throw modelFilePOSIXError() }
+            let input = FileHandle(fileDescriptor:descriptor,closeOnDealloc:true)
+            defer { try? input.close() }
+            var info = stat()
+            guard fstat(descriptor,&info) == 0, info.st_mode & S_IFMT == S_IFREG,
+                  try ModelFileRevision(descriptor) == selected.revision else {
+                throw ExchangeError.invalid("コピー中に選択したGGUFファイルが変わりました")
+            }
+            guard try input.read(upToCount:4) == Data("GGUF".utf8) else {
+                throw ExchangeError.invalid("GGUFファイルではありません")
+            }
+            try input.seek(toOffset:0)
+            let destination = pending.appendingPathComponent(selected.name)
+            let outputDescriptor = open(destination.path,O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW,0o600)
+            guard outputDescriptor >= 0 else { throw modelFilePOSIXError() }
+            let output = FileHandle(fileDescriptor:outputDescriptor,closeOnDealloc:true)
+            defer { try? output.close() }
+            let hash = try ModelDirectoryAccess.transfer(input,to:output)
+            try output.synchronize()
+            guard hash == selected.hash, try ModelFileRevision(descriptor) == selected.revision else {
+                throw ExchangeError.invalid("コピー中に選択したGGUFファイルが変わりました")
+            }
+            files.append(.init(path:selected.name,hash:selected.hash,size:selected.size,revision:selected.revision))
+        }
+        let inspection = DirectoryInspection(declaration:try directoryPlan(model).encoded(),directories:[:],targetRevision:nil,files:files)
+        let result = DirectoryStage(pending:pending,target:target,inspection:inspection)
+        staged = true
+        return result
     }
 
     func stageDirectory(_ source: URL, model: OrderedJSON, inspection: DirectoryInspection) throws -> DirectoryStage {

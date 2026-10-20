@@ -11,7 +11,7 @@ import {
   type WllamaFeatureCheck,
 } from '@src/local-llm/runtime';
 import type { VariantOverride as WasmVariantOverride } from '@src/vendor/wllama/variant-table';
-import { OpfsFileProvider, getTempFileSize, readFile, saveFile, sha256Blob } from '@src/local-llm/storage';
+import { OpfsFileProvider, equalBlobBytes, getTempFileSize, readFile, saveFile, sha256Blob } from '@src/local-llm/storage';
 import { removeAssets } from '@src/local-llm/assetRemoval';
 import { rehydrateLocalModels } from '@hooks/useLocalModelRehydration';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
@@ -33,7 +33,7 @@ import {
   resolveGgufFiles,
   generateSearchModelId,
 } from '@src/local-llm/hfSearch';
-import { getManifestFiles, getManifestPrimaryFile, parseShardInfo } from '@src/local-llm/ggufShardUtils';
+import { getManifestFiles, getManifestPrimaryFile } from '@src/local-llm/ggufShardUtils';
 import OpfsFileBrowser from './OpfsFileBrowser';
 
 import { ASSIGNABLE_TASKS, getModelStatusLabel } from './localModelConstants';
@@ -42,10 +42,8 @@ import { CatalogCard, DownloadedModelRow, DownloadingModelRow, TaskAssignmentRow
 import SearchResultCard from './SearchResultCard';
 import { useModelDownload } from '@src/hooks/useModelDownload';
 import { useModelDeletion } from '@src/hooks/useModelDeletion';
-import { autoAssignImportedModel, commitCatalogDuplicate, prepareSingleGGUFImport } from '@utils/localModelImport';
+import { autoAssignImportedModel, commitCatalogDuplicate, commitSelectedGGUFImport, findSelectedGGUFDuplicate, inspectSelectedGGUFs, prepareSelectedGGUFImport } from '@utils/localModelImport';
 import { useHfSearch } from '@src/hooks/useHfSearch';
-
-const IMPORTED_MODEL_PREFIX = 'local-file';
 
 const MDN_FEATURE_LINKS = {
   secureContext: 'https://developer.mozilla.org/en-US/docs/Glossary/Secure_Context',
@@ -64,10 +62,6 @@ const MDN_FEATURE_LINKS = {
 function formatEstimatedGiB(value: number | null): string {
   if (!value || value <= 0) return '—';
   return `${value} GB`;
-}
-
-function sanitizeModelIdSegment(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'model';
 }
 
 // Helper: build a fake HfSearchResult from a persisted model definition
@@ -382,6 +376,55 @@ const LocalModelSettings = () => {
     return null;
   }, []);
 
+  const findStoredSelectedGGUF = useCallback(async (
+    selection: ReturnType<typeof inspectSelectedGGUFs>,
+    files: Array<{name: string; size: number; hash: string}>,
+    incomingFiles: Blob[],
+  ): Promise<LocalModelDefinition | null> => {
+    const store = useStore.getState();
+    const candidates = [
+      ...CURATED_MODELS.map((model) => ({
+        id: model.id, engine: model.engine, tasks: model.tasks, label: model.label,
+        origin: model.huggingFaceRepo, source: 'opfs' as const, manifest: model.manifest,
+        fileSize: model.expectedDownloadSize, displayMeta: model.displayMeta,
+      })),
+      ...store.localModels,
+    ];
+    const inspected: Array<{model: LocalModelDefinition; kind: 'single-file' | 'gguf-sharded'; hashes: string[]; size?: number}> = [];
+    for (const model of candidates) {
+      const kind = model.manifest.kind;
+      if (model.engine !== 'wllama' || (kind !== 'single-file' && kind !== 'gguf-sharded')) continue;
+      const metadata = store.savedModelMeta[model.id];
+      if (metadata?.storageState !== 'saved') continue;
+      const hashes = {...metadata.fileHashes};
+      try {
+        for (const path of getManifestFiles(model.manifest)) {
+          if (!hashes[path]) hashes[path] = await sha256Blob(await readFile(model.id,path));
+        }
+      } catch {
+        continue;
+      }
+      store.updateSavedModelMeta(model.id,{fileHashes:hashes});
+      inspected.push({model,kind,hashes:getManifestFiles(model.manifest).map((path) => hashes[path]),size:metadata.storedBytes || undefined});
+    }
+    for (const candidate of inspected) {
+      const id = findSelectedGGUFDuplicate(selection,files,[{
+        id:candidate.model.id, engine:candidate.model.engine, kind:candidate.kind, hashes:candidate.hashes, size:candidate.size,
+      }]);
+      if (id === null) continue;
+      const paths = getManifestFiles(candidate.model.manifest);
+      var matches = true;
+      for (const [index,path] of paths.entries()) {
+        if (!await equalBlobBytes(incomingFiles[index],await readFile(candidate.model.id,path))) {
+          matches = false;
+          break;
+        }
+      }
+      if (matches) return candidate.model;
+    }
+    return null;
+  }, []);
+
   const registerDownloadedOrUseDuplicate = useCallback(async (model: LocalModelDefinition, totalBytes: number) => {
     if (model.engine !== 'wllama'
       || (model.manifest.kind !== 'single-file' && model.manifest.kind !== 'gguf-sharded')) {
@@ -491,127 +534,29 @@ const LocalModelSettings = () => {
     setEphemeralLoadError(null);
     setOutput('');
     setContextLength(null);
-
-    // Collect selected files and detect shard sets
-    const selectedFiles = Array.from(fileList);
-    // Sort by filename so shard ordering is deterministic
-    selectedFiles.sort((a, b) => a.name.localeCompare(b.name));
-
-    // Detect if all files form a shard set
-    const shardInfos = selectedFiles.map((f) => ({ file: f, info: parseShardInfo(f.name) }));
-    const allShards = shardInfos.every(({ info }) => info !== null);
-    const mightBeShardSet = allShards && selectedFiles.length > 1;
-
-    // Validate shard set integrity before accepting it
-    let isShardSet = false;
-    if (mightBeShardSet) {
-      const baseNames = new Set(shardInfos.map(({ info }) => info!.baseName));
-      const totals = new Set(shardInfos.map(({ info }) => info!.total));
-
-      if (baseNames.size !== 1) {
-        // Files belong to different models
-        setEphemeralLoadError(
-          `選択されたファイルは異なるモデルのシャードが混在しています（ベース名: ${[...baseNames].join(', ')}）。同じモデルの全シャードだけを選択してください。`,
-        );
-        e.target.value = '';
-        return;
-      }
-      if (totals.size !== 1) {
-        // Inconsistent total shard counts across files
-        setEphemeralLoadError(
-          '選択されたファイルのシャード総数が一致しません。同じモデルの全シャードだけを選択してください。',
-        );
-        e.target.value = '';
-        return;
-      }
-
-      const expectedTotal = [...totals][0];
-      if (selectedFiles.length !== expectedTotal) {
-        // Missing or extra shards
-        setEphemeralLoadError(
-          `シャードセットが不完全です: ${expectedTotal} 個中 ${selectedFiles.length} 個が選択されています。全 ${expectedTotal} シャードをまとめて選択してください。`,
-        );
-        e.target.value = '';
-        return;
-      }
-
-      // Verify contiguity: indices must be exactly {1, 2, ..., expectedTotal}
-      const indices = new Set(shardInfos.map(({ info }) => info!.current));
-      for (let i = 1; i <= expectedTotal; i++) {
-        if (!indices.has(i)) {
-          setEphemeralLoadError(
-            `シャードセットに欠番があります（${i} 番目が見つかりません）。全 ${expectedTotal} シャードをまとめて選択してください。`,
-          );
-          e.target.value = '';
-          return;
-        }
-      }
-
-      isShardSet = true;
-    }
-
-    // Build manifest
-    let manifest: import('@src/local-llm/types').LocalModelManifest;
-    let primaryFile: File;
-    let totalSize: number;
-    let displayLabel: string;
-
-    if (isShardSet) {
-      // Sort shards by shard index
-      shardInfos.sort((a, b) => (a.info?.current ?? 0) - (b.info?.current ?? 0));
-      const sortedFiles = shardInfos.map(({ file }) => file);
-      primaryFile = sortedFiles[0];
-      totalSize = sortedFiles.reduce((s, f) => s + f.size, 0);
-      manifest = {
-        kind: 'gguf-sharded',
-        entrypoint: primaryFile.name,
-        shards: sortedFiles.map((f) => f.name),
-        totalSize,
-      };
-      displayLabel = `${primaryFile.name} (${sortedFiles.length} shards)`;
-    } else {
-      // Single file (or non-shard multiple files treated as individual)
-      if (selectedFiles.length > 1) {
-        // Multiple files that don't form a valid shard set
-        setEphemeralLoadError(
-          '複数ファイルが選択されましたが、有効なシャードセットとして認識できません。単一の .gguf ファイル、または同一モデルの全シャードを選択してください。',
-        );
-        e.target.value = '';
-        return;
-      }
-      primaryFile = selectedFiles[0];
-      totalSize = primaryFile.size;
-      manifest = { kind: 'single-file', entrypoint: primaryFile.name };
-      displayLabel = primaryFile.name;
-    }
-
-    setFileName(displayLabel);
-
     try {
-      // Hash the primary (first) file; for shards: composite key includes totalSize + shardCount
-      const fileHash = await sha256Blob(primaryFile);
-      const existingModel = await findStoredModelWithHash(fileHash, totalSize);
+      const selectedFiles = Array.from(fileList);
+      const selection = inspectSelectedGGUFs(selectedFiles.map(({name,size}) => ({name,size})));
+      const filesByName = new Map(selectedFiles.map((file) => [file.name,file]));
+      const orderedFiles = selection.files.map((file) => filesByName.get(file.name)!);
+      const inspectedFiles: Array<{name: string; size: number; hash: string}> = [];
+      for (const file of orderedFiles) inspectedFiles.push({name:file.name,size:file.size,hash:await sha256Blob(file)});
+      const existingModel = await findStoredSelectedGGUF(selection,inspectedFiles,orderedFiles);
       const store = useStore.getState();
-      const modelId = `${IMPORTED_MODEL_PREFIX}--${fileHash.slice(0, 16)}--${sanitizeModelIdSegment(primaryFile.name)}`;
-
-      const model: LocalModelDefinition = isShardSet
-        ? existingModel ?? {id: modelId, engine: 'wllama', tasks: ['generation', 'analysis'], label: displayLabel, origin: primaryFile.name, source: 'opfs', manifest, fileSize: totalSize, lastFileName: primaryFile.name}
-        : prepareSingleGGUFImport(primaryFile.name, fileHash, totalSize, [], existingModel ?? undefined, store.localModels.map(({id}) => id)).model;
+      const model = prepareSelectedGGUFImport(selection,inspectedFiles[0].hash,existingModel ?? undefined,store.localModels.map(({id}) => id)).model;
+      setFileName(selection.displayLabel);
 
       if (!existingModel) {
-        // Save all files to OPFS
-        const filesToSave = isShardSet
-          ? shardInfos.sort((a, b) => (a.info?.current ?? 0) - (b.info?.current ?? 0)).map(({ file }) => file)
-          : [primaryFile];
         const storedFiles: string[] = [];
-        const fileHashes: Record<string, string> = { [primaryFile.name]: fileHash };
-        for (const f of filesToSave) {
-          await saveFile(model.id, f.name, f);
-          storedFiles.push(f.name);
+        const fileHashes: Record<string, string> = {};
+        for (const [index, file] of orderedFiles.entries()) {
+          await saveFile(model.id, file.name, file);
+          storedFiles.push(file.name);
+          fileHashes[file.name] = inspectedFiles[index].hash;
         }
         store.updateSavedModelMeta(model.id, {
           storageState: 'saved',
-          storedBytes: totalSize,
+          storedBytes: selection.totalSize,
           storedFiles,
           fileHashes,
           lastVerifiedAt: Date.now(),
@@ -629,16 +574,19 @@ const LocalModelSettings = () => {
       const caps = localModelRuntime.getCapabilities(model.id);
       if (caps?.contextLength) setContextLength(caps.contextLength);
       setImportedModelId(model.id);
-      store.addLocalModel(model);
-      autoAssignIfUnset(model.id, model.tasks);
-      if (!store.favoriteLocalModelIds.includes(model.id)) store.toggleFavoriteLocalModel(model.id);
+      const current = useStore.getState();
+      useStore.setState(commitSelectedGGUFImport({
+        localModels: current.localModels,
+        activeLocalModels: current.activeLocalModels,
+        favoriteLocalModelIds: current.favoriteLocalModelIds,
+      },model,current.localModels.map(({id}) => id)));
       setSelectedModelId(null);
       bumpOpfsBrowser();
     } catch (err) {
       setEphemeralLoadError((err as Error).message);
     }
     e.target.value = '';
-  }, [autoAssignIfUnset, bumpOpfsBrowser, findStoredModelWithHash]);
+  }, [bumpOpfsBrowser, findStoredSelectedGGUF]);
 
   const handleUnloadEphemeral = useCallback(async () => {
     if (importedModelId) await localModelRuntime.unloadModel(importedModelId, { force: true });
