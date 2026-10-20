@@ -1249,3 +1249,12 @@ Web関連32件、型検査、bundle鮮度・差分確認成功。初回型検査
 独立Astraで入力focus/keyboard対応のscrollを復元が打ち消すP2を確認し、編集開始/復元開始/継続時に自tokenを取消すよう修正。限定再監査は新規P1/P2なし。Native境界は共有計算→UIScrollView位置と上下限/横位置保持、node欠損/Lazy行/viewport、Unicode別ID、古いtoken拒否、保存失敗時のstate/diskと履歴非公開、runtime非永続を確認した。保存/暗号/recordsの基盤は変更せず全項目I/O・実Web暗号化同期の既存成功を再利用した。ログ /private/tmp/weavelet-scroll-history-{web-test,types,types-final,native-test,native-final-test,generate-final,web-build}.log。
 
 隔離FAKE Catalyst実画面で、スクロール途中（先頭user本文の下端が残りassistant見出しが約406px）→次バブル→戻るで同じ配置を復元し、進むで移動先へ戻ること、別会話→元会話でも位置を復元することを確認した。AX containerへのscrollはnoValueだったため、取得した画面内の本文座標で操作し直した。通常データ/実Keychainは使わず、終了後のprocess不在とbuilt Info.plistのbyte一致復元を確認。狭幅/文字拡大、実keyboardとの同時操作、長時間の動的layout、VoiceOverの全操作、実API/cloudは未確認。iPhone照会/導入・main統合・pushは行わない。U22の行左端折畳入口、全UI/OS/性能と実オンライン互換の最終受入は引き続き残る。
+
+
+## 行左端の本文折畳・展開（2026-10-21）
+
+U22の入口を操作Menuから行左端へ移し、既存NodeOptionsの共有更新・保存を再利用した。見出し/本文を同じ44pt領域の右へ配置し、生成中と対象行編集中も領域を保持してボタンだけ無効化する。readonly比較表示には領域を追加しない。
+
+最終Catalyst buildと差分確認成功。隔離FAKE画面で折畳→展開、本文再表示、対象行編集中のdisabled状態と整列を確認し、編集は取消した。終了後のprocess不在とbuilt Info.plistのbyte一致復元を確認。独立Astraは新規P1/P2なし、同一差分の前回監査結果を再利用した。業務規則・保存/同期形式は未変更で、NodeOptionsと全項目I/O・暗号化同期の既存成功を再利用する。ログ /private/tmp/weavelet-row-collapse-final-build.log。
+
+狭幅・文字拡大・実keyboard・VoiceOver全操作、生成中の実画面確認は未実施。iPhone照会/導入・push・main統合は行わない。次はWebの生成中スクロール追従とnative接続を実callerで照合する。実オンライン相互運用と全機能/UIの最終受入は未完了。
