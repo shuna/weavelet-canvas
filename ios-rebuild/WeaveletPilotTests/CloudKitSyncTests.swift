@@ -105,6 +105,7 @@ import XCTest
         let fake = FakeCloudKit(snapshot:try remote(snapshot)), connection = CloudKitSyncConnection(state:local,transport:fake,syncStore:CloudKitSyncStore(fileURL:dir.appendingPathComponent("sync.json")),deviceID:"FAKE")
         let previousRoots = try local.publicationSnapshot().required("state").object("state").map(\.key)
         try await connection.connect(); try await connection.download()
+        XCTAssertEqual(local.diagnostics.entries["sync-cloudkit"]?.status,"done")
         let received = try local.publicationSnapshot().required("state"), incoming = try snapshot.required("state")
         // Web mergeSyncDocumentSnapshot overlays roots: existing root positions stay, new roots append.
         let incomingKeys = try incoming.object("state").map(\.key)
@@ -168,6 +169,7 @@ import XCTest
         let fake = FakeCloudKit(snapshot:try remote(incoming)), connection = CloudKitSyncConnection(state:local,transport:fake,syncStore:CloudKitSyncStore(fileURL:dir.appendingPathComponent("sync.json")),deviceID:"FAKE")
         fault.reject = true
         do { try await connection.download(); XCTFail("failed save accepted") } catch {}
+        XCTAssertEqual(local.diagnostics.entries["sync-cloudkit"]?.status,"error")
         XCTAssertEqual(try local.publicationSnapshot(),before); XCTAssertEqual(try Data(contentsOf:url),disk)
         fault.reject = false; try await connection.download()
         XCTAssertEqual(try ChatState(store:store).publicationSnapshot(),try local.publicationSnapshot())

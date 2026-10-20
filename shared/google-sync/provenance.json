@@ -45,7 +45,8 @@
     "src/local-llm/lowbit-q/types.ts": "0b061561953b4df738befdd4103326bc73fb77ae897e0ab21ff9d292365921bf",
     "src/local-llm/lowbit-q/ggufParser.ts": "ed785589a9a91c10d162432985e7a227042409b678bd1d7e55d78a39ed67397a",
     "src/local-llm/lowbit-q/lowbitQManager.ts": "a36f0fe1025b2afc27558ab930fd5edeb1ee8d3cdec37479987ea4ae702f0643",
-    "src/store/debug-store.ts": "bd8b783585f4e8ed03d07ca2cf2d777c358b7ca71941138d2d5a12026e2fc3ad",
+    "src/utils/debugState.ts": "fc315634962591e9e64ccd42e92b08e37bc4b6c597d887c5760ac30b06adc535",
+    "src/store/debug-store.ts": "34b07edac34e2ab311740c8d09c4f7b93c642f8be06fa27ebf5b0b0769de841d",
     "src/local-llm/runtime.ts": "0e6964286b59f1848358cfa0c60d6a54082f619be6c09b8848949149c3af9807",
     "src/utils/modelCostCore.ts": "202c19599fe56bcd6d5b5fb8908bdfd248888af29b28e30e5e68912252de6024",
     "src/utils/modelLookup.ts": "ab195754372c3fc93114c69d1a8d8abb44e027e476a0bcbaa220fa7d723550fd",
@@ -374,7 +375,9 @@
     "src/local-llm/ggufShardUtils.ts": "33845697477f6a02eab2bcc6ce94412ce34cea521400fe7dcac1ffb9823e6ef7",
     "src/local-llm/fileProvider.ts": "4046bf8b8036f227ee000132a829adfd95100e83826319dce5fadb840427d121",
     "shared/google-sync/localModelFiles.ts": "b677bf5a478483ecb3cc42e8d252de9e4456e12eb98fe64ffd528b9135b1edbe",
-    "shared/google-sync/entry.ts": "a4fa51c9884437e91cd5d8f8421f01643cf79793ff72c7589e62f527ab15edd2",
+    "src/utils/debugState.ts": "fc315634962591e9e64ccd42e92b08e37bc4b6c597d887c5760ac30b06adc535",
+    "shared/google-sync/debugState.ts": "2d01d3a7e47caced539d38a3a3bbf15fb52ece380a89121ea06901863e7872bf",
+    "shared/google-sync/entry.ts": "81305f1549a035a60d6933c42b4703bafceeba7c6b5af150389ac2d0e7d73bf7",
     "shared/google-sync/generate.mjs": "3b6c9ade9f1651fad5f4dfc1cce2b7e492d9be197fc8854ded1fbc553a058982",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
   },
@@ -426,5 +429,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "627351d312dc799ffc2f3f275f3ef2be295c3f816274a38ceb8facc17e42bcb9"
+  "bundleSHA256": "f016bb37743495eb20db9bd47e19c05e416e329193d7c07764504b75d3f5b42b"
 }

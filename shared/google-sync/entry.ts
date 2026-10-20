@@ -225,3 +225,5 @@ export { localModelRole } from './localModelRole';
 export { localModelImport } from './localModelImport';
 
 export { localModelFiles } from './localModelFiles';
+
+export { debugState } from './debugState';

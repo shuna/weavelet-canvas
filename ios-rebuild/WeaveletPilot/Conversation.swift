@@ -176,6 +176,145 @@ struct CatalogDownloadJob: Equatable {
     let canResume: Bool
 }
 
+struct NativeDiagnosticEntry: Identifiable, Equatable {
+    let id: String
+    var label: String
+    var status: String
+    var detail: String?
+    var updatedAt: Double
+}
+struct NativeDiagnosticLog: Identifiable, Equatable {
+    let id: String
+    let timestamp: Double
+    let source: String
+    let level: String
+    let message: String
+}
+
+final class NativeDiagnostics: ObservableObject {
+    @Published private(set) var entries: [String: NativeDiagnosticEntry] = [:]
+    @Published private(set) var logs: [NativeDiagnosticLog] = []
+    @Published private(set) var displayedEntries: [NativeDiagnosticEntry] = []
+    @Published private(set) var formattedLogs: [String] = []
+    @Published private(set) var displayError: String?
+
+    private var state = OrderedJSON.object([
+        .init(key: "entries", value: .object([])),
+        .init(key: "logs", value: .array([])),
+    ])
+    private var bridge: SharedWebOperations.Session?
+    private var doneTTLms = 30_000.0
+    private var doneExpiry: [String: DispatchWorkItem] = [:]
+
+    private func call(_ input: OrderedJSON) throws -> OrderedJSON {
+        if bridge == nil { bridge = try SharedWebOperations.Session() }
+        return try bridge!.call("debugState", input)
+    }
+
+    private func entry(_ value: OrderedJSON) throws -> NativeDiagnosticEntry {
+        let detail: String?
+        if let raw = value["detail"], raw != .null { detail = try raw.string("diagnostic detail") }
+        else { detail = nil }
+        return try .init(id: value.required("id").string("diagnostic id"),
+                         label: value.required("label").string("diagnostic label"),
+                         status: value.required("status").string("diagnostic status"),
+                         detail: detail,
+                         updatedAt: try value.required("updatedAt").number("diagnostic time"))
+    }
+
+    private func log(_ value: OrderedJSON) throws -> NativeDiagnosticLog {
+        try .init(id: value.required("id").string("diagnostic log id"),
+                  timestamp: value.required("timestamp").number("diagnostic log time"),
+                  source: value.required("source").string("diagnostic log source"),
+                  level: value.required("level").string("diagnostic log level"),
+                  message: value.required("message").string("diagnostic log message"))
+    }
+
+    private func publish(_ next: OrderedJSON) throws {
+        let display = try call(.object([
+            .init(key: "operation", value: .string("display")),
+            .init(key: "state", value: next),
+        ]))
+        let rows = try display.required("entries").array("diagnostic entries").map(entry)
+        let lines = try display.required("logs").array("diagnostic logs")
+        let nextLogs = try lines.map(log)
+        let nextFormatted = try lines.map { try $0.required("formatted").string("formatted diagnostic log") }
+        if let ttl = try? display.required("doneTTLms").number("diagnostic done TTL"), ttl >= 0 { doneTTLms = ttl }
+        state = next
+        entries = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) })
+        logs = nextLogs
+        displayedEntries = rows
+        formattedLogs = nextFormatted
+        displayError = nil
+    }
+
+    private func reduce(_ action: OrderedJSON) {
+        do {
+            let next = try call(.object([
+                .init(key: "operation", value: .string("reduce")),
+                .init(key: "state", value: state),
+                .init(key: "action", value: action),
+            ]))
+            try publish(next)
+        } catch {
+            displayError = "実行状況を更新できませんでした"
+        }
+    }
+
+    private func scheduleDoneExpiry(for id: String, status: String) {
+        doneExpiry.removeValue(forKey: id)?.cancel()
+        guard status == "done" else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.entries[id]?.status == "done" else { return }
+            self.remove(id)
+        }
+        doneExpiry[id] = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + doneTTLms / 1000, execute: work)
+    }
+
+    func report(id: String, label: String, status: String, detail: String? = nil) {
+        let previous = entries[id]
+        let storedDetail = detail ?? ""
+        let changed = previous == nil || previous?.label != label || previous?.status != status || previous?.detail != storedDetail
+        reduce(.object([
+            .init(key: "type", value: .string("update")),
+            .init(key: "id", value: .string(id)),
+            .init(key: "patch", value: .object([
+                .init(key: "label", value: .string(label)),
+                .init(key: "status", value: .string(status)),
+                .init(key: "detail", value: .string(storedDetail)),
+            ])),
+            .init(key: "updatedAt", value: .number(String(Date().timeIntervalSince1970 * 1000))),
+        ]))
+        scheduleDoneExpiry(for: id, status: status)
+        guard changed else { return }
+        reduce(.object([
+            .init(key: "type", value: .string("appendLog")),
+            .init(key: "line", value: .object([
+                .init(key: "id", value: .string(UUID().uuidString.lowercased())),
+                .init(key: "timestamp", value: .number(String(Date().timeIntervalSince1970 * 1000))),
+                .init(key: "source", value: .string("runtime")),
+                .init(key: "level", value: .string(status == "error" ? "error" : "info")),
+                .init(key: "message", value: .string(label + " " + status)),
+            ])),
+        ]))
+    }
+
+    func clear() {
+        for entry in entries.values where entry.status == "done" { doneExpiry.removeValue(forKey: entry.id)?.cancel() }
+        reduce(.object([.init(key: "type", value: .string("clear"))]))
+    }
+
+    func remove(_ id: String) {
+        doneExpiry.removeValue(forKey: id)?.cancel()
+        reduce(.object([
+            .init(key: "type", value: .string("remove")),
+            .init(key: "id", value: .string(id)),
+        ]))
+    }
+}
+
+
 struct ActiveGeneration {
     let id: UUID
     let chatID: String
@@ -246,6 +385,7 @@ final class ChatState: ObservableObject {
     @Published private(set) var document: SyncDocument?
     @Published var persistenceError: String?
     @Published private(set) var generations: [Data: ActiveGeneration] = [:]
+    let diagnostics = NativeDiagnostics()
     @Published private var catalogDownloads: [Data: CatalogDownloadJob] = [:]
     private var catalogDownloadTasks: [Data: UUID] = [:]
     private var catalogDownloadEpochs: [Data: UUID] = [:]
@@ -269,6 +409,7 @@ final class ChatState: ObservableObject {
     @Published private var generationErrors: [Data:String] = [:]
     @Published var streamRecoveryError: String?
     @Published private(set) var isRecoveringStream = false
+    @Published private(set) var isDiscardingProxyRecovery = false
     private var streamRecoveryTask: Task<Void,Never>?
     @Published private var failedGenerationRetries: [Data:FailedGenerationRetry] = [:]
     @Published var automaticEvaluationError: String?
@@ -1390,6 +1531,7 @@ final class ChatState: ObservableObject {
         let started = try startingStreamState(source:source,chatID:chatID,plan:plan,id:id,proxy:proxy != nil,now:now)
         try applyLibrary(started, selectedID: chatID, resetViewFor: chatID, editing: history, now: now)
         setGeneration(ActiveGeneration(id: id, chatID: chatID, baseSource: try publishedSource(), path: path, plan: plan, titleAfterAppend: titleAfterAppend))
+        diagnostics.report(id: "generation-" + id.uuidString.lowercased(), label: "生成", status: "active")
         generationError = nil
         automaticEvaluationError = nil
         pendingTitleContexts[id] = (legacy,client,readProviderCredential)
@@ -1474,6 +1616,7 @@ final class ChatState: ObservableObject {
         let expected = catalogDownloads[key]?.expectedBytes
         let plan = catalogResumePlans[key]
         catalogDownloads[key] = .init(receivedBytes:0,expectedBytes:expected,running:false,partial:true,error:nil,canResume:false)
+        diagnostics.report(id: "model-" + id, label: "モデル取得", status: "done", detail: "取消")
         catalogTransport.cancel(token) { [weak self] data in
             Task { @MainActor in
                 guard let self, self.catalogDownloadEpochs[key] == token, self.catalogDownloadTasks[key] == nil else { return }
@@ -1510,6 +1653,7 @@ final class ChatState: ObservableObject {
         else { catalogResumeData.removeValue(forKey:key); catalogResumePlans.removeValue(forKey:key); try? catalogResumeStore.save(catalogResumeRecords()); resumeData = nil }
         catalogResumePlans[key] = (urlText,revision)
         catalogDownloads[key] = .init(receivedBytes:0,expectedBytes:expected,running:true,partial:false,error:nil,canResume:false)
+        diagnostics.report(id:"model-" + id,label:"モデル取得",status:"active")
         let token = UUID()
         catalogDownloadEpochs[key] = token
         catalogDownloadTasks[key] = token
@@ -1549,6 +1693,7 @@ final class ChatState: ObservableObject {
         try? catalogResumeStore.save(catalogResumeRecords())
         catalogDownloadTasks.removeValue(forKey:key)
         catalogDownloads[key] = .init(receivedBytes:received,expectedBytes:expected,running:false,partial:true,error:error?.localizedDescription,canResume:catalogResumeData[key]?.isEmpty == false)
+        diagnostics.report(id:"model-" + String(data:key,encoding:.utf8)!,label:"モデル取得",status:"error",detail:"失敗")
     }
 
     @MainActor private func finishCatalogDownload(id: String, key: Data, token: UUID, roots: OrderedJSON, model: OrderedJSON, file: OrderedJSON,
@@ -1683,6 +1828,7 @@ final class ChatState: ObservableObject {
         catalogResumePlans.removeValue(forKey:key)
         try? catalogResumeStore.save(catalogResumeRecords())
         catalogDownloads[key] = .init(receivedBytes:inspected.size,expectedBytes:inspected.size,running:false,partial:false,error:nil,canResume:false)
+        diagnostics.report(id:"model-" + id,label:"モデル取得",status:"done")
     }
 
     private var catalogResumeStore: NativeCatalogResumeStore { NativeCatalogResumeStore(libraryURL:(store ?? LocalStateStore.applicationStore).fileURL) }
@@ -1793,6 +1939,7 @@ final class ChatState: ObservableObject {
             let started = try startingStreamState(source:source,chatID:chatID,plan:plan,id:id,proxy:false,now:now)
             try applyLibrary(started,selectedID:chatID,resetViewFor:chatID,editing:history,now:now)
             setGeneration(ActiveGeneration(id:id,chatID:chatID,baseSource:try publishedSource(),path:path,plan:plan,output:output,usesRemoteTransport:false,titleAfterAppend:titleAfterAppend))
+            diagnostics.report(id: "generation-" + id.uuidString.lowercased(), label: "生成", status: "active")
             generationError = nil
             automaticEvaluationError = nil
             if let userContent {
@@ -1835,14 +1982,20 @@ final class ChatState: ObservableObject {
             try output.flush()
             var updated = current; updated.output = output; setGeneration(updated)
             finishGeneration(id:current.id,error:nil,completed:false)
+            if generation(current.id) == nil {
+                diagnostics.report(id: "generation-" + current.id.uuidString.lowercased(), label: "生成", status: "done", detail: "取消")
+            }
         } catch { finishGeneration(id:current.id,error:error) }
     }
 
     func saveGenerationResult() throws {
         guard let current = generation, !current.running else { throw ExchangeError.invalid("生成結果がありません") }
-        do { try persistGeneration(current) }
-        catch {
+        do {
+            try persistGeneration(current)
+            diagnostics.report(id: "generation-" + current.id.uuidString.lowercased(), label: "生成", status: current.failed ? "error" : "done")
+        } catch {
             cancelAutomaticEvaluation(generationID:current.id,clearContext:false)
+            diagnostics.report(id: "generation-" + current.id.uuidString.lowercased(), label: "生成結果の保存", status: "error", detail: "失敗")
             throw error
         }
         generationError = nil
@@ -1857,10 +2010,13 @@ final class ChatState: ObservableObject {
         setGeneration(current)
         generationTasks[id] = nil
         if let error { setGenerationError("生成を完了できませんでした。\n" + error.localizedDescription, chatID:current.chatID) }
-        do { try persistGeneration(current) }
-        catch {
+        do {
+            try persistGeneration(current)
+            diagnostics.report(id: "generation-" + id.uuidString.lowercased(), label: "生成", status: current.failed ? "error" : "done")
+        } catch {
             cancelAutomaticEvaluation(generationID:id,clearContext:false)
             setGenerationError("生成結果を保存できませんでした。部分本文を保持しています。\n" + error.localizedDescription, chatID:current.chatID)
+            diagnostics.report(id: "generation-" + id.uuidString.lowercased(), label: "生成結果の保存", status: "error", detail: "失敗")
         }
     }
 
@@ -1978,19 +2134,51 @@ final class ChatState: ObservableObject {
     }
     @MainActor func canRecoverProxyRecord(_ record: OrderedJSON) -> Bool { (try? proxyRecoveryTarget(record)) == true }
     func runProxyRecovery() {
-        guard streamRecoveryTask == nil else { return }
+        guard streamRecoveryTask == nil, !isDiscardingProxyRecovery else { return }
+        diagnostics.report(id: "stream-recovery", label: "ストリーム復旧", status: "active")
         streamRecoveryTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            do { try await recoverProxyStreams() }
-            catch is CancellationError { }
-            catch { streamRecoveryError = "ストリームを復旧できませんでした。記録は保持しています。\n" + error.localizedDescription }
+            do {
+                try await recoverProxyStreams()
+                self.diagnostics.report(id: "stream-recovery", label: "ストリーム復旧", status: self.streamRecoveryError == nil ? "done" : "error", detail: self.streamRecoveryError == nil ? nil : "未完了")
+            } catch is CancellationError {
+                self.diagnostics.report(id: "stream-recovery", label: "ストリーム復旧", status: "done", detail: "取消")
+            }
+            catch {
+                streamRecoveryError = "ストリームを復旧できませんでした。記録は保持しています。\n" + error.localizedDescription
+                self.diagnostics.report(id: "stream-recovery", label: "ストリーム復旧", status: "error", detail: "失敗")
+            }
             streamRecoveryTask = nil
         }
     }
-    func cancelProxyRecovery() { streamRecoveryTask?.cancel() }
+    func cancelProxyRecovery() {
+        guard streamRecoveryTask != nil else { return }
+        streamRecoveryTask?.cancel()
+        diagnostics.report(id: "stream-recovery", label: "ストリーム復旧", status: "done", detail: "取消")
+    }
+
+    @MainActor func discardPendingProxyRecoveryRecords() async throws {
+        guard !hasGenerations, !isDiscardingProxyRecovery else { throw ExchangeError.invalid("生成中は復旧記録を破棄できません") }
+        isDiscardingProxyRecovery = true
+        defer { isDiscardingProxyRecovery = false }
+        if let task = streamRecoveryTask {
+            task.cancel()
+            await task.value
+        }
+        guard !hasGenerations else { throw ExchangeError.invalid("生成中は復旧記録を破棄できません") }
+        guard streamRecoveryTask == nil, !isRecoveringStream else {
+            throw ExchangeError.invalid("復旧処理の終了を待ってから破棄してください")
+        }
+        let records = try proxyRecoveryStore.records()
+        for record in records {
+            try proxyRecoveryStore.remove(record.required("requestId").string("request ID"))
+        }
+        streamRecoveryError = nil
+        diagnostics.report(id: "stream-recovery", label: "ストリーム復旧", status: "done")
+    }
 
     @MainActor func recoverProxyStreams(record credential: RemoteCredentialRecord? = nil, client: RemoteClient? = nil, sessionID: String? = nil) async throws {
-        guard !hasGenerations, !isRecoveringStream, !initialLoadFailed, exchange != nil else { return }
+        guard !hasGenerations, !isRecoveringStream, !isDiscardingProxyRecovery, !initialLoadFailed, exchange != nil else { return }
         let records = try proxyRecoveryStore.records()
         streamRecoveryError = nil
         guard !records.isEmpty else { return }
@@ -2227,7 +2415,10 @@ final class ChatState: ObservableObject {
         generationErrors.removeAll()
         for current in generations.values {
             liveUsageVersions[current.id, default:0] += 1; liveUsageTasks[current.id] = nil; liveTokenCounts.removeValue(forKey:current.id)
-            if current.running { cancelAutomaticEvaluation(generationID:current.id) }
+            if current.running {
+                cancelAutomaticEvaluation(generationID:current.id)
+                diagnostics.report(id: "generation-" + current.id.uuidString.lowercased(), label: "生成", status: "done", detail: "取消")
+            }
             generationTasks[current.id]?.cancel()
         }
         pendingTitleContexts.removeAll()
@@ -2253,14 +2444,19 @@ final class ChatState: ObservableObject {
             guard let prepared = try ConversationTitle.prepare(source:exchange.source,state:roots,chatID:chatID,language:language,sourceConfig:sourceConfig,legacy:credential,readProviderCredential:readProviderCredential) else { return }
             let titleClient = client?.auxiliaryClient() ?? RemoteClient()
             let key = Data(chatID.utf8), id = UUID()
-            titleTasks[key]?.task.cancel(); titleError = nil
+            if let previous = titleTasks[key] {
+                previous.task.cancel()
+                diagnostics.report(id: "title-" + previous.id.uuidString.lowercased(), label: "タイトル生成", status: "done", detail: "取消")
+            }
+            titleError = nil
+            diagnostics.report(id: "title-" + id.uuidString.lowercased(), label: "タイトル生成", status: "active")
             let task = Task { @MainActor [weak self] in
                 guard let self else { return }
                 defer { if self.titleTasks[key]?.id == id { self.titleTasks[key] = nil } }
                 do {
                     let response = try await ConversationTitle.generate(prepared,client:titleClient)
                     try Task.checkCancellation()
-                    guard self.titleTasks[key]?.id == id else { return }
+                    guard self.titleTasks[key]?.id == id else { throw CancellationError() }
                     let counts: OrderedJSON?
                     if self.usageCountingEnabled {
                         let plan = try SharedWebOperations.call("titleOperation",.object([.init(key:"operation",value:.string("usagePlan")),
@@ -2268,9 +2464,19 @@ final class ChatState: ObservableObject {
                         counts = try await self.tokenCounting.counts(plan:plan)
                     } else { counts = nil }
                     try Task.checkCancellation()
-                    guard self.titleTasks[key]?.id == id else { return }
+                    guard self.titleTasks[key]?.id == id else { throw CancellationError() }
                     try self.applyGeneratedTitle(response,prepared:prepared,language:language,fallbackEndpoint:credential.settings.endpoint,counts:counts)
-                } catch is CancellationError {} catch { if self.titleTasks[key]?.id == id { self.titleError = "タイトル生成に失敗しました。\n" + error.localizedDescription } }
+                    self.diagnostics.report(id: "title-" + id.uuidString.lowercased(), label: "タイトル生成", status: "done")
+                } catch is CancellationError {
+                    if self.titleTasks[key]?.id == id {
+                        self.diagnostics.report(id: "title-" + id.uuidString.lowercased(), label: "タイトル生成", status: "done", detail: "取消")
+                    }
+                } catch {
+                    if self.titleTasks[key]?.id == id {
+                        self.titleError = "タイトル生成に失敗しました。\n" + error.localizedDescription
+                        self.diagnostics.report(id: "title-" + id.uuidString.lowercased(), label: "タイトル生成", status: "error", detail: "失敗")
+                    }
+                }
             }
             titleTasks[key] = (id,task)
         } catch { titleError = "タイトル生成に失敗しました。\n" + error.localizedDescription }
@@ -2349,10 +2555,23 @@ final class ChatState: ObservableObject {
             format:format,summaryID:UUID().uuidString.lowercased(),now:Date().timeIntervalSince1970 * 1000,config:roots["bubbleSummaryConfig"],generatingNodeIDs:summaryGeneratingIDs(chatID:draft.chatID),busyJobs:busy,
             legacy:record ?? RemoteCredentials.load(),readProviderCredential:readProviderCredential,promptTokens:0) else { return }
         let key = SummaryIdentity(chatID:draft.chatID,nodeID:draft.nodeID), id = UUID()
-        summaryJobs = summaryJobs.filter { _, job in
-            job.busy || !job.chatID.utf8.elementsEqual(draft.chatID.utf8) || !job.sourceNodeIDs.contains { previous in sourceNodeIDs.contains { $0.utf8.elementsEqual(previous.utf8) } }
+        let replacedSummaryKeys = summaryJobs.compactMap { key, job in
+            job.busy || !job.chatID.utf8.elementsEqual(draft.chatID.utf8) || !job.sourceNodeIDs.contains { previous in sourceNodeIDs.contains { $0.utf8.elementsEqual(previous.utf8) } } ? nil : key
+        }
+        for previousKey in replacedSummaryKeys {
+            summaryTasks[previousKey]?.cancel()
+            summaryTasks[previousKey] = nil
+            if let previous = summaryJobs[previousKey] {
+                diagnostics.report(id: "summary-" + previous.id.uuidString.lowercased(), label: "要約", status: "done", detail: "取消")
+            }
+            summaryJobs[previousKey] = nil
+        }
+        if let previous = summaryJobs[key] {
+            summaryTasks[key]?.cancel()
+            diagnostics.report(id: "summary-" + previous.id.uuidString.lowercased(), label: "要約", status: "done", detail: "取消")
         }
         summaryJobs[key] = SummaryJob(id:id,chatID:draft.chatID,originNodeID:draft.nodeID,sourceNodeIDs:sourceNodeIDs,busy:true)
+        diagnostics.report(id: "summary-" + id.uuidString.lowercased(), label: "要約", status: "active")
         summaryTasks[key] = Task { @MainActor [weak self] in
             guard let self else { return }
             defer { if self.summaryJobs[key]?.id == id { self.summaryTasks[key] = nil; self.summaryJobs[key]?.busy = false } }
@@ -2384,14 +2603,30 @@ final class ChatState: ObservableObject {
                 }
                 self.summaryJobs[key]?.warning = result.warning
                 self.summaryJobs[key]?.error = result.error
-            } catch is CancellationError {} catch { if self.summaryJobs[key]?.id == id { self.summaryJobs[key]?.error = error.localizedDescription } }
+                self.diagnostics.report(id: "summary-" + id.uuidString.lowercased(), label: "要約", status: result.error == nil ? "done" : "error", detail: result.error == nil ? nil : "失敗")
+            } catch is CancellationError {
+                if self.summaryJobs[key]?.id == id {
+                    self.diagnostics.report(id: "summary-" + id.uuidString.lowercased(), label: "要約", status: "done", detail: "取消")
+                }
+            } catch {
+                if self.summaryJobs[key]?.id == id {
+                    self.summaryJobs[key]?.error = error.localizedDescription
+                    self.diagnostics.report(id: "summary-" + id.uuidString.lowercased(), label: "要約", status: "error", detail: "失敗")
+                }
+            }
         }
     }
     func stopSummary(chatID: String, nodeID: String) {
         let key = SummaryIdentity(chatID:chatID,nodeID:nodeID)
-        summaryTasks[key]?.cancel(); summaryTasks[key] = nil; summaryJobs[key] = nil
+        summaryTasks[key]?.cancel(); summaryTasks[key] = nil
+        if let job = summaryJobs.removeValue(forKey:key) {
+            diagnostics.report(id: "summary-" + job.id.uuidString.lowercased(), label: "要約", status: "done", detail: "取消")
+        }
     }
-    private func cancelSummaries() { for task in summaryTasks.values { task.cancel() }; summaryTasks.removeAll(); summaryJobs.removeAll(); summaryChosen.removeAll() }
+    private func cancelSummaries() {
+        for (key, task) in summaryTasks { task.cancel(); if let job = summaryJobs[key] { diagnostics.report(id: "summary-" + job.id.uuidString.lowercased(), label: "要約", status: "done", detail: "取消") } }
+        summaryTasks.removeAll(); summaryJobs.removeAll(); summaryChosen.removeAll()
+    }
 
     func evaluationDraft(nodeID: String) throws -> ConversationEvaluationDraft {
         guard let conversation else { throw ExchangeError.invalid("評価する会話がありません") }
@@ -2476,6 +2711,7 @@ final class ChatState: ObservableObject {
         let prepared = try ConversationEvaluation.prepare(source:source,state:roots,chatID:draft.chatID,nodeID:draft.nodeID,dimension:dimension,scope:scope,omittedMode:omittedMode,language:Locale.preferredLanguages.first ?? "en",legacy:record ?? RemoteCredentials.load(),files:localModelFiles,readProviderCredential:readProviderCredential)
         let id = UUID()
         evaluationJobs[key] = EvaluationJob(id:id,busy:true)
+        diagnostics.report(id: "evaluation-" + id.uuidString.lowercased(), label: "評価", status: "active")
         evaluationTasks[key] = Task { @MainActor [weak self] in
             guard let self else { return }
             defer { if self.evaluationJobs[key]?.id == id { self.evaluationTasks[key] = nil; self.evaluationJobs[key]?.busy = false } }
@@ -2489,15 +2725,28 @@ final class ChatState: ObservableObject {
                     for field in (try? update.object("axis progress")) ?? [] { self.evaluationJobs[key]?.progress = self.evaluationJobs[key]?.progress.replacing(field.key,with:field.value) ?? .object([field]) }
                 })
                 try Task.checkCancellation()
-                guard self.evaluationJobs[key]?.id == id, let latestSource = self.exchange?.source else { return }
+                guard self.evaluationJobs[key]?.id == id, let latestSource = self.exchange?.source else { throw CancellationError() }
                 let updated = try ConversationEvaluation.apply(result,prepared:prepared,source:latestSource,state:self.publicationSnapshot().required("state"))
                 try self.applyLibrary(latestSource,selectedID:self.selectedID,preserveGeneration:true,evaluationResults:try updated.required("evaluationResults"))
-            } catch is CancellationError {} catch { if self.evaluationJobs[key]?.id == id { self.evaluationJobs[key]?.error = error.localizedDescription } }
+                self.diagnostics.report(id: "evaluation-" + id.uuidString.lowercased(), label: "評価", status: "done")
+            } catch is CancellationError {
+                if self.evaluationJobs[key]?.id == id {
+                    self.diagnostics.report(id: "evaluation-" + id.uuidString.lowercased(), label: "評価", status: "done", detail: "取消")
+                }
+            } catch {
+                if self.evaluationJobs[key]?.id == id {
+                    self.evaluationJobs[key]?.error = error.localizedDescription
+                    self.diagnostics.report(id: "evaluation-" + id.uuidString.lowercased(), label: "評価", status: "error", detail: "失敗")
+                }
+            }
         }
     }
     func stopEvaluation(chatID: String, nodeID: String) {
         let key = SummaryIdentity(chatID:chatID,nodeID:nodeID)
-        evaluationTasks[key]?.cancel(); evaluationTasks[key] = nil; evaluationJobs[key] = nil
+        evaluationTasks[key]?.cancel(); evaluationTasks[key] = nil
+        if let job = evaluationJobs.removeValue(forKey:key) {
+            diagnostics.report(id: "evaluation-" + job.id.uuidString.lowercased(), label: "評価", status: "done", detail: "取消")
+        }
     }
     private var cancelledAutomaticEvaluationIDs: Set<UUID> = []
 
@@ -2563,12 +2812,21 @@ final class ChatState: ObservableObject {
     }
 
     private func cancelEvaluations() {
-        for task in evaluationTasks.values { task.cancel() }
+        for (key, task) in evaluationTasks {
+            task.cancel()
+            if let job = evaluationJobs[key] { diagnostics.report(id: "evaluation-" + job.id.uuidString.lowercased(), label: "評価", status: "done", detail: "取消") }
+        }
         evaluationTasks.removeAll(); evaluationJobs.removeAll()
         for id in automaticEvaluationTasks.keys { cancelAutomaticEvaluation(generationID:id) }
     }
 
-    private func cancelTitles() { for value in titleTasks.values { value.task.cancel() }; titleTasks.removeAll() }
+    private func cancelTitles() {
+        for value in titleTasks.values {
+            value.task.cancel()
+            diagnostics.report(id: "title-" + value.id.uuidString.lowercased(), label: "タイトル生成", status: "done", detail: "取消")
+        }
+        titleTasks.removeAll()
+    }
 
     func renameChat(id: String, title: String, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard let exchange else { throw ExchangeError.invalid("サンプル会話は変更できません") }
@@ -2635,7 +2893,11 @@ final class ChatState: ObservableObject {
         }
         let nextNavigation = try navigation ?? historySelecting(selectedID, in: changed.source)
         let nextEditing = try editing ?? (navigation != nil ? editingHistory : MessageEditing.invalidatingHistory(editingHistory, before: before, after: changed.source))
-        try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selectedID, style: displayStyle))
+        do { try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selectedID, style: displayStyle)) }
+        catch {
+            diagnostics.report(id: "local-save", label: "ローカル保存", status: "error", detail: "失敗")
+            throw error
+        }
         // A generation owns only its target chat.  Applying a result for another
         // chat must not cancel it, while an edited target is still rejected.
         let invalidGenerations = generations.values.filter { (try? generationTargetIsCurrent($0, in:changed.source)) != true }
@@ -2647,6 +2909,7 @@ final class ChatState: ObservableObject {
                 retained.running = false; retained.failed = true
                 setGeneration(retained)
                 setGenerationError("生成先が変更されたため、結果は自動保存していません。", chatID:current.chatID)
+                diagnostics.report(id: "generation-" + current.id.uuidString.lowercased(), label: "生成", status: "error", detail: "生成先変更")
             }
         }
         branchCandidates = candidates
@@ -2743,7 +3006,11 @@ final class ChatState: ObservableObject {
         let selected = views.contains { $0.id.utf8.elementsEqual(desired.utf8) } ? desired : views.first?.id ?? ""
         let nextNavigation = try historySelecting(selected, in: changed.source)
         let nextEditing = try exchange.map { try MessageEditing.invalidatingHistory(editingHistory, before: $0.source, after: changed.source) } ?? nil
-        try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selected, style: displayStyle))
+        do { try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selected, style: displayStyle)) }
+        catch {
+            diagnostics.report(id: "local-save", label: "ローカル保存", status: "error", detail: "失敗")
+            throw error
+        }
         invalidateGeneration(); cancelTitles(); cancelSummaries(); cancelEvaluations()
         chatScrollAnchors = [:]; chatScrollRestoration = nil
         branchCandidates = candidates

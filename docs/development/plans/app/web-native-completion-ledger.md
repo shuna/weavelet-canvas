@@ -1401,3 +1401,16 @@ nativeは標準URLSessionDownloadTaskで一時ファイルへ取得し、既存G
 独立Astraで検出したawait前stateの上書き、opaque ID欠落、失効resume再使用、評価の無断取消と、後続配置awaitのcleanup漏れ/同ID再開始競合を修正した。変更部分だけの限定確認は新規P1/P2なし。親の統合確認でもMainActor明示と大容量I/O分離を補った。ログは `/private/tmp/weavelet-catalog-{web-test,web-related,duplicate-web-test,opaque-web-test,types-opaque,catalyst,catalyst-compile-fixed,catalyst-tests,record-boundary,catalyst-final,install-preservation}.log`。保存/同期wire/schema・暗号は未変更のため、全項目I/O・実Webとの暗号化往復の既存成功を再利用する。
 
 隔離FAKE Catalystの実設定画面で既存の役割/ファイル取込入口、選定3モデルの名称・取得元・容量・標準取得buttonを確認した。実インターネットの大容量取得は実行せず、取得/取消/HTTP失敗/保存失敗と再試行/同ID衝突/重複集約はURLProtocolの小さな合成GGUFで確認した。実サーバーのRange再開、実resume dataの再起動後利用、OS中断/復帰、大容量性能、実GGUF推論と実cloud/全UI最終受入は未確認。現catalogのrevisionはmainであり、固定commitや署名済み資産の来歴を保証するものではない。画面確認後はprocess不在とbuilt Infoのbyte一致復元済み。iPhone照会/導入、push/main統合は行っていない。
+## 実行状況・ログの共有とnative診断表示（2026-10-21）
+
+Web debug-store/DebugPanelの更新・ログ上限500行・完了項目のみの消去・表示順・時刻整形をsrc/utils/debugStateへ抽出し、Web実callerとnative bridgeから共用した。日時/ID生成・タイマー・clipboardはhostに残す。nativeは順序を保持する共有stateを原本に、型付き表示へ全件変換してから公開する。表示設定だけを既存保存経路へ接続し、実行項目とログは永続化・同期しない。生成・補助生成・評価・モデル取得・保存失敗・復旧・Google/フォルダー/CloudKitの状態を固定ラベルで報告し、本文・鍵・passphrase・自由形式の通信エラーをログに含めない。
+
+nativeの行を閉じる操作は表示だけを閉じる。Webの復旧記録破棄に対応する操作は常設Menuから明示確認して実行し、進行中の復旧終了を待ち、生成との競合を拒否して端末の未完了journalだけを削除する。会話/主保存ファイル/remote記録は変更しない。
+
+共有Web3件・型検査・Vite build・bundle鮮度・差分確認成功。Catalystは初回14件と修正後4件（1件重複）の固有17件が成功し、最後の復旧取消修正後は該当1件だけ再確認した。初回RemoteGenerationのfilter誤記による0件は成功数へ含めず、正しいtest名で後続runを実行した。共有変換・非永続・設定保存、保存失敗の部分結果保持、生成中のjournal破棄拒否、Google/フォルダーの全項目暗号化同期とrestart、CloudKit全項目受信/保存失敗保全を確認。変更のない全I/O・Web→native→Web暗号化互換の既存成功を再利用する。ログ /private/tmp/weavelet-debug-{web-complete,types-final,web-build-final,catalyst,native-final,recovery-final}.log。
+
+独立Astraの指摘により、補助生成の古い対象/取消、対象消失による生成終了、停止時の保存失敗を完了表示で上書きする箇所、detail省略時の旧エラー残留、復旧取消と未完了の終端表示を修正した。限定再監査の最終結果は新規P1/P2なし。
+
+隔離FAKE Catalystで設定ON、生成中表示、生成完了、完了後の消去とcopy無効化を確認。生成中の消去不変性は自動テストによる確認であり、画面操作時は既に生成が完了していた。最終画面確認で空の一覧領域が高く残る問題を修正し、行数に応じた高さとstatusのaccessibility labelを追加、Catalyst build成功後に消去時の空白解消を実画面で確認した。終了後はprocess不在とbuilt Info.plistのbyte一致復元を確認。
+
+数値の同期診断（転送量/処理時間/履歴圧縮）と手動compactionは今回の完成範囲外であり、共有adaptersのno-op接続が残る。Service WorkerやIndexedDB固有UIはnativeへ移植しない。狭幅/文字拡大/VoiceOver全操作・実keyboard・実cloud相互運用は未確認。iPhone照会/導入・push・main統合は行わない。全Web機能と実オンライン互換の最終受入は引き続き未完了。

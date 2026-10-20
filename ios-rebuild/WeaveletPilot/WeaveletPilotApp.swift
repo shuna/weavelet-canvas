@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import UIKit
 
 @main
 struct WeaveletPilotApp: App {
@@ -34,6 +35,96 @@ struct WeaveletPilotApp: App {
         if RemoteFixture.enabled { return LocalStateStore(fileURL: LocalStateStore.applicationStore.fileURL.deletingLastPathComponent().appendingPathComponent("debug-remote-fixture/local-state.json")) }
         #endif
         return .applicationStore
+    }
+}
+
+
+private struct RuntimeDiagnosticsPanel: View {
+    let state: ChatState
+    @ObservedObject var diagnostics: NativeDiagnostics
+    @State private var confirmsRecoveryDiscard = false
+    @State private var recoveryDiscardError: String?
+    @ScaledMetric(relativeTo: .caption) private var activityRowHeight = 44.0
+
+    private func symbol(for status: String) -> String {
+        switch status {
+        case "active": return "ellipsis"
+        case "done": return "checkmark"
+        case "error": return "exclamationmark.triangle.fill"
+        default: return "circle"
+        }
+    }
+
+    private func statusLabel(for status: String) -> String {
+        switch status {
+        case "active": return "実行中"
+        case "done": return "完了"
+        case "error": return "エラー"
+        default: return "待機中"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Divider()
+            HStack {
+                Text("実行状況").font(.caption.weight(.semibold))
+                Spacer()
+                Button("ログをコピー") { UIPasteboard.general.string = diagnostics.formattedLogs.joined(separator: "\n") }
+                    .font(.caption).frame(minWidth: 44, minHeight: 44)
+                    .accessibilityLabel("実行ログをコピー")
+                    .disabled(diagnostics.formattedLogs.isEmpty)
+                Button("消去") { diagnostics.clear() }.font(.caption).frame(minWidth: 44, minHeight: 44)
+                    .accessibilityLabel("完了した実行状況とログを消去")
+                Menu("操作") {
+                    Button("端末の未完了復旧記録を破棄", role: .destructive) { confirmsRecoveryDiscard = true }
+                }
+                .font(.caption).frame(minWidth: 44, minHeight: 44)
+                .accessibilityLabel("実行状況の操作")
+            }
+            if let recoveryDiscardError { Text(recoveryDiscardError).font(.caption).foregroundStyle(.red) }
+            if let displayError = diagnostics.displayError { Text(displayError).font(.caption).foregroundStyle(.red) }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(diagnostics.displayedEntries) { entry in
+                        HStack(spacing: 5) {
+                            Image(systemName: symbol(for: entry.status)).frame(width: 14)
+                                .accessibilityLabel(statusLabel(for: entry.status))
+                            Text(entry.label + (entry.detail.flatMap { $0.isEmpty ? nil : ": " + $0 } ?? "")).lineLimit(2)
+                            Spacer(minLength: 4)
+                            Button("閉じる", systemImage: "xmark") { diagnostics.remove(entry.id) }
+                                .labelStyle(.iconOnly).buttonStyle(.borderless)
+                                .frame(minWidth: 44, minHeight: 44)
+                                .accessibilityLabel("\(entry.label)を閉じる")
+                        }
+                        .font(.caption)
+                        .frame(minHeight: activityRowHeight)
+                    }
+                }
+            }
+            .frame(height: min(Double(diagnostics.displayedEntries.count),3) * activityRowHeight)
+            if !diagnostics.formattedLogs.isEmpty {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(diagnostics.formattedLogs.enumerated()), id: \.offset) { item in
+                            Text(item.element).font(.caption2.monospaced()).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                .frame(maxHeight: 88)
+            }
+        }
+        .background(.bar)
+        .confirmationDialog("端末の未完了復旧記録を破棄しますか？", isPresented: $confirmsRecoveryDiscard, titleVisibility: .visible) {
+            Button("破棄", role: .destructive) {
+                Task {
+                    do { try await state.discardPendingProxyRecoveryRecords(); recoveryDiscardError = nil }
+                    catch { recoveryDiscardError = error.localizedDescription }
+                }
+            }
+        } message: {
+            Text("端末に残る未完了の復旧記録だけを削除します。保存済みの会話とプロキシ側の記録は変更しません。")
+        }
     }
 }
 
@@ -466,19 +557,24 @@ struct ChatView: View {
         }.disabled(state.hasGenerations)
     }
     private var libraryFooter: some View {
-        HStack {
-            Menu("同期", systemImage: "arrow.triangle.2.circlepath") { syncButtons }
-                .disabled(state.hasGenerations)
-                .frame(minWidth: 44, minHeight: 44)
-            Spacer()
-            fileMenu
-            Spacer()
-            Button("設定", systemImage: "slider.horizontal.3") {
-                presentAfterLibrary { showsSettings = true }
+        VStack(spacing: 0) {
+            if (try? state.displaySetting(.showDebugPanel)) == .bool(true) {
+                RuntimeDiagnosticsPanel(state: state, diagnostics: state.diagnostics)
             }
-            .frame(minWidth: 44, minHeight: 44)
+            HStack {
+                Menu("同期", systemImage: "arrow.triangle.2.circlepath") { syncButtons }
+                    .disabled(state.hasGenerations)
+                    .frame(minWidth: 44, minHeight: 44)
+                Spacer()
+                fileMenu
+                Spacer()
+                Button("設定", systemImage: "slider.horizontal.3") {
+                    presentAfterLibrary { showsSettings = true }
+                }
+                .frame(minWidth: 44, minHeight: 44)
+            }
+            .labelStyle(.iconOnly)
         }
-        .labelStyle(.iconOnly)
         .sheet(item: Binding(get: { showsSettings ? nil : shownGoogleConnection }, set: { shownGoogleConnection = $0 })) { connection in GoogleSyncSettingsView(connection: connection) }
         .sheet(item: Binding(get: { showsSettings ? nil : shownCloudKitConnection }, set: { shownCloudKitConnection = $0 })) { connection in CloudKitSyncSettingsView(connection:connection) }
         .sheet(item: Binding(get: { showsSettings ? nil : shownFolderConnection }, set: { shownFolderConnection = $0 })) { connection in FolderSyncSettingsView(connection:connection) }

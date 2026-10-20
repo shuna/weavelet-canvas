@@ -1,22 +1,6 @@
 import { create } from 'zustand';
-
-export type DebugStatus = 'idle' | 'active' | 'error' | 'done';
-
-export interface DebugEntry {
-  id: string;
-  label: string;
-  status: DebugStatus;
-  detail?: string;
-  updatedAt: number;
-}
-
-export interface DebugLogLine {
-  id: string;
-  timestamp: number;
-  source: string;
-  level: string;
-  message: string;
-}
+import { DEBUG_DONE_TTL_MS, reduceDebugState, type DebugEntry, type DebugLogLine } from '@utils/debugState';
+export type { DebugStatus, DebugEntry, DebugLogLine } from '@utils/debugState';
 
 interface DebugStore {
   entries: Record<string, DebugEntry>;
@@ -27,22 +11,13 @@ interface DebugStore {
   remove: (id: string) => void;
 }
 
-const DONE_TTL = 30_000;
-const MAX_LOG_LINES = 500;
-
 export const useDebugStore = create<DebugStore>((set, get) => ({
   entries: {},
   logs: [],
   update: (id, patch) => {
-    const prev = get().entries[id];
-    const entry: DebugEntry = {
-      id,
-      label: patch.label ?? prev?.label ?? id,
-      status: patch.status ?? prev?.status ?? 'idle',
-      detail: patch.detail ?? prev?.detail,
-      updatedAt: Date.now(),
-    };
-    set({ entries: { ...get().entries, [id]: entry } });
+    const next = reduceDebugState(get(), {type: 'update', id, patch, updatedAt: Date.now()});
+    const entry = next.entries[id];
+    set(next);
 
     if (entry.status === 'done') {
       setTimeout(() => {
@@ -51,7 +26,7 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
           const { [id]: _, ...rest } = get().entries;
           set({ entries: rest });
         }
-      }, DONE_TTL);
+      }, DEBUG_DONE_TTL_MS);
     }
   },
   appendLog: (line) => {
@@ -64,19 +39,10 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
       level: line.level,
       message: line.message,
     };
-    set({ logs: [...get().logs, next].slice(-MAX_LOG_LINES) });
+    set(reduceDebugState(get(), {type: 'appendLog', line: next}));
   },
-  clearLogs: () => {
-    const entries = get().entries;
-    const activeEntries = Object.fromEntries(
-      Object.entries(entries).filter(([, entry]) => entry.status !== 'done')
-    );
-    set({ logs: [], entries: activeEntries });
-  },
-  remove: (id) => {
-    const { [id]: _, ...rest } = get().entries;
-    set({ entries: rest });
-  },
+  clearLogs: () => set(reduceDebugState(get(), {type: 'clear'})),
+  remove: (id) => set(reduceDebugState(get(), {type: 'remove', id})),
 }));
 
 /** Non-React helper for calling from plain functions */

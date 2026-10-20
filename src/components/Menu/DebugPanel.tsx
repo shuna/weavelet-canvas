@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import { useDebugStore, DebugStatus } from '@store/debug-store';
 import { cancelAndPurgeRecovery } from '@hooks/useStreamRecovery';
+import { formatDebugLogLine, formatDebugLogTime, sortedDebugEntries } from '@utils/debugState';
 
 const Spinner = () => (
   <svg
@@ -58,18 +59,6 @@ const SwToggle = () => {
   );
 };
 
-const formatLogTime = (timestamp: number) => {
-  const d = new Date(timestamp);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}.${String(d.getMilliseconds()).padStart(3, '0')}`;
-};
-
-const formatLogLine = (line: {
-  timestamp: number;
-  source: string;
-  level: string;
-  message: string;
-}) => `${formatLogTime(line.timestamp)} [${line.source}] ${line.level} ${line.message}`;
-
 const logLevelClass = (level: string) => {
   if (level === 'error') return 'text-red-600 dark:text-red-300';
   if (level === 'warn') return 'text-amber-600 dark:text-amber-300';
@@ -100,16 +89,12 @@ const DebugPanel = () => {
 
   if (!showDebugPanel) return null;
 
-  const sorted = Object.values(entries).sort((a, b) => {
-    if (a.status === 'active' && b.status !== 'active') return -1;
-    if (b.status === 'active' && a.status !== 'active') return 1;
-    return b.updatedAt - a.updatedAt;
-  });
+  const sorted = sortedDebugEntries(entries);
 
   const copyLogs = async () => {
     if (logs.length === 0) return;
     try {
-      await navigator.clipboard.writeText(logs.map(formatLogLine).join('\n'));
+      await navigator.clipboard.writeText(logs.map(formatDebugLogLine).join('\n'));
       setCopyState('copied');
     } catch (error) {
       console.warn('Failed to copy debug logs', error);
@@ -197,7 +182,7 @@ const DebugPanel = () => {
         ) : (
           logs.map((line) => (
             <div key={line.id} className='whitespace-pre-wrap break-words'>
-              <span className='text-gray-400 dark:text-gray-500'>{formatLogTime(line.timestamp)}</span>{' '}
+              <span className='text-gray-400 dark:text-gray-500'>{formatDebugLogTime(line.timestamp)}</span>{' '}
               <span className='text-gray-500 dark:text-gray-400'>[{line.source}]</span>{' '}
               <span className={logLevelClass(line.level)}>{line.level}</span>{' '}
               <span className='text-gray-800 dark:text-gray-100'>{line.message}</span>

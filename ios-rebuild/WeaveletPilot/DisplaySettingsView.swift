@@ -31,11 +31,12 @@ struct DisplaySettingsView: View {
             switch Result(catching: {
                 try (state.displaySetting(.theme), state.displaySetting(.inlineLatex),
                      state.displaySetting(.markdownMode), state.displaySetting(.streamingMarkdownPolicy), state.displaySetting(.displayChatSize),
-                     state.displaySetting(.branchSwipeDirection), state.displaySetting(.animateBubbleNavigation), state.displaySetting(.enterToSubmit), state.displaySetting(.advancedMode))
+                     state.displaySetting(.branchSwipeDirection), state.displaySetting(.animateBubbleNavigation), state.displaySetting(.enterToSubmit), state.displaySetting(.advancedMode), state.displaySetting(.showDebugPanel))
             }) {
             case .success(let values):
                 Section("表示する操作") {
                     boolean(.advancedMode, title: "高度な操作を表示", value: values.8)
+                    boolean(.showDebugPanel, title: "実行状況を表示", value: values.9)
                     Text("先頭のシステム本文、役割の編集、本文の追加・挿入、入力欄の生成設定を表示します。会話の内容は削除されません。")
                         .font(.footnote).foregroundStyle(.secondary)
                 }

@@ -8468,6 +8468,7 @@ var WeaveletGoogleSync = (() => {
     chatSizes: () => chatSizes,
     cloudKitOperation: () => cloudKitOperation,
     composerContent: () => composerContent,
+    debugState: () => debugState,
     documentOperation: () => documentOperation,
     drain: () => drain,
     driveErrorKind: () => driveErrorKind,
@@ -28096,6 +28097,66 @@ ${text}`;
     if (hasRequiredModelParts(requiredFiles, files))
       throw new Error("Required model file download is incomplete");
     return JSON.stringify({ id: model.id, requiredFiles, entrypoint, files: getFinalModelFiles(files) });
+  }
+
+  // src/utils/debugState.ts
+  var MAX_LOG_LINES = 500;
+  var DEBUG_DONE_TTL_MS = 3e4;
+  function reduceDebugState(state, action) {
+    switch (action.type) {
+      case "update": {
+        const previous = state.entries[action.id];
+        const entry = {
+          id: action.id,
+          label: action.patch.label ?? previous?.label ?? action.id,
+          status: action.patch.status ?? previous?.status ?? "idle",
+          detail: action.patch.detail ?? previous?.detail,
+          updatedAt: action.updatedAt
+        };
+        return { ...state, entries: { ...state.entries, [action.id]: entry } };
+      }
+      case "appendLog":
+        return { ...state, logs: [...state.logs, action.line].slice(-MAX_LOG_LINES) };
+      case "clear":
+        return {
+          entries: Object.fromEntries(Object.entries(state.entries).filter(([, entry]) => entry.status !== "done")),
+          logs: []
+        };
+      case "remove": {
+        const { [action.id]: _23, ...entries } = state.entries;
+        return { ...state, entries };
+      }
+    }
+  }
+  function sortedDebugEntries(entries) {
+    return Object.values(entries).sort((left, right) => {
+      if (left.status === "active" && right.status !== "active")
+        return -1;
+      if (right.status === "active" && left.status !== "active")
+        return 1;
+      return right.updatedAt - left.updatedAt;
+    });
+  }
+  function formatDebugLogTime(timestamp) {
+    const date = new Date(timestamp);
+    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:${String(date.getSeconds()).padStart(2, "0")}.${String(date.getMilliseconds()).padStart(3, "0")}`;
+  }
+  function formatDebugLogLine(line) {
+    return `${formatDebugLogTime(line.timestamp)} [${line.source}] ${line.level} ${line.message}`;
+  }
+
+  // shared/google-sync/debugState.ts
+  function debugState(json) {
+    const input = JSON.parse(json);
+    if (input.operation === "reduce")
+      return JSON.stringify(reduceDebugState(input.state, input.action));
+    if (input.operation === "display")
+      return JSON.stringify({
+        doneTTLms: DEBUG_DONE_TTL_MS,
+        entries: sortedDebugEntries(input.state.entries),
+        logs: input.state.logs.map((line) => ({ ...line, formatted: formatDebugLogLine(line) }))
+      });
+    throw new Error("Invalid debug state operation.");
   }
 
   // shared/google-sync/entry.ts

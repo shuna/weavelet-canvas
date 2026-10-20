@@ -335,6 +335,8 @@ import XCTest
         let before = try state.publicationSnapshot()
         try await controller.create(password:password,folderName:"FAKE folder")
         XCTAssertEqual(controller.status,.ready)
+        XCTAssertEqual(state.diagnostics.entries["sync-google"]?.status,"done")
+        XCTAssertFalse(String(describing:state.diagnostics.logs).contains(password))
         XCTAssertEqual(try state.publicationSnapshot()["state"]?["xRaw"],.number("9007199254740993"))
         XCTAssertEqual(try state.publicationSnapshot()["state"]?["theme"],.string("LOCAL_THEME"))
         XCTAssertNil(try cache.publication(dataset:XCTUnwrap(controller.dataset)))
@@ -383,6 +385,7 @@ import XCTest
         fault.reject = true
         do { try await controller.download(); XCTFail("save must fail") } catch {}
         XCTAssertEqual(controller.status,.recoveryRequired)
+        XCTAssertEqual(state.diagnostics.entries["sync-google"]?.status,"error")
         XCTAssertEqual(try state.publicationSnapshot(),before)
         XCTAssertEqual(try Data(contentsOf:local.fileURL),disk)
         XCTAssertNotNil(try cache.publication(dataset:"fake1")?.received)

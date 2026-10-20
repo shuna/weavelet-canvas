@@ -219,6 +219,27 @@ final class DisplaySettingsTests: XCTestCase {
         XCTAssertNil(restored["splitPanelRatio"])
         XCTAssertNil(restored["splitPanelSwapped"])
     }
+    func testRuntimeDiagnosticsUseSharedReducerAndStayOutOfSavedLibrary() throws {
+        let local = try store(), state = ChatState(store: local)
+        try state.importWebData(fixture().encoded())
+        let before = try state.exportWebData(), disk = try Data(contentsOf: local.fileURL)
+        state.diagnostics.report(id: "active", label: "同期", status: "active", detail: "passphrase must not be logged")
+        state.diagnostics.report(id: "done", label: "保存", status: "done")
+        XCTAssertEqual(state.diagnostics.displayedEntries.map(\.id), ["active", "done"])
+        XCTAssertFalse(state.diagnostics.logs.map(\.message).joined(separator: "\n").contains("passphrase"))
+        state.diagnostics.report(id: "active", label: "同期", status: "active")
+        XCTAssertEqual(state.diagnostics.entries["active"]?.detail, "")
+        state.diagnostics.clear()
+        XCTAssertEqual(state.diagnostics.entries["active"]?.status, "active")
+        XCTAssertNil(state.diagnostics.entries["done"])
+        XCTAssertTrue(state.diagnostics.logs.isEmpty)
+        XCTAssertEqual(try state.exportWebData(), before)
+        XCTAssertEqual(try Data(contentsOf: local.fileURL), disk)
+        try state.saveDisplaySetting(.showDebugPanel, value: .bool(true))
+        XCTAssertEqual(try ChatState(store: local).displaySetting(.showDebugPanel), .bool(true))
+        XCTAssertTrue(ChatState(store: local).diagnostics.entries.isEmpty)
+    }
+
     func testActualDisplayBridgeKeepsOriginalNodesAndHiddenSystemInExportSyncAndRoleEditing() throws {
         let nodes = [MessageNode(id: "system", parentId: nil, createdAt: 1, role: "system"),
                      MessageNode(id: "é", parentId: "system", createdAt: 2, role: "user"),

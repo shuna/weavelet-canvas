@@ -1,12 +1,12 @@
 import Foundation
 
 enum DisplaySetting: String {
-    case theme, inlineLatex, markdownMode, streamingMarkdownPolicy, displayChatSize, branchSwipeDirection, animateBubbleNavigation, enterToSubmit, advancedMode, splitPanelRatio, splitPanelSwapped, searchHistory, sidebarSearchHistory, chatFindHistory
+    case theme, inlineLatex, markdownMode, streamingMarkdownPolicy, displayChatSize, branchSwipeDirection, animateBubbleNavigation, enterToSubmit, advancedMode, showDebugPanel, splitPanelRatio, splitPanelSwapped, searchHistory, sidebarSearchHistory, chatFindHistory
 
     func accepts(_ value: OrderedJSON) -> Bool {
         switch self {
         case .theme: return value == .string("light") || value == .string("dark")
-        case .inlineLatex, .markdownMode, .displayChatSize, .animateBubbleNavigation, .enterToSubmit, .advancedMode, .splitPanelSwapped: if case .bool = value { return true }; return false
+        case .inlineLatex, .markdownMode, .displayChatSize, .animateBubbleNavigation, .enterToSubmit, .advancedMode, .showDebugPanel, .splitPanelSwapped: if case .bool = value { return true }; return false
         case .splitPanelRatio: return (try? value.number("splitPanelRatio")) != nil
         case .searchHistory, .sidebarSearchHistory, .chatFindHistory: if case .array(let entries) = value { return entries.allSatisfy(\.isString) }; return false
         case .branchSwipeDirection: return ["left-next", "right-next"].contains { value == .string($0) }

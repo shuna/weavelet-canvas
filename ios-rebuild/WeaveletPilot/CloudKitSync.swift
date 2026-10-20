@@ -50,6 +50,7 @@ enum CloudKitSnapshots {
     private var automaticActive = false
     private var automaticBlockedByLegacy = false
     private var operationInFlight = false
+    private var diagnosticSucceeded = false
     private var backgroundID: UIBackgroundTaskIdentifier = .invalid
     private var backgroundWork: Task<Void,Never>?
     @Published private(set) var automaticEnabled = false
@@ -106,6 +107,7 @@ enum CloudKitSnapshots {
         try check(token)
         guard account == .available else { throw SyncSessionError.invalid("iCloudアカウントを利用できません（状態: \(account.rawValue)）") }
         status = "接続済み"
+        diagnosticSucceeded = true
     }
     func download() async throws {
         try beginOperation(); defer { endOperation() }
@@ -119,6 +121,7 @@ enum CloudKitSnapshots {
         try state.applyCloudKitSnapshot(snapshot,expected:baseline)
         try checkpoint(state.publicationSnapshot())
         record = remote; metrics = nextMetrics; status = "CloudKitから受信しました"; succeeded = true
+        diagnosticSucceeded = true
     }
     func prepareLegacyIOSImport() async throws -> ChatImportPreview {
         try beginOperation(); defer { endOperation() }
@@ -138,6 +141,7 @@ enum CloudKitSnapshots {
         }
         let preview = try await state.prepareImport(data: remote.payload, filename: "weavelet-ios-snapshot")
         try check(token)
+        diagnosticSucceeded = true
         return preview
     }
     func upload() async throws {
@@ -160,6 +164,7 @@ enum CloudKitSnapshots {
                 try state.applyCloudKitSnapshot(snapshot,expected:baseline)
                 try checkpoint(state.publicationSnapshot())
                 record = server; metrics = nextMetrics; status = "新しいCloudKitの内容を採用しました"
+                diagnosticSucceeded = true
                 return
             }
             if metrics == nil, let snapshot = serverSnapshot {
@@ -175,6 +180,7 @@ enum CloudKitSnapshots {
         try checkpoint(baseline)
         record = saved; metrics = try guardResult.required("metrics")
         status = try state.syncInputSnapshot() == baseline ? "CloudKitへ保存しました" : "送信した内容を保存しました。端末には未送信の変更があります"
+        diagnosticSucceeded = true
     }
     func run(_ work: @escaping @MainActor () async throws -> Void) {
         guard task == nil else { return }
@@ -188,8 +194,13 @@ enum CloudKitSnapshots {
         if let startupError { throw startupError }
         guard !operationInFlight else { throw SyncSessionError.invalid("CloudKitの処理が進行中です") }
         operationInFlight = true; working = true
+        diagnosticSucceeded = false
+        state.diagnostics.report(id:"sync-cloudkit",label:"CloudKit同期",status:"active",detail:"処理中")
     }
-    private func endOperation() { operationInFlight = false; working = task != nil }
+    private func endOperation() {
+        operationInFlight = false; working = task != nil
+        state.diagnostics.report(id:"sync-cloudkit",label:"CloudKit同期",status:diagnosticSucceeded ? "done" : "error",detail:diagnosticSucceeded ? "操作完了" : "操作中断・失敗")
+    }
     private func currentDigest() throws -> String { SyncRecords.digest(String(decoding:try state.syncInputSnapshot().encoded(),as:UTF8.self)) }
     private func checkpoint(_ snapshot: OrderedJSON) throws {
         let digest = SyncRecords.digest(String(decoding:try snapshot.encoded(),as:UTF8.self))
@@ -258,6 +269,7 @@ enum CloudKitSnapshots {
         automaticEnabled = false; automaticActive = false
         automaticQueue?.cancel(); session = UUID(); task?.cancel(); record = nil; metrics = nil; status = "未接続"
         try syncStore.saveEnabled(false)
+        state.diagnostics.report(id:"sync-cloudkit",label:"CloudKit同期",status:"idle",detail:"未接続")
     }
 }
 

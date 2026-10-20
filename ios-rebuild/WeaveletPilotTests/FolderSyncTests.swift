@@ -26,6 +26,7 @@ import XCTest
         let publisher = GoogleSyncController(chatState:sender,drive:transport,store:syncStore,keyStore:keys,transportMode:.filesystem)
         let original = try sender.exportWebData()
         try await publisher.create(password:password)
+        XCTAssertEqual(sender.diagnostics.entries["sync-folder"]?.status,"done")
         let dataset = try XCTUnwrap(publisher.dataset)
         XCTAssertEqual(try ChatState(store:senderStore).exportWebData(),try sender.exportWebData())
         XCTAssertEqual(try OrderedJSON.decode(original)["xFixtureExport"],try OrderedJSON.decode(sender.exportWebData())["xFixtureExport"])

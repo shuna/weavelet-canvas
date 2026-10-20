@@ -876,6 +876,30 @@ final class RemoteGenerationTests: XCTestCase {
         }
     }
 
+    func testDiscardPendingProxyRecoveryRecordsKeepsConversationAndLibraryFile() async throws {
+        let local = try store(), app = try state(local)
+        let journal = NativeProxyRecoveryStore(libraryURL: local.fileURL)
+        try journal.upsert(.object([.init(key: "requestId", value: .string("pending")), .init(key: "future", value: .number("9007199254740993"))]))
+        let source = try app.exportWebData(), disk = try Data(contentsOf: local.fileURL)
+        try await app.discardPendingProxyRecoveryRecords()
+        XCTAssertTrue(try journal.records().isEmpty)
+        XCTAssertEqual(try app.exportWebData(), source)
+        XCTAssertEqual(try Data(contentsOf: local.fileURL), disk)
+        XCTAssertEqual(app.diagnostics.entries["stream-recovery"]?.status, "done")
+        let pending = OrderedJSON.object([.init(key:"requestId",value:.string("while-generating"))])
+        try journal.upsert(pending)
+        FakeRemoteProtocol.packets = [.init(bytes:Data("data: [DONE]\n\n".utf8),delay:1)]
+        try app.startGeneration(input:"FAKE guarded discard",record:record(),client:client())
+        let activeSource = try app.exportWebData(), activeDisk = try Data(contentsOf:local.fileURL)
+        app.diagnostics.clear()
+        do { try await app.discardPendingProxyRecoveryRecords(); XCTFail("Active generation must retain its recovery journal") } catch {}
+        XCTAssertEqual(app.generation?.running,true)
+        XCTAssertEqual(try journal.records(),[pending])
+        XCTAssertEqual(try app.exportWebData(),activeSource)
+        XCTAssertEqual(try Data(contentsOf:local.fileURL),activeDisk)
+        app.stopGeneration()
+    }
+
     func testProxyRecoveryRetriesHTTPAndCacheMissWithTheSameCheckpoint() async throws {
         let local = try store(), initial = try state(local), remote = client()
         FakeRemoteProtocol.packets = [try proxyPacket(1,raw:"data: {\"choices\":[{\"delta\":{\"content\":\"Visible<th\"}}]}\n\n"),proxyDone]

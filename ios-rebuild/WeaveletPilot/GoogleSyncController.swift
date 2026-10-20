@@ -4,7 +4,9 @@ import Combine
 @MainActor final class GoogleSyncController: ObservableObject {
     enum Status: Equatable { case disconnected, locked, ready, syncing, conflict, recoveryRequired, failed }
     enum Resolution: String { case merge, local, cloud }
-    @Published private(set) var status: Status = .disconnected
+    @Published private(set) var status: Status = .disconnected {
+        didSet { if status != oldValue { reportDiagnostics() } }
+    }
     @Published private(set) var dataset: String?
     @Published private(set) var conflictKeys: [String] = []
     @Published private(set) var errorMessage: String?
@@ -18,6 +20,21 @@ import Combine
     private var session: SyncSession?
     private var task: Task<Void, Error>?
     private var idleWaiters: [CheckedContinuation<Void,Never>] = []
+
+    private func reportDiagnostics() {
+        let state: String, detail: String
+        switch status {
+        case .disconnected: state = "idle"; detail = "未接続"
+        case .locked: state = "idle"; detail = "ロック中"
+        case .ready: state = "done"; detail = "操作完了・待機中"
+        case .syncing: state = "active"; detail = "処理中"
+        case .conflict: state = "error"; detail = "競合の解決が必要"
+        case .recoveryRequired: state = "error"; detail = "保存の復旧が必要"
+        case .failed: state = "error"; detail = "操作失敗"
+        }
+        let folder = transportMode == .filesystem
+        chatState.diagnostics.report(id:folder ? "sync-folder" : "sync-google",label:folder ? "フォルダー同期" : "Google同期",status:state,detail:detail)
+    }
 
     init(chatState: ChatState, drive: any SyncDrive, store: SyncStateStore = .applicationStore, keyStore: any SyncKeyStore = KeychainSyncKeyStore(), transportMode: SyncSession.TransportMode = .drive) {
         self.transportMode = transportMode; self.chatState = chatState; self.drive = drive; self.store = store; self.keyStore = keyStore
