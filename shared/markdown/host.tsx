@@ -1,6 +1,8 @@
 import React from 'react';
 import initialState from '../google-sync/importDefaults.generated.json';
 import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
+import { findTextMatches } from '../../src/utils/chatFind';
 import ContentBody from '../../src/components/Chat/ChatContent/Message/View/ContentBody';
 import type { StreamingMarkdownPolicy } from '../../src/types/chat';
 import { clearChatFind, highlightChatFind, selectChatFindMatch, type ChatFindMatch } from '../../src/utils/chatFindDom';
@@ -41,6 +43,30 @@ const searchObserver = new MutationObserver(() => {
 });
 observeSearchContent();
 (window as any).weaveletMarkdown = {
+  async index(entries: { id: string; text: string; rendered: boolean; inlineLatex: boolean }[], query: string) {
+    const Renderer = (await import('../../src/components/Chat/ChatContent/Message/View/MarkdownRenderer')).default;
+    // One temporary DOM indexes unmounted rows without creating a WebView for every message.
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const indexRoot = createRoot(container);
+    try {
+      return entries.map(entry => {
+        if (!entry.rendered) {
+          const ranges = findTextMatches(entry.text, query);
+          return { id: entry.id, count: ranges.length, ranges };
+        }
+        flushSync(() => indexRoot.render(<div key={entry.id}><Renderer content={entry.text} inlineLatex={entry.inlineLatex} onCopy={async () => {}} /></div>));
+        const element = container.firstElementChild as HTMLElement;
+        const count = highlightChatFind(element, query).length;
+        clearChatFind(element);
+        return { id: entry.id, count, ranges: [] };
+      });
+    } finally {
+      for (const child of Array.from(container.children)) clearChatFind(child as HTMLElement);
+      flushSync(() => indexRoot.unmount());
+      container.remove();
+    }
+  },
   find(value: FindRequest) {
     findRequest = value.query.trim() ? value : null;
     return refreshFind();

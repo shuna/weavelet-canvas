@@ -26,6 +26,8 @@ extension EnvironmentValues {
 struct MarkdownTextView: View {
     let text: String
     var isGenerating = false
+    @Environment(\.conversationFind) private var conversationFind
+    @Environment(\.conversationFindBodyID) private var findBodyID
     @Environment(\.markdownSettings) private var settings
     @Environment(\.markdownPresentation) private var presentation
     @Environment(\.colorScheme) private var colorScheme
@@ -60,7 +62,10 @@ struct MarkdownTextView: View {
                         .font(.caption).accessibilityLabel(rendered ? "原文を表示" : "Markdownで表示")
                 }
             }
-            if !rendered || failure != nil {
+            if let conversationFind, let findBodyID, !rendered || failure != nil || isVisible {
+                ConversationFindBodyView(find:conversationFind,bodyID:findBodyID,text:text,rendered:rendered && failure == nil,input:input,height:$height,failure:$failure)
+                if let failure { Text(failure).font(.caption).foregroundStyle(.secondary) }
+            } else if !rendered || failure != nil {
                 Text(text).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 if let failure { Text(failure).font(.caption).foregroundStyle(.secondary) }
             } else if isVisible {
@@ -70,8 +75,14 @@ struct MarkdownTextView: View {
                 Color.clear.frame(height: height)
             }
         }
+        .onChange(of:failure) { _, value in
+            if let findBodyID { conversationFind?.setFallback(value != nil,bodyID:findBodyID) }
+        }
         .onChange(of:presentation.revision) { _, _ in failure = nil }
-        .onAppear { isVisible = true }
+        .onAppear {
+            isVisible = true
+            if let findBodyID { conversationFind?.setFallback(failure != nil,bodyID:findBodyID) }
+        }
         .onDisappear { isVisible = false }
     }
 }

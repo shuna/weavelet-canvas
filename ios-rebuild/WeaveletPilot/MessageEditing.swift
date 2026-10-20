@@ -86,6 +86,9 @@ struct MessageDraft: Identifiable {
     let source: OrderedJSON
     let isInsertion: Bool
     var beforeNodeID: String? { isInsertion ? nodeID : nil }
+    func targets(chatID: String, nodeID: String) -> Bool {
+        self.chatID.utf8.elementsEqual(chatID.utf8) && self.nodeID?.utf8.elementsEqual(nodeID.utf8) == true
+    }
     var promptParts: OrderedJSON?
     var parts: OrderedJSON { promptParts ?? originalParts }
     let originalParts: OrderedJSON

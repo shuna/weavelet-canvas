@@ -70,6 +70,10 @@ import SwiftUI
         update(text: "target", matches: [NSRange(location: 0, length: 6)], width: 100)
         await fulfillment(of: [textReport], timeout: 2)
         XCTAssertEqual(try XCTUnwrap(result).minY, 0, accuracy: 1)
+        let repeatReport = expectation(description:"unchanged selection is reported again")
+        callback = repeatReport
+        update(text:"target",matches:[NSRange(location:0,length:6)],width:100)
+        await fulfillment(of:[repeatReport],timeout:2)
         let invalidReport = expectation(description: "invalid selection")
         callback = invalidReport
         update(text: "target", matches: [NSRange(location: NSNotFound, length: 1)], width: 100)
@@ -77,9 +81,12 @@ import SwiftUI
         XCTAssertNil(result)
     }
 
-    func testSwiftUIEnvironmentScalesBodyAndUsesLabelColor() throws {
+    func testSwiftUIEnvironmentUsesPlatformBodyMetricsAndLabelColor() async throws {
         let host = UIHostingController(rootView: FindableTextView(text: "原文", matches: [])
             .environment(\.dynamicTypeSize, .accessibility3).environment(\.colorScheme, .dark))
+        let window = UIWindow(frame:CGRect(x:0,y:0,width:300,height:600))
+        window.rootViewController = host; window.makeKeyAndVisible()
+        defer { window.isHidden = true }
         host.view.frame = CGRect(x: 0, y: 0, width: 300, height: 600)
         host.view.setNeedsLayout()
         host.view.layoutIfNeeded()
@@ -87,9 +94,13 @@ import SwiftUI
             if let view = view as? FindableUITextView { return view }
             return view.subviews.lazy.compactMap { findTextView($0) }.first
         }
+        let mounted = XCTNSPredicateExpectation(predicate:NSPredicate { _, _ in findTextView(host.view) != nil },object:nil)
+        await fulfillment(of:[mounted],timeout:3)
         let view = try XCTUnwrap(findTextView(host.view))
         let font = try XCTUnwrap(view.textStorage.attribute(.font, at: 0, effectiveRange: nil) as? UIFont)
-        XCTAssertGreaterThan(font.pointSize, 17)
+        // Catalyst's standard Text body metrics stay fixed even with an accessibility size.
+        let expected = UIFont.preferredFont(forTextStyle:.body,compatibleWith:UITraitCollection(preferredContentSizeCategory:.accessibilityExtraLarge))
+        XCTAssertEqual(font.pointSize,expected.pointSize,accuracy:0.1)
         let foreground = try XCTUnwrap(view.textStorage.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? UIColor)
         XCTAssertEqual(foreground, UIColor.label.resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark)))
     }

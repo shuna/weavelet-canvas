@@ -79,6 +79,7 @@ struct ChatView: View {
     @State private var inlineFocused = false
     @State private var composerFocused = false
     @State private var showsConversationSearch = false
+    @StateObject private var conversationFind = ConversationFind()
     @GestureState private var splitDragPosition: CGFloat?
     @State private var configDraft: ChatConfigDraft?
     @State private var optionsDraft: NodeOptionsDraft?
@@ -122,11 +123,16 @@ struct ChatView: View {
                 CollapsibleSearchPanel(isPresented:showsConversationSearch && state.chatActiveView != .branchEditor) {
                     ChatSearchView(state:state,initialMode:.nodes,
                         initialScope:state.chatActiveView == .branchEditor ? .all : .activePath,
-                        inline:true,close:{ showsConversationSearch = false },reportError:{ errorMessage = $0 }) { result, _ in
+                        inline:true,close:{ showsConversationSearch = false },reportError:{ errorMessage = $0 },bodyFind:conversationFind) { result, _ in
                         try state.navigate(chatID:result.chatID,nodeID:result.nodeID,source:.search)
                     }
                 }
                 activeContent
+            }
+            .environment(\.conversationFind,conversationFind)
+            .task(id:FindInput(query:conversationFind.query,enabled:conversationFind.enabled,bodies:conversationFindBodies,running:state.generation?.running ?? false,starredOnly:conversationFind.starredOnly)) {
+                if conversationFind.enabled && state.generation?.running == true { conversationFind.suspend() }
+                else { await conversationFind.search(conversationFindBodies) }
             }
             .navigationTitle((state.conversation.flatMap { $0.title.isEmpty ? nil : $0.title } ?? "Weavelet Pilot") + (RemoteFixture.enabled ? " · FAKE" : ""))
             .navigationBarTitleDisplayMode(.inline)
@@ -702,6 +708,27 @@ struct ChatView: View {
             return (try? state.summaryInfo(chatID:conversation.id,nodeID:node.id))?["hidden"] != .bool(true)
         }
     }
+    private var conversationFindBodies: [ConversationFindBody] {
+        guard conversationFind.enabled, !conversationFind.query.isEmpty else { return [] }
+        guard let conversation = state.conversation,
+              let nodes = try? DisplaySettings.messagesForDisplay(conversation.visibleMessages,advancedMode:advancedMode) else { return [] }
+        let inlineLatex = (try? state.displaySetting(.inlineLatex)) != .bool(false)
+        let defaultRendered = MarkdownTextView.defaultRendered(settings:(try? state.publicationSnapshot().required("state")) ?? .object([]))
+        return nodes.flatMap { node -> [ConversationFindBody] in
+            let summary = try? state.summaryInfo(chatID:conversation.id,nodeID:node.id)
+            guard (!conversationFind.starredOnly || node.options.starred), summary?["hidden"] != .bool(true), inlineDraft?.targets(chatID:conversation.id,nodeID:node.id) != true else { return [] }
+            let rendered = conversationFind.modes[ConversationFindBody.key(node.id,"mode",context:conversation.identity)] ?? defaultRendered
+            return MessageBodyItem.items(node:node,summaryInfo:summary,generation:generation(at:node,in:conversation),context:conversation.identity).compactMap { $0.findBody(rendered:rendered && !conversationFind.rawFallbacks.contains($0.id),inlineLatex:inlineLatex) }
+        }
+    }
+    private struct FindInput: Equatable {
+        let query: String
+        let enabled: Bool
+        let bodies: [ConversationFindBody]
+        let running: Bool
+        let starredOnly: Bool
+        static func == (a:Self,b:Self) -> Bool { a.query.utf8.elementsEqual(b.query.utf8) && a.enabled == b.enabled && a.bodies == b.bodies && a.running == b.running && a.starredOnly == b.starredOnly }
+    }
     private var chatContent: some View {
             GeometryReader { viewport in
             ScrollViewReader { scroll in
@@ -796,6 +823,7 @@ struct ChatView: View {
                     } else { scroll.scrollTo("inline-recovery",anchor:.bottom) }
                 } else if composerFocused { scroll.scrollTo("connected-composer",anchor:.bottom) }
             }
+            .modifier(ConversationFindScrolling(find:conversationFind,scroll:scroll,viewportHeight:viewport.size.height))
             .onChange(of: state.navigationFocus) { _, focus in
                 if let focus {
                     if !reduceMotion && (try? state.displaySetting(.animateBubbleNavigation)) == .bool(true) {
@@ -969,7 +997,7 @@ struct ChatView: View {
             catch { errorMessage = error.localizedDescription }
         }
         let editor: AnyView? = inlineDraft.flatMap { pending in
-            guard pending.chatID.utf8.elementsEqual(conversation.id.utf8), pending.nodeID?.utf8.elementsEqual(node.id.utf8) == true else { return nil }
+            guard pending.targets(chatID:conversation.id,nodeID:node.id) else { return nil }
             return AnyView(inlineEditor(pending))
         }
         return MessageView(node: node, siblings: state.siblings(for: node.id), style: state.style, advancedMode: advancedMode, branchSwipeDirection: branchSwipePreference, branchSwipeContext: Data(conversation.id.utf8), generation: generation, inlineEditor: editor, focusBranchEditor: horizontalSizeClass != .compact && state.branchEditorSyncEnabled && (state.chatActiveView == .splitHorizontal || state.chatActiveView == .splitVertical) && state.generation == nil ? {
@@ -1167,6 +1195,7 @@ struct MessageView: View {
     @State private var swipeRejected = false
     @State private var swipePreference: String?
     @Environment(\.markdownSettings) private var markdownSettings
+    @Environment(\.conversationFind) private var conversationFind
     @State private var markdownMode: Bool?
     @State private var markdownRevision = 0
 
@@ -1289,10 +1318,10 @@ struct MessageView: View {
                     }
                     Divider()
                     Button("Markdownで整形",systemImage:"textformat") {
-                        markdownMode = true; markdownRevision += 1
+                        markdownMode = true; conversationFind?.setMode(true,nodeID:node.id,context:branchSwipeContext); markdownRevision += 1
                     }
                     Button("テキストで表示",systemImage:"text.quote") {
-                        markdownMode = false; markdownRevision += 1
+                        markdownMode = false; conversationFind?.setMode(false,nodeID:node.id,context:branchSwipeContext); markdownRevision += 1
                     }
                     Button("詳細設定",systemImage:"slider.horizontal.3",action:openSummary)
                 } label: {
@@ -1413,9 +1442,6 @@ struct MessageView: View {
 
     var body: some View {
         let isBubble = style == .bubbles
-        let summary = summaryInfo?["summary"]
-        let tab = (try? summaryInfo?["tab"]?.string("tab")) ?? "original"
-        let showsSummary = tab != "original" && summaryInfo?["valid"] == .bool(true)
         HStack(spacing: 0) {
             if isBubble && node.role == "user" { Spacer(minLength: 24) }
             VStack(alignment: .leading, spacing: 8) {
@@ -1441,22 +1467,16 @@ struct MessageView: View {
                 }
                 VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 8) {
-                if !node.options.label.isEmpty { Text(node.options.label).font(.subheadline).foregroundStyle(.secondary) }
-                if let generation {
-                    Text(generation.running ? "生成中" : "未保存の生成結果").font(.caption).foregroundStyle(.secondary)
-                    if !generation.output.reasoning.isEmpty { MessagePartView(part: .reasoning(generation.output.reasoning), isGenerating: generation.running) }
-                    if !generation.output.text.isEmpty { MessagePartView(part: .text(generation.output.text), isGenerating: generation.running) }
-                } else if showsSummary, let text = try? summary?["text"]?.string("summary text") {
-                    Text(tab == "compact" ? "圧縮" : "要約").font(.caption).foregroundStyle(.secondary)
-                    MarkdownTextView(text:text)
-                } else if node.options.collapsed {
-                    Text("本文を折りたたみ中").foregroundStyle(.secondary)
-                } else if node.parts.isEmpty {
-                    MarkdownTextView(text: node.content)
-                } else {
-                    ForEach(Array(node.parts.enumerated()), id: \.offset) { _, part in
-                        MessagePartView(part: part)
-                    }
+                ForEach(MessageBodyItem.items(node:node,summaryInfo:summaryInfo,generation:generation,context:branchSwipeContext)) { item in
+                    Group {
+                        switch item.content {
+                        case .markdown(let text,let running): MarkdownTextView(text:text,isGenerating:running)
+                        case .part(let part): MessagePartView(part:part,isGenerating:generation?.running ?? false)
+                        case .label(let text): FindableMessagePlainText(text:text,baseFontSize:15).font(.subheadline).foregroundStyle(.secondary)
+                        case .note(let text): Text(text).font(.caption).foregroundStyle(.secondary)
+                        case .collapsed: Text("本文を折りたたみ中").foregroundStyle(.secondary)
+                        }
+                    }.environment(\.conversationFindBodyID,item.id)
                 }
                 }
                 .simultaneousGesture(TapGesture().onEnded {
@@ -1497,7 +1517,7 @@ struct MessageView: View {
         .padding(.horizontal,16).padding(.vertical,8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .buttonStyle(.plain)
-        .environment(\.markdownPresentation, MarkdownPresentation(mode:markdownMode,revision:markdownRevision,controlsHidden:openSummary != nil))
+        .environment(\.markdownPresentation, MarkdownPresentation(mode:markdownMode ?? conversationFind?.modes[ConversationFindBody.key(node.id,"mode",context:branchSwipeContext)],revision:markdownRevision,controlsHidden:openSummary != nil))
     }
 }
 
@@ -1517,11 +1537,11 @@ struct MessagePartView: View {
             case .toolCall(let id, let name, let arguments):
                 Text("ツール呼び出し: \(name)").font(.headline)
                 Text("ID: \(id)")
-                Text(arguments)
+                FindableMessagePlainText(text:arguments)
             case .toolResult(let callID, let content):
                 Text("ツール結果").font(.headline)
                 Text("呼び出しID: \(callID)")
-                Text(content)
+                FindableMessagePlainText(text:content)
             }
         }
         .font(.body)

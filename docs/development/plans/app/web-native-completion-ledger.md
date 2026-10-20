@@ -1069,3 +1069,16 @@ native WK接続はrequest ID付きのquery/index入力と、件数・選択位�
 担当の実Chrome 6件・共有Vitest 2件・型検査成功を回収した。親は型検査・bundle鮮度、実WKの既存Catalyst接続test 1件を確認した。監査修正後の初回はtest側でlet inputを代入してコンパイル失敗し、Representable全体の更新へ訂正した。最終の再生成bundleでも同じ1件が成功。日本語/重なり一致、rect、props-only更新、React本文更新、clear後本文保持、stale拒否を既存の描画/HTML非実行/copy/fallback確認と同じ経路で検証した。ログ `/private/tmp/weavelet-chat-find-integrated-native-test.log`、`/private/tmp/weavelet-chat-find-final-types.log`、`/private/tmp/weavelet-chat-find-integrated-freshness.log`。変更のない全I/O/暗号化同期の成功結果は再利用した。
 
 これは検索機能全体の完成ではない。iOS検索バーの一致箇所ごとの件数・前後移動、外側scrollとの接続、原文表示と未mount行を含む集計は未完了。raw sourceの一致数を整形後の件数として代用しない。実クラウド/実機条件は引き続き未確認、iPhone Air照会・導入は未実施。main統合も行っていない。
+
+
+## iOSの表示中経路の本文一致検索（2026-10-20）
+
+検索バーを一致箇所ごとの件数・前後移動・強調・外側スクロールへ接続した。原文範囲は既存の共有findTextMatchesから取得し、UIKitはUTF-16範囲の描画と選択矩形だけを担当する。整形本文は同じMarkdownRenderer/chatFindDomで索引を作り、raw sourceの件数へ置き換えない。未mount行も単一の非永続WKで逐次処理し、各行のWebViewを一斉生成しない。索引用WKは既存tokenizer/classifierと同じcontent ruleによってhttp/ws通信を遮断する。250msの取消可能な待機で連続入力時の不要な解析を抑制する。
+
+実描画と索引でMessageBodyItemの本文選択を共用し、選択要約、折りたたみ、label、tool本文、詳細表示、スター絞り込み、編集中本文の除外へ接続した。整形失敗時は実際の原文fallbackを索引へ反映する。キーは会話とnodeのUTF-8を分けてbase64化し、同名nodeや正規化等価なIDを混同しない。会話をまたいで保持中の編集draftの判定は既存MessageDraft.targetsを編集表示と索引除外で共用する。検索・表示mode・geometryはruntimeの状態で、保存形式・I/O・暗号化同期の契約は変更していない。全ノードscopeの既存node単位の結果表示は維持し、そのscopeの本文強調接続は別の残件。
+
+独立Astraで同一選択の再scroll通知不足、Markdown失敗後の索引不一致、別会話にある同名nodeの誤除外、DOM件数変化時の意図しない自動scrollを検出し修正した。実WKからの件数変化も反映し、索引対象外・staleの結果を拒否する。DOM更新のrevisionと明示移動のrevealを分け、同じbody/indexの位置が変わる場合も自動scrollしない。指摘修正と最後の限定差分に対する独立Astra確認は新規なし。
+
+Catalystは関連unique 10件の成功結果を機能群内で回収した（複数run合算であり、最終全10件の一括runではない）。共有索引の原文/整形/Text境界/Unicode/NEL、未mount本文、遅延query拒否、表示選択と会話ID、UIKitの範囲/本文保全・font/幅・選択矩形、原文/整形それぞれの長文末尾への実ScrollViewReader移動と1件wrap、実WK process終了からの原文再索引、既存Markdown描画接続を確認した。初回のSwiftUI testはwindow未接続、scroll fixtureは更新後layout未確定だったため、標準windowと実layout確定で確認するよう直した。font>17の期待はCatalyst標準Text/ScaledMetric/UIFontがaccessibility3でも17である独立実測を根拠に、同じ環境のUIFont標準値との一致へ訂正した。根拠 `/private/tmp/weavelet-font-probe.{swift,txt}`。UI/layout/整形/fallback/境界/最終移動ログは `/private/tmp/weavelet-conversation-find-{ui-layout,rendered-ui,boundary,final-reveal}-test.log`。型検査・bundle鮮度・手書き差分検査も成功。変更のないWeb共有テスト・全I/O/暗号化同期は既存の成功結果を再利用した。
+
+通常画面の手動受入、大規模会話での実測、全ノードscopeの強調、実オンライン相互運用等は未確認/未完了のまま。iPhone Air照会・導入とmain統合は行っていない。

@@ -5,6 +5,7 @@ struct FindableTextView: UIViewRepresentable {
     let text: String
     let matches: [NSRange]
     var selectedIndex = -1
+    var baseFontSize: CGFloat = 17
     var onRect: ((CGRect?) -> Void)? = nil
     @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .body) private var fontSize = 17.0
@@ -12,7 +13,7 @@ struct FindableTextView: UIViewRepresentable {
     func makeUIView(context: Context) -> FindableUITextView { FindableUITextView() }
     func updateUIView(_ view: FindableUITextView, context: Context) {
         view.configure(text: text, matches: matches, selectedIndex: selectedIndex,
-                       font: .systemFont(ofSize: fontSize), dark: colorScheme == .dark, onRect: onRect)
+                       font: .systemFont(ofSize: fontSize * baseFontSize / 17), dark: colorScheme == .dark, onRect: onRect)
     }
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: FindableUITextView, context: Context) -> CGSize? {
         guard let width = proposal.width else { return nil }
@@ -45,6 +46,7 @@ struct FindableTextView: UIViewRepresentable {
     func configure(text: String, matches: [NSRange], selectedIndex: Int, font: UIFont, dark: Bool,
                    onRect: ((CGRect?) -> Void)?) {
         self.onRect = onRect
+        needsRect = true; setNeedsLayout()
         let textChanged = !textStorage.string.utf8.elementsEqual(text.utf8)
         guard textChanged || self.matches != matches || self.selectedIndex != selectedIndex ||
                 appliedFont != font || self.dark != dark else { return }

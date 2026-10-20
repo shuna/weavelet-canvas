@@ -9,6 +9,7 @@ struct ChatSearchView: View {
     let chatIDs: [String]?
     let dismissOnSelection: Bool
     let reportError: ((String) -> Void)?
+    let bodyFind: ConversationFind?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var inlineContentVisible = false
@@ -22,7 +23,7 @@ struct ChatSearchView: View {
     @State private var currentResultIndex = -1
     @FocusState private var queryFocused: Bool
 
-    init(state: ChatState, initialMode: ChatSearchMode = .grep, initialScope: ChatSearchScope = .all, inline: Bool = false, close: (() -> Void)? = nil, library: Bool = false, chatIDs: [String]? = nil, dismissOnSelection: Bool = true, reportError: ((String) -> Void)? = nil, navigate: @escaping (ChatSearchResult, ChatSearchMode) throws -> Void) {
+    init(state: ChatState, initialMode: ChatSearchMode = .grep, initialScope: ChatSearchScope = .all, inline: Bool = false, close: (() -> Void)? = nil, library: Bool = false, chatIDs: [String]? = nil, dismissOnSelection: Bool = true, reportError: ((String) -> Void)? = nil, bodyFind: ConversationFind? = nil, navigate: @escaping (ChatSearchResult, ChatSearchMode) throws -> Void) {
         self.state = state
         self.navigate = navigate
         self.inline = inline
@@ -31,6 +32,7 @@ struct ChatSearchView: View {
         self.chatIDs = chatIDs
         self.dismissOnSelection = dismissOnSelection
         self.reportError = reportError
+        self.bodyFind = bodyFind
         _mode = State(initialValue: initialMode)
         _scope = State(initialValue: initialScope)
     }
@@ -88,9 +90,15 @@ struct ChatSearchView: View {
         } catch { errorMessage = error.localizedDescription }
     }
     private func stepResult(backward: Bool) {
+        if usesBodyFind {
+            do { try state.saveSearchQueryToHistory(query,field:historyField); bodyFind?.step(backward:backward) }
+            catch { errorMessage = error.localizedDescription }
+            return
+        }
         do { activate(try ChatSearch.stepResult(index:currentResultIndex,count:results.count,backward:backward)) }
         catch { errorMessage = error.localizedDescription }
     }
+    private var usesBodyFind: Bool { bodyFind != nil && mode == .nodes && scope == .activePath }
     private var resultControls: some View {
         HStack(spacing:0) {
             Text(results.indices.contains(currentResultIndex) ? "\(currentResultIndex + 1) / \(results.count)" : "0 / \(results.count)")
@@ -142,9 +150,16 @@ struct ChatSearchView: View {
                     }
                     if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
                     if library || !query.isEmpty || starredOnly {
-                        resultControls
-                        ScrollView { LazyVStack(alignment:.leading,spacing:0) { resultRows } }
-                            .frame(maxHeight:library ? .infinity : 180).buttonStyle(.plain)
+                        if usesBodyFind, let bodyFind {
+                            ConversationFindControls(find:bodyFind) { backward in
+                                do { try state.saveSearchQueryToHistory(query,field:historyField); bodyFind.step(backward:backward) }
+                                catch { errorMessage = error.localizedDescription }
+                            }.disabled(state.generation != nil)
+                        } else {
+                            resultControls
+                            ScrollView { LazyVStack(alignment:.leading,spacing:0) { resultRows } }
+                                .frame(maxHeight:library ? .infinity : 180).buttonStyle(.plain)
+                        }
                     }
                 }.padding(.horizontal,12).padding(.bottom,8).background(.bar)
                     .compositingGroup()
@@ -195,6 +210,8 @@ struct ChatSearchView: View {
             }
         }
         .task(id: request) {
+            bodyFind?.configure(query:query,enabled:usesBodyFind,starredOnly:starredOnly)
+            if usesBodyFind { results = []; currentResultIndex = -1; errorMessage = nil; return }
             do {
                 guard let source = state.exchange?.source else { results = []; return }
                 let found = try ChatSearch.results(in: source, query: query, mode: mode, scope: scope,
@@ -211,6 +228,7 @@ struct ChatSearchView: View {
             } catch { results = []; currentResultIndex = -1; errorMessage = error.localizedDescription }
         }
         .onDisappear {
+            bodyFind?.configure(query:"",enabled:false)
             do { try state.saveSearchQueryToHistory(query,field:historyField) }
             catch { reportError?(error.localizedDescription) }
         }
