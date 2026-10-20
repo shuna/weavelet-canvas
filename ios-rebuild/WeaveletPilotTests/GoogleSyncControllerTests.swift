@@ -574,6 +574,7 @@ import XCTest
         try state.startGeneration(input:"still generating",record:record,client:client,nodeIDs:["generation-user"])
         let generation = try XCTUnwrap(state.generation)
         let snapshot = try state.publicationSnapshot()
+        XCTAssertThrowsError(try state.clearConversations())
         // Web navigation and native layout-only updates may run while generation continues.
         try state.navigate(chatID: state.selectedConversationID, source: .search)
         try state.moveNavigation(.back)

@@ -75,3 +75,8 @@ export function deleteLibraryChats(chats: ChatInterface[], indices: number[], st
   if (!remaining.length) return { chats: [create()], contentStore };
   return { chats: remaining, contentStore };
 }
+
+// Clear conversations and folders together; clipboard-held content remains referenced.
+export function clearLibraryChats(chats: ChatInterface[], store: ContentStoreData, create: () => ChatInterface) {
+  return { ...deleteLibraryChats(chats, chats.map((_, index) => index), store, create), folders: {} };
+}

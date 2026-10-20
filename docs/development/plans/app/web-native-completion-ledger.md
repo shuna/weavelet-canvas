@@ -1439,3 +1439,12 @@ native設定に検索・実行形式・並び順と昇降順・取消・追加�
 独立Astraはnull/旧応答/取消表示/URL変換とsize取得方向/残存file/重複完了表示を指摘し、修正後の限定再監査は新規P1/P2なし。ログは/private/tmp/weavelet-hf-search-{generate,types-final,web-build,web-build-final,web-final,native,native-final,native-audit-fixes,native-orphan}.log。
 
 隔離FAKE Catalystの設定から実公開APIを検索し、DevQuasar-11候補Q4-K-M 258MBとHuggingFaceTB候補Q8-0 369MBの到着、選択欄と取得入口を実画面で確認した。認証・モデル本体の取得は実行していない。合成小GGUFは取得/配置境界の証拠で実推論の証拠ではない。終了後process不在とbuilt Info.plistのbyte一致復元を確認。実Range/resume・大容量・GGUF実推論・実cloud相互運用・狭幅/文字拡大/VoiceOver等の最終受入は未完了。追加照合でnative言語選択と会話/フォルダー全消去も残件と確認した。iPhone照会/導入、push/main統合は行っていない。
+## 会話・フォルダー全消去の共有（2026-10-21）
+
+実Web ClearConversationはuseInitialiseNewChat→removeChats全ID→setFolders({})であり、本文全消去/設定初期化ではない。既存deleteLibraryChatsを使うclearLibraryChatsへ処理をまとめ、Web実storeとnative libraryOperation.clearで共用した。Webは会話とfoldersを一回のstate更新へまとめ、既存のAI task取消・削除対象履歴除外・node map更新・選択初期化を維持する。bootstrap用useInitialiseNewChatは変更しない。nativeは既存projection/changesとapplyLibraryのatomic保存を通し、新規会話を選択する。folder metadataはJSへ渡さずkeyだけ投影して削除し、他の未知root/設定/clipboardを保つ。生成結果の未保存を防ぐためnativeの全消去はhasGenerations中に拒否する。Webは従来同様に対象生成を取り消して削除する。設定に明示確認と取消、保存失敗時の同sheet内エラー表示を追加した。追加依存・保存/sync schema変更はない。
+
+Web関連22件・型検査・Vite build・bundle鮮度成功。Catalyst ChatLibraryTests初回8件中7成功/新case1失敗。差の原本snapshot調査ではlastContentEditedAt固定nowの追加のみであり、実Web chat-sliceのrecordChatEdits/folder編集と共有document処理による更新だった。さらにraw snapshotとrecords reader結果の直接一致は、実records.tsのwithoutBrowserLocalSettingsと本文ID再採番に反する期待だった。新testを、編集時刻以外の非対象全root raw一致、全snapshotのlocal再起動一致、全recordのtoRecords→fromRecords→toRecords一致へ訂正した。修正した新caseと生成中保全の2件が成功し、未変更の7件を再利用、固有9件成功を確認。一括9件成功とはしない。保存失敗時のsource/snapshot/disk/選択完全不変、retry、新規一会話と空folders、undo不能、clipboard/全設定/未知項目、生成中拒否と既存生成保持を検証した。変更しない暗号化sync/保存schemaの全項目I/O・実Webとの暗号化wireの成功証拠は再利用し、実オンライン確認を追加実施したとは扱わない。
+
+独立Astraの機能群監査と期待訂正の限定監査は新規P1/P2なし。全消去を初期化として設定/clipboardまで消す別実装は追加していない。ログは/private/tmp/weavelet-clear-library-{generate,web,types,build,native,isolate,native-final,ui-build}.log。isolateは原因調査用の失敗runであり成功数に含めない。実cloud相互運用・実端末/狭幅/文字拡大/VoiceOver等の最終受入は引き続き未完了。iPhone導入・push/main統合は行っていない。
+
+Catalyst final UI build succeeded. Isolated FAKE settings showed the all-conversations/folders entry, the explicit scope and irreversible-action warning, and cancellation returning to settings. The destructive confirmation was not exercised through the UI; execution and failure preservation are covered by the automated boundary tests above. The exact app process was stopped and built Info.plist was restored byte-for-byte.

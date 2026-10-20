@@ -1,6 +1,6 @@
 import { setChatNodeMapState, updateChatNodeField, type NodeMapField } from '@utils/nodeOptions';
 import { applyFolderOperation } from '@utils/chatFolders';
-import { addLibraryChat, deleteLibraryChats, duplicateLibraryChat, renameLibraryChat } from '@utils/chatLibrary';
+import { addLibraryChat, clearLibraryChats, deleteLibraryChats, duplicateLibraryChat, renameLibraryChat } from '@utils/chatLibrary';
 import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
 import { v4 as uuidv4 } from 'uuid';
 import { StoreSlice, StoreState } from './store';
@@ -16,6 +16,7 @@ import { recordChatEdits, hasFolderContentEdits } from './chat-edit-time';
 
 export interface ChatSlice {
   lastContentEditedAt?: number;
+  clearConversations: () => void;
   removeChats: (input: { chatIds: readonly string[] }) => { removedChatIds: string[]; missingChatIds: string[]; selectedChatId: string };
   createChat: (input: { folderId?: string }) => { status: 'created'; chatId: string } | { status: 'folder-missing' | 'not-ready' };
   duplicateChat: (input: { chatId: string; scope: 'all' | 'activePath' }) => { status: 'created'; chatId: string } | { status: 'chat-missing' };
@@ -116,29 +117,32 @@ export const createChatSlice: StoreSlice<ChatSlice> = (setState, get) => {
     get().setCurrentChatIndex(0);
     return { status: 'created' as const, chatId: chat.id };
   };
+  const removeChats = (chatIds: readonly string[], clear = false) => {
+    const ids = new Set(chatIds);
+    const previous = get().chats ?? [];
+    const removedChatIds = previous.filter(chat => ids.has(chat.id)).map(chat => chat.id);
+    const missingChatIds = [...ids].filter(id => !removedChatIds.includes(id));
+    if (!removedChatIds.length && !clear) return { removedChatIds, missingChatIds, selectedChatId: previous[get().currentChatIndex]?.id ?? '' };
+    const state = get();
+    const selected = previous.flatMap((chat, index) => ids.has(chat.id) ? [index] : []);
+    const cleared = clear ? clearLibraryChats(previous, state.contentStore, () => generateDefaultChat()) : undefined;
+    const { chats, contentStore } = cleared ?? deleteLibraryChats(previous, selected, state.contentStore, () => generateDefaultChat());
+    invalidateAiTasks(removedChatIds);
+    const touches = (snapshot: StoreState['branchHistoryPast'][number]) => snapshot.chats.some(chat => ids.has(chat.id));
+    set({ chats, contentStore, ...(cleared ? { folders: cleared.folders } : {}),
+      generatingSessions: Object.fromEntries(Object.entries(state.generatingSessions).filter(([, session]) => !ids.has(session.chatId))),
+      branchHistoryPast: state.branchHistoryPast.filter(snapshot => !touches(snapshot)),
+      branchHistoryFuture: state.branchHistoryFuture.filter(snapshot => !touches(snapshot)),
+      collapsedNodeMaps: buildNodeMaps(chats, 'collapsedNodes'),
+      omittedNodeMaps: buildNodeMaps(chats, 'omittedNodes'),
+      protectedNodeMaps: buildNodeMaps(chats, 'protectedNodes'),
+    });
+    get().setCurrentChatIndex(0);
+    return { removedChatIds, missingChatIds, selectedChatId: chats[0].id };
+  };
   return {
-    removeChats: ({ chatIds }) => {
-      const ids = new Set(chatIds);
-      const previous = get().chats ?? [];
-      const removedChatIds = previous.filter(chat => ids.has(chat.id)).map(chat => chat.id);
-      const missingChatIds = [...ids].filter(id => !removedChatIds.includes(id));
-      if (!removedChatIds.length) return { removedChatIds, missingChatIds, selectedChatId: previous[get().currentChatIndex]?.id ?? '' };
-      const state = get();
-      const selected = previous.flatMap((chat, index) => ids.has(chat.id) ? [index] : []);
-      const { chats, contentStore } = deleteLibraryChats(previous, selected, state.contentStore, () => generateDefaultChat());
-      invalidateAiTasks(removedChatIds);
-      const touches = (snapshot: StoreState['branchHistoryPast'][number]) => snapshot.chats.some(chat => ids.has(chat.id));
-      set({ chats, contentStore,
-        generatingSessions: Object.fromEntries(Object.entries(state.generatingSessions).filter(([, session]) => !ids.has(session.chatId))),
-        branchHistoryPast: state.branchHistoryPast.filter(snapshot => !touches(snapshot)),
-        branchHistoryFuture: state.branchHistoryFuture.filter(snapshot => !touches(snapshot)),
-        collapsedNodeMaps: buildNodeMaps(chats, 'collapsedNodes'),
-        omittedNodeMaps: buildNodeMaps(chats, 'omittedNodes'),
-        protectedNodeMaps: buildNodeMaps(chats, 'protectedNodes'),
-      });
-      get().setCurrentChatIndex(0);
-      return { removedChatIds, missingChatIds, selectedChatId: chats[0].id };
-    },
+    removeChats: ({ chatIds }) => removeChats(chatIds),
+    clearConversations: () => { removeChats((get().chats ?? []).map(chat => chat.id), true); },
     createChat: ({ folderId }) => {
       const { chats, folders } = get();
       if (!chats) return { status: 'not-ready' };

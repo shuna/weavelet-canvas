@@ -21616,6 +21616,9 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       return { chats: [create()], contentStore };
     return { chats: remaining, contentStore };
   }
+  function clearLibraryChats(chats, store, create) {
+    return { ...deleteLibraryChats(chats, chats.map((_23, index) => index), store, create), folders: {} };
+  }
 
   // shared/google-sync/library.ts
   function libraryOperation(json) {
@@ -21646,6 +21649,9 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     };
     let next = { chats, contentStore };
     switch (operation.type) {
+      case "clear":
+        next = clearLibraryChats(chats, contentStore, create);
+        break;
       case "create":
         next = { chats: addLibraryChat(chats, create), contentStore };
         break;
@@ -21667,7 +21673,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       default:
         throw new Error("Unknown library operation.");
     }
-    return JSON.stringify(diffJSONChanges({ chats, contentStore }, JSON.parse(JSON.stringify(next))));
+    return JSON.stringify(diffJSONChanges({ chats, contentStore, ...operation.type === "clear" ? { folders: input.folders ?? {} } : {} }, JSON.parse(JSON.stringify(next))));
   }
   var libraryDefaults = (value = "{}") => {
     const input = typeof value === "string" ? JSON.parse(value) : value;

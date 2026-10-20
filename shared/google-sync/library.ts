@@ -1,4 +1,4 @@
-import { addLibraryChat, createLibraryChat, deleteLibraryChats, duplicateLibraryChat, renameLibraryChat } from '../../src/utils/chatLibrary';
+import { addLibraryChat, clearLibraryChats, createLibraryChat, deleteLibraryChats, duplicateLibraryChat, renameLibraryChat } from '../../src/utils/chatLibrary';
 import { newChatConfig, newChatDefaults, type NewChatDefaults } from '../../src/utils/newChatDefaults';
 import { diffJSONChanges } from '../../src/utils/jsonChanges';
 import type { ChatInterface, ConfigInterface, ImageDetail } from '../../src/types/chat';
@@ -8,9 +8,10 @@ import type { LocalContextCapabilities, LocalModelState } from '../../src/utils/
 import type { ReasoningModelState } from '../../src/utils/modelReasoning';
 
 type LibraryInput = {
+  folders?: Record<string, unknown>;
   chats: ChatInterface[];
   contentStore: ContentStoreData;
-  operation: { type: 'create' | 'rename' | 'duplicate' | 'delete'; id?: string; newID?: string; ids?: string[]; title?: string; folder?: string };
+  operation: { type: 'create' | 'rename' | 'duplicate' | 'delete' | 'clear'; id?: string; newID?: string; ids?: string[]; title?: string; folder?: string };
   defaults?: { config: ConfigInterface; imageDetail: ImageDetail };
 };
 export function libraryOperation(json: string): string {
@@ -30,8 +31,9 @@ export function libraryOperation(json: string): string {
     return createLibraryChat(operation.newID!, title, input.defaults.config,
       input.defaults.imageDetail, input.defaults.config.systemPrompt, operation.folder);
   };
-  let next = { chats, contentStore };
+  let next: { chats: ChatInterface[]; contentStore: ContentStoreData; folders?: Record<string, unknown> } = { chats, contentStore };
   switch (operation.type) {
+    case 'clear': next = clearLibraryChats(chats, contentStore, create); break;
     case 'create': next = { chats: addLibraryChat(chats, create), contentStore }; break;
     case 'rename':
       if (typeof operation.title !== 'string') throw new Error('Invalid chat title.');
@@ -46,7 +48,7 @@ export function libraryOperation(json: string): string {
     default: throw new Error('Unknown library operation.');
   }
   // Match the JSON boundary: optional undefined fields are removals, never valueless set patches.
-  return JSON.stringify(diffJSONChanges({ chats, contentStore }, JSON.parse(JSON.stringify(next))));
+  return JSON.stringify(diffJSONChanges({ chats, contentStore, ...(operation.type === 'clear' ? { folders: input.folders ?? {} } : {}) }, JSON.parse(JSON.stringify(next))));
 }
 
 type LibraryDefaultsInput = {

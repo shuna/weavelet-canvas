@@ -138,6 +138,26 @@ describe('chat library operations', () => {
 });
 
 describe('chat removal', () => {
+  it('clears folders and conversations in one update while preserving clipboard and settings', () => {
+    const { get, writes } = fixture();
+    get().setFolders({ folder: { id: 'folder', name: 'Folder', order: 0, expanded: true } });
+    const root = get().chats![0].branchTree!.rootId;
+    get().copyBranchSequence({ chatId: 'a', fromNodeId: root, toNodeId: root });
+    const clipboard = get().branchClipboard, config = get().defaultChatConfig;
+    const beforeWrites = writes.length;
+    get().clearConversations();
+    expect(writes.length - beforeWrites).toBe(1);
+    expect(get().folders).toEqual({});
+    expect(get().chats).toHaveLength(1);
+    expect(get().chats![0].messages).toEqual([]);
+    expect(get().branchClipboard).toBe(clipboard);
+    expect(get().defaultChatConfig).toBe(config);
+    expect(resolveContent(get().contentStore, clipboard!.nodes[root].contentHash)).toEqual([{ type: 'text', text: 'a' }]);
+    get().setChats([]);
+    get().clearConversations();
+    expect(get().chats).toHaveLength(1);
+  });
+
   it('removes only requested IDs, keeps clipboard content, and initializes the final empty library', () => {
     const { get } = fixture();
     const root = get().chats![0].branchTree!.rootId;

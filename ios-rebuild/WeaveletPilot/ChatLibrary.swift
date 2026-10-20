@@ -59,6 +59,12 @@ enum ChatLibrary {
         ]), defaults: defaults)
     }
 
+    static func clear(in source: OrderedJSON, replacementID: String, defaults: ChatDefaults) throws -> OrderedJSON {
+        try apply(in: source, operation: .object([
+            .init(key: "type", value: .string("clear")), .init(key: "newID", value: .string(replacementID))
+        ]), defaults: defaults)
+    }
+
     private static func apply(in source: OrderedJSON, operation: OrderedJSON, defaults: ChatDefaults? = nil) throws -> OrderedJSON {
         var projection = SharedWebProjection()
         var chats: [OrderedJSON] = []
@@ -68,6 +74,12 @@ enum ChatLibrary {
             .init(key: "contentStore", value: try projection.store(source.required("contentStore"))),
             .init(key: "operation", value: operation)
         ])
+        if operation["type"] == .string("clear") {
+            // Only folder keys are needed to remove them; metadata stays outside JS.
+            input = input.replacing("folders", with: .object(try (source["folders"] ?? .object([])).object("folders").map {
+                .init(key: $0.key, value: .null)
+            }))
+        }
         if let defaults {
             input = input.replacing("defaults", with: .object([
                 .init(key: "config", value: try projection.config(defaults.config)), .init(key: "imageDetail", value: .string(defaults.imageDetail))

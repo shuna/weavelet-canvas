@@ -85,6 +85,43 @@ final class ChatLibraryTests: XCTestCase {
         }
     }
 
+    func testClearConversationsPreservesAllOtherRootsAndSaveFailureIsAtomic() throws {
+        let library = try store()
+        let state = ChatState(store:library)
+        let root = URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let corpus = try OrderedJSON.decode(Data(contentsOf:root.appendingPathComponent("tests/fixtures/web-native/io-corpus.json"))).required("syncSnapshot")
+        try state.applySnapshot(corpus)
+        let before = try state.publicationSnapshot(), source = try XCTUnwrap(state.exchange).source
+        let disk = try Data(contentsOf:library.fileURL), selected = state.selectedConversationID
+        let directory = library.fileURL.deletingLastPathComponent()
+        try FileManager.default.setAttributes([.posixPermissions:0o500],ofItemAtPath:directory.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions:0o700],ofItemAtPath:directory.path) }
+        XCTAssertThrowsError(try state.clearConversations(replacementID:"clear-new",now:1700000000123))
+        XCTAssertEqual(try state.publicationSnapshot(),before)
+        XCTAssertEqual(state.exchange?.source,source)
+        XCTAssertEqual(state.selectedConversationID,selected)
+        XCTAssertEqual(try Data(contentsOf:library.fileURL),disk)
+        try FileManager.default.setAttributes([.posixPermissions:0o700],ofItemAtPath:directory.path)
+        try state.clearConversations(replacementID:"clear-new",now:1700000000123)
+        let after = try state.publicationSnapshot(), roots = try after.required("state")
+        let changed = ["chats","folders","contentStore"]
+        // Web recordChatEdits and folder edits stamp this field for content changes.
+        let expected = try before.required("state").replacing("lastContentEditedAt",with:.number("1700000000123"))
+        XCTAssertEqual(OrderedJSON.object(try roots.object("state").filter { !changed.contains($0.key.text) }),
+                       .object(try expected.object("state").filter { !changed.contains($0.key.text) }))
+        XCTAssertEqual(roots["folders"],.object([]))
+        XCTAssertEqual(try roots.required("chats").array("chats").count,1)
+        XCTAssertEqual(try roots.required("chats").array("chats")[0]["id"],.string("clear-new"))
+        XCTAssertEqual(state.selectedConversationID,"clear-new")
+        XCTAssertFalse(state.canUndoMessageEdit)
+        XCTAssertEqual(try ChatState(store:library).publicationSnapshot(),after)
+        // The actual Web wire excludes browser-local settings and remaps content IDs.
+        // Local restart above checks every raw field; the wire must reproduce every record.
+        let records = try SyncRecords.toRecords(after)
+        let restored = try SyncRecords.fromRecords(records)
+        XCTAssertEqual(try SyncRecords.canonical(SyncRecords.toRecords(restored)),try SyncRecords.canonical(records))
+    }
+
     func testRemainingViewingStatesAndStyleSurviveLibraryMutations() throws {
         let input = try fixture().required("cases").array("cases")[0].required("input")
         let store = try store()

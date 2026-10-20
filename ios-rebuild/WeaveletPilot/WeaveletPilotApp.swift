@@ -134,6 +134,8 @@ struct ChatView: View {
     @State private var defaultConfigDraft: ChatConfigDraft?
     @State private var settingsConfigDraft: ChatConfigDraft?
     @State private var showsSettings = false
+    @State private var confirmsClearConversations = false
+    @State private var clearConversationError: String?
     @State private var showsModelInspector = false
     @State private var isModelInspectorClosing = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
@@ -447,6 +449,8 @@ struct ChatView: View {
                     }
                     Section("同期・データ") {
                         syncButtons
+                        Button("すべての会話とフォルダーを消去",role:.destructive) { confirmsClearConversations = true }
+                            .frame(minHeight:44).disabled(state.exchange == nil || state.hasGenerations)
                     }
                     Section("評価") {
                         NavigationLink("評価設定") { EvaluationSettingsView(state:state) }
@@ -464,6 +468,18 @@ struct ChatView: View {
                 .sheet(item: $defaultConfigDraft) { draft in ChatConfigView(state:state,draft:draft) }
                 .sheet(item: $settingsConfigDraft) { draft in ChatConfigView(state:state,draft:draft) }
                 .sheet(isPresented: $showsRemoteSettings) { RemoteSettingsView(state: state) }
+                .confirmationDialog("すべての会話とフォルダーを消去しますか？",isPresented:$confirmsClearConversations,titleVisibility:.visible) {
+                    Button("すべて消去",role:.destructive) {
+                        do { try state.clearConversations() }
+                        catch { clearConversationError = error.localizedDescription }
+                    }
+                    Button("キャンセル",role:.cancel) { }
+                } message: {
+                    Text("会話とフォルダーを消去し、新しい会話を作成します。設定・モデル・クリップボードは保持します。この操作は元に戻せません。")
+                }
+                .alert("消去できませんでした",isPresented:Binding(get:{ clearConversationError != nil },set:{ if !$0 { clearConversationError = nil } })) {
+                    Button("閉じる",role:.cancel) { clearConversationError = nil }
+                } message: { Text(clearConversationError ?? "") }
                 .navigationTitle("設定")
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完了") { showsSettings = false } } }
             }

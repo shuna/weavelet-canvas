@@ -2884,6 +2884,14 @@ final class ChatState: ObservableObject {
         try applyLibrary(source, selectedID: first, now: now)
     }
 
+    func clearConversations(replacementID: String = UUID().uuidString.lowercased(), now: Double = Date().timeIntervalSince1970 * 1000) throws {
+        guard !hasGenerations else { throw ExchangeError.invalid("生成結果を保存してから会話を消去してください") }
+        guard let exchange else { throw ExchangeError.invalid("保存済みの会話がありません") }
+        let defaults = try ChatDefaults.saved(in: (document ?? SyncDocument(v3:exchange.source)).snapshot.required("state"))
+        let source = try ChatLibrary.clear(in:exchange.source,replacementID:replacementID,defaults:defaults)
+        try applyLibrary(source,selectedID:replacementID,now:now)
+    }
+
     func folderRows() throws -> [ChatFolderRow] {
         guard let exchange else { return [] }
         return try ChatFolders.rows(in: exchange.source)
