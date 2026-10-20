@@ -7,9 +7,10 @@ import WebKit
     func testBundledRendererReceivesLiteralTextAndNativeDisplayUpdates() async throws {
         let measured = expectation(description: "Web content height reaches native")
         var height = 0.0, hasMeasured = false, failure: String?
-        let literal = "日本語🙂 </script><script>window.injected=true</script>"
+        var findReports: [MarkdownFindResult] = []
+        let literal = "日本語🙂 </script><script>window.injected=true</script> banana İxİ"
         var input: [String: Any] = ["content": "# Heading\n\n" + literal + "\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n```swift\nlet value = 1\n```\n\n$$x^2$$", "inlineLatex": true, "markdownMode": true, "fontSize": 17, "dark": false, "policy": "always", "isGenerating": false, "isDesktopLike": true, "saveData": false]
-        let parent = MarkdownWebView(input: input, height: Binding(get: { height }, set: { height = $0; if !hasMeasured { hasMeasured = true; measured.fulfill() } }), failure: Binding(get: { failure }, set: { failure = $0 }))
+        let parent = MarkdownWebView(input: input, height: Binding(get: { height }, set: { height = $0; if !hasMeasured { hasMeasured = true; measured.fulfill() } }), failure: Binding(get: { failure }, set: { failure = $0 }),onFind:{ findReports.append($0) })
         let coordinator = MarkdownWebView.Coordinator(parent)
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
@@ -28,6 +29,37 @@ import WebKit
         XCTAssertTrue((result?["text"] as? String)?.contains("日本語🙂") == true)
         XCTAssertEqual(result?["table"] as? Bool, true); XCTAssertEqual(result?["math"] as? Bool, true)
         XCTAssertEqual(result?["code"] as? Bool, true); XCTAssertEqual(result?["injected"] as? Bool, false)
+        let renderedFind = MarkdownFindRequest(query:"日本語")
+        coordinator.parent.find = renderedFind
+        coordinator.update()
+        let found = XCTNSPredicateExpectation(predicate:NSPredicate { _, _ in
+            findReports.last?.requestID == renderedFind.requestID && findReports.last?.count == 1 && findReports.last?.rect != nil
+        },object:nil)
+        await fulfillment(of:[found],timeout:5)
+        XCTAssertEqual(findReports.last?.selectedIndex,0)
+        XCTAssertGreaterThan(findReports.last?.rect?.height ?? 0,0)
+        // Reapply marks after props-only updates even when React keeps the same content DOM.
+        var appearance = input
+        appearance["dark"] = true
+        appearance["fontSize"] = 23
+        let appearanceReports = findReports.count
+        coordinator.parent = MarkdownWebView(input:appearance,height:parent.$height,failure:parent.$failure,find:renderedFind,onFind:parent.onFind)
+        coordinator.update()
+        let retained = XCTNSPredicateExpectation(predicate:NSPredicate { _, _ in
+            findReports.count > appearanceReports && findReports.last?.requestID == renderedFind.requestID && findReports.last?.count == 1 && findReports.last?.rect != nil
+        },object:nil)
+        await fulfillment(of:[retained],timeout:5)
+        let retainedMarks = try await view.evaluateJavaScript("document.querySelectorAll('mark.chat-find-highlight').length") as? Int
+        XCTAssertEqual(retainedMarks,1)
+        let priorReports = findReports.count
+        let barrierFind = MarkdownFindRequest(query:"日本語")
+        coordinator.parent.find = barrierFind
+        _ = try await view.callAsyncJavaScript("window.webkit.messageHandlers.markdown.postMessage({type:'find',requestID:'stale',count:999,selectedIndex:0,rect:null}); window.weaveletMarkdown.find(request);",arguments:["request":barrierFind.arguments],in:nil,contentWorld:.page)
+        let receivedBarrier = XCTNSPredicateExpectation(predicate:NSPredicate { _, _ in
+            findReports.last?.requestID == barrierFind.requestID
+        },object:nil)
+        await fulfillment(of:[receivedBarrier],timeout:5)
+        XCTAssertFalse(findReports.dropFirst(priorReports).contains { $0.requestID == "stale" || $0.count == 999 })
         // Verify the OS clipboard boundary without retaining or exposing the user's previous clipboard.
         let clipboard = UIPasteboard.general
         let previousItems = clipboard.items
@@ -42,6 +74,20 @@ import WebKit
         XCTAssertTrue((updated?["text"] as? String)?.contains(literal) == true)
         XCTAssertEqual(updated?["font"] as? String, "28px")
         XCTAssertEqual(updated?["table"] as? Bool, false); XCTAssertEqual(updated?["injected"] as? Bool, false)
+        let overlappingFind = MarkdownFindRequest(query:"ana",index:1)
+        coordinator.parent.find = overlappingFind
+        coordinator.update()
+        let overlapping = XCTNSPredicateExpectation(predicate:NSPredicate { _, _ in
+            findReports.last?.requestID == overlappingFind.requestID && findReports.last?.count == 2 && findReports.last?.selectedIndex == 1
+        },object:nil)
+        await fulfillment(of:[overlapping],timeout:5)
+        let searchedText = try await view.evaluateJavaScript("document.getElementById('root').textContent") as? String
+        XCTAssertEqual(searchedText,literal)
+        coordinator.parent.find = nil
+        coordinator.update()
+        let cleared = try await view.evaluateJavaScript("({text:document.getElementById('root').textContent,count:document.querySelectorAll('mark.chat-find-highlight').length})") as? [String:Any]
+        XCTAssertEqual(cleared?["text"] as? String,literal)
+        XCTAssertEqual(cleared?["count"] as? Int,0)
         coordinator.webViewWebContentProcessDidTerminate(view)
         XCTAssertEqual(failure, "本文表示が終了しました。原文を表示しています。")
     }

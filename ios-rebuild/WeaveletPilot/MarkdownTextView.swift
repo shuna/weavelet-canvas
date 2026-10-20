@@ -76,11 +76,27 @@ struct MarkdownTextView: View {
     }
 }
 
+struct MarkdownFindRequest: Equatable {
+    let query: String
+    var index = 0
+    var requestID = UUID().uuidString
+    var arguments: [String:Any] { ["query":query,"index":index,"requestID":requestID] }
+}
+struct MarkdownFindResult {
+    let requestID: String
+    let count: Int
+    let selectedIndex: Int?
+    let rect: CGRect?
+    var error: String? = nil
+}
+
 // The bundled Web renderer owns parsing and streaming rules; WebKit handles text layout and selection.
 struct MarkdownWebView: UIViewRepresentable {
     let input: [String: Any]
     @Binding var height: Double
     @Binding var failure: String?
+    var find: MarkdownFindRequest? = nil
+    var onFind: ((MarkdownFindResult) -> Void)? = nil
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
@@ -115,14 +131,40 @@ struct MarkdownWebView: UIViewRepresentable {
         var resourceRoot: URL?
         var ready = false
         private var lastInput: Data?
+        private var lastFind: MarkdownFindRequest?
         init(_ parent: MarkdownWebView) { self.parent = parent }
         func update() {
-            guard ready, let webView, let encoded = try? JSONSerialization.data(withJSONObject: parent.input, options: [.sortedKeys]), encoded != lastInput else { return }
-            lastInput = encoded
-            webView.callAsyncJavaScript("window.weaveletMarkdown.update(input)", arguments: ["input": parent.input], in: nil, in: .page) { [weak self] result in
-                guard let self, self.lastInput == encoded else { return }
-                if case .failure = result { self.parent.failure = "本文を整形できませんでした。原文を表示しています。" }
+            guard ready, let webView else { return }
+            if let encoded = try? JSONSerialization.data(withJSONObject:parent.input,options:[.sortedKeys]), encoded != lastInput {
+                lastInput = encoded
+                webView.callAsyncJavaScript("window.weaveletMarkdown.update(input)", arguments:["input":parent.input], in:nil, in:.page) { [weak self] result in
+                    guard let self, self.lastInput == encoded else { return }
+                    if case .failure = result { self.parent.failure = "本文を整形できませんでした。原文を表示しています。" }
+                }
             }
+            guard parent.find != lastFind else { return }
+            lastFind = parent.find
+            let submittedFind = parent.find
+            let arguments = submittedFind?.arguments ?? ["query":"","index":0,"requestID":""]
+            webView.callAsyncJavaScript("window.weaveletMarkdown.find(request)",arguments:["request":arguments],in:nil,in:.page) { [weak self] result in
+                guard let self, self.parent.find == submittedFind, let request = submittedFind else { return }
+                if case .failure = result {
+                    self.parent.onFind?(.init(requestID:request.requestID,count:0,selectedIndex:nil,rect:nil,error:"本文内を検索できませんでした。"))
+                }
+            }
+        }
+        private func receiveFind(_ body:[String:Any]) {
+            guard let request = parent.find, body["requestID"] as? String == request.requestID,
+                  let count = body["count"] as? Int, count >= 0 else { return }
+            let selected = body["selectedIndex"] as? Int
+            let index = selected.flatMap { (0..<count).contains($0) ? $0 : nil }
+            var rect: CGRect?
+            if index != nil, let value = body["rect"] as? [String:Double],
+               let x = value["x"], let y = value["y"], let width = value["width"], let height = value["height"],
+               [x,y,width,height].allSatisfy({ $0.isFinite }), width >= 0, height >= 0 {
+                rect = CGRect(x:x,y:y,width:width,height:height)
+            }
+            parent.onFind?(.init(requestID:request.requestID,count:count,selectedIndex:index,rect:rect))
         }
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { ready = true; update() }
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { parent.failure = "本文を整形できませんでした。原文を表示しています。" }
@@ -135,6 +177,7 @@ struct MarkdownWebView: UIViewRepresentable {
             switch type {
             case "height":
                 if let value = body["value"] as? Double, value.isFinite, value > 0, abs(parent.height - value) > 0.5 { parent.height = value }
+            case "find": receiveFind(body)
             case "copy":
                 if let text = body["text"] as? String { UIPasteboard.general.string = text }
             case "link":
