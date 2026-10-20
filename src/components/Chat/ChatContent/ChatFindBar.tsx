@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useWorkspaceStore } from '@store/workspaceScope';
 import { SearchResult, searchBranchNodes } from '@utils/branchSearch';
@@ -59,6 +59,10 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const marksRef = useRef<ChatFindMatch[]>([]);
+  const searchRootRef = useRef<HTMLElement | null>(null);
+  const selectedIndexRef = useRef(currentIndex);
+  selectedIndexRef.current = currentIndex;
+  const nodeHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   // "allNodes" mode state
   const [nodeResults, setNodeResults] = useState<SearchResult[]>([]);
@@ -128,9 +132,10 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
   // ---------- DOM-based search ("visible" scope) ----------
 
   const clearHighlights = useCallback(() => {
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
-    clearChatFind(scroller);
+    clearTimeout(nodeHighlightTimeoutRef.current);
+    const scroller = searchRootRef.current ?? scrollerRef.current;
+    if (scroller) clearChatFind(scroller);
+    searchRootRef.current = null;
     marksRef.current = [];
   }, [scrollerRef]);
 
@@ -144,7 +149,17 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
         return;
       }
 
-      const marks = highlightChatFind(scroller, q);
+      searchRootRef.current = scroller;
+      const refresh = () => {
+        const marks = highlightChatFind(scroller, q, refresh);
+        const index = marks.length ? Math.max(0, Math.min(selectedIndexRef.current, marks.length - 1)) : -1;
+        marksRef.current = marks;
+        selectedIndexRef.current = index;
+        setMatchCount(marks.length);
+        setCurrentIndex(index);
+        selectChatFindMatch(marks, index);
+      };
+      const marks = highlightChatFind(scroller, q, refresh);
 
       marksRef.current = marks;
       setMatchCount(marks.length);
@@ -193,7 +208,8 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
     (result: SearchResult, q: string) => {
       if (navigateToNode({ chatId: result.chatId, nodeId: result.nodeId, source: 'search', history: 'push', focus: 'none' }) !== 'reached') return;
       // After path switch, highlight in DOM with a short delay for re-render
-      setTimeout(() => {
+      clearTimeout(nodeHighlightTimeoutRef.current);
+      nodeHighlightTimeoutRef.current = setTimeout(() => {
         applyDomHighlightAndScroll(q);
       }, 200);
     },
@@ -207,7 +223,13 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
       const scroller = scrollerRef.current;
       if (!scroller || !q.trim()) return;
 
-      const marks = highlightChatFind(scroller, q);
+      searchRootRef.current = scroller;
+      const refresh = () => {
+        const marks = highlightChatFind(scroller, q, refresh);
+        marksRef.current = marks;
+        selectChatFindMatch(marks, 0);
+      };
+      const marks = highlightChatFind(scroller, q, refresh);
       marksRef.current = marks;
 
       if (marks.length > 0) {
@@ -220,7 +242,7 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
 
   // ---------- Debounced search dispatch ----------
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       if (scope === 'visible') {
@@ -229,8 +251,11 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
         doNodeSearch(query);
       }
     }, 250);
-    return () => clearTimeout(debounceRef.current);
-  }, [query, scope, doDomSearch, doNodeSearch]);
+    return () => {
+      clearTimeout(debounceRef.current);
+      clearHighlights();
+    };
+  }, [query, scope, doDomSearch, doNodeSearch, clearHighlights]);
 
   // Clean up highlights on unmount
   useEffect(() => {

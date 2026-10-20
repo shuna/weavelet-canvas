@@ -21,7 +21,7 @@ export function clearChatFind(root: HTMLElement): void {
   }
 }
 
-export function highlightChatFind(root: HTMLElement, query: string): ChatFindMatch[] {
+export function highlightChatFind(root: HTMLElement, query: string, onInvalidate?: () => void): ChatFindMatch[] {
   clearChatFind(root);
   if (!query.trim()) return [];
   const document = root.ownerDocument;
@@ -35,12 +35,18 @@ export function highlightChatFind(root: HTMLElement, query: string): ChatFindMat
   const session: HighlightSession = {
     targets: [],
     observer: new MutationObserver(records => {
+      const relevant = records.filter(record => {
+        const element = record.target.nodeType === Node.ELEMENT_NODE ? record.target as Element : record.target.parentElement;
+        return !element?.closest('[data-chat-find-bar], textarea, input, [contenteditable]:not([contenteditable="false"])');
+      });
+      if (!relevant.length) return;
       // Preserve mutation records so clear can distinguish a renderer's empty text from ours.
-      for (const record of records) if (record.type === 'characterData') {
+      for (const record of relevant) if (record.type === 'characterData') {
         const target = session.targets.find(entry => entry.node === record.target);
         if (target) target.text = target.node.data;
       }
       clearChatFind(root);
+      onInvalidate?.();
     }),
   };
   for (const node of targets) {
@@ -84,7 +90,7 @@ export function highlightChatFind(root: HTMLElement, query: string): ChatFindMat
       matches.push(match);
     }
   }
-  if (session.targets.length) {
+  if (session.targets.length || onInvalidate) {
     sessions.set(root, session);
     session.observer.observe(root, { childList: true, characterData: true, subtree: true });
   }
