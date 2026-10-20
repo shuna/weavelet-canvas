@@ -57,6 +57,7 @@ enum AttachmentImageLoader {
 struct AttachmentImageView: View {
     let url: String
     let detail: String
+    var allowsExpansion = true
     @State private var image: UIImage?
     @State private var failure: String?
     @State private var expanded = false
@@ -64,11 +65,16 @@ struct AttachmentImageView: View {
     var body: some View {
         Group {
             if let image {
-                Button { expanded = true } label: {
-                    Image(uiImage: image).resizable().scaledToFit().frame(maxWidth: 320, maxHeight: 180)
+                if allowsExpansion {
+                    Button { expanded = true } label: {
+                        Image(uiImage: image).resizable().scaledToFit().frame(maxWidth: 320, maxHeight: 180)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("添付画像（\(detail)）を拡大")
+                } else {
+                    Image(uiImage:image).resizable().scaledToFit().frame(maxHeight:384)
+                        .accessibilityLabel("添付画像（\(detail)）")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("添付画像（\(detail)）を拡大")
             } else if let failure {
                 Label(failure, systemImage: "photo.badge.exclamationmark").font(.caption).foregroundStyle(.secondary)
             } else {

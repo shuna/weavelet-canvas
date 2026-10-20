@@ -17,6 +17,40 @@ final class NodeOptionsTests: XCTestCase {
         var chats=try original.required("chats").array("chats"); chats[0]=changed
         return original.replacing("chats",with:.array(chats)).replacing("xRoot",with:.object([.init(key:"z",value:.number("9007199254740993")),.init(key:"a",value:.string("e\u{301}"))]))
     }
+    func testExplicitOtherChatDraftPreservesRawMetadataAndSelection() throws {
+        let rawLabel = OrderedJSON.utf16String([0x41, 0xd800, 0x42])
+        var source = try sourceWithRawMetadata(), chats = try source.required("chats").array("chats")
+        let targetTree = try chats[0].required("branchTree"), targetNodes = try targetTree.required("nodes")
+        chats[0] = chats[0].replacing("branchTree", with: targetTree.replacing("nodes", with: targetNodes.replacing("n-user", with: try targetNodes.required("n-user").replacing("label", with: rawLabel))))
+        source = source.replacing("chats", with: .array(chats))
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("explicit-node-options-\(UUID())")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = LocalStateStore(fileURL: directory.appendingPathComponent("state.json")), state = ChatState(store: store)
+        try state.importWebData(source.encoded())
+        state.selectedConversationID = "chat-b"
+        var draft = try state.nodeOptionsDraft(nodeID: "n-user", chatID: "chat-a")
+        XCTAssertEqual(draft.chatID, "chat-a")
+        XCTAssertEqual(draft.value.label, "A�B")
+        // The actual I/O corpus starts n-user starred and unpinned.
+        XCTAssertTrue(draft.value.starred); XCTAssertFalse(draft.value.pinned)
+        draft.value.starred = false; draft.value.pinned = true
+        try state.saveNodeOptions(draft, now: now)
+
+        XCTAssertEqual(state.selectedConversationID, "chat-b")
+        let changed = try XCTUnwrap(state.exchange?.source), originalTarget = try chat(source, "chat-a"), target = try chat(changed, "chat-a")
+        let node = try target.required("branchTree").required("nodes").required("n-user")
+        XCTAssertEqual(node["label"], rawLabel)
+        // Web setNodeStar removes the field on false (branch-slice.ts); typed read remains false.
+        XCTAssertNil(node["starred"]); XCTAssertEqual(node["pinned"], .bool(true))
+        XCTAssertEqual(node["xHuge"], .number("9007199254740993")); XCTAssertEqual(node["xDecimal"], .number("1.234567890123456789"))
+        XCTAssertEqual(try NodeOptions.read(chat: target, nodeID: "n-user"), draft.value)
+        XCTAssertEqual(target["xHuge"], originalTarget["xHuge"])
+        XCTAssertEqual(changed["xRoot"], source["xRoot"])
+        XCTAssertEqual(try chat(changed, "chat-b").encoded(), try chat(source, "chat-b").encoded())
+        XCTAssertEqual(try ChatState(store: store).exportWebData(), try state.exportWebData())
+    }
+
     func testTypedReadMatchesSharedWebProjectionWithoutCreatingVMForUIRows() throws {
         let source=try fixture(), treeChat=try chat(source,"chat-a")
         for id in ["n-system","n-user","n-inactive","n-assistant"] {

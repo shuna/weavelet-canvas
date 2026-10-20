@@ -573,15 +573,23 @@ final class ChatState: ObservableObject {
 
     func navigateBranchSearch(_ result: ChatSearchResult) throws {
         guard let nodeID = result.nodeID else { throw ExchangeError.invalid("移動先のメッセージがありません") }
+        try navigateBranchEditor(chatID: result.chatID, nodeID: nodeID, source: .search, focus: true)
+    }
+
+    func openBranchNodeDetail(chatID: String, nodeID: String) throws {
+        try navigateBranchEditor(chatID: chatID, nodeID: nodeID, source: .branchEditor, focus: false)
+    }
+
+    private func navigateBranchEditor(chatID: String, nodeID: String, source: BranchNavigation.Source, focus: Bool) throws {
         guard let exchange else { throw ExchangeError.invalid("保存済み会話がありません") }
         let current = try captureNavigationScroll(try currentNavigationHistory(in: exchange.source), in: exchange.source)
-        let target = try BranchNavigation.navigate(in: exchange.source, chatID: result.chatID, nodeID: nodeID, source: .search)
+        let target = try BranchNavigation.navigate(in: exchange.source, chatID: chatID, nodeID: nodeID, source: source)
         guard target.status == .reached else { throw ExchangeError.invalid("移動先の会話またはメッセージがありません") }
         let next = try BranchNavigation.history(current.history, action: .push, in: target.source, target: target,
-                                                view: chatActiveView.rawValue, navigationSource: .search)
-        try applyLibrary(target.source, selectedID: selectedID, resetViewFor: result.chatID, navigation: next)
+                                                view: chatActiveView.rawValue, navigationSource: source)
+        try applyLibrary(target.source, selectedID: selectedID, resetViewFor: chatID, navigation: next)
         chatScrollRestoration = nil
-        branchEditorFocus = BranchEditorFocus(chatID: result.chatID, nodeID: nodeID)
+        branchEditorFocus = focus ? BranchEditorFocus(chatID: chatID, nodeID: nodeID) : nil
     }
 
     func moveNavigation(_ direction: BranchNavigation.HistoryAction) throws {
@@ -664,14 +672,18 @@ final class ChatState: ObservableObject {
         return try ChatConfigDraft(chatID:draft.chatID,source:source,snapshot:snapshot,modelState:ChatConfig.modelState(in:snapshot.required("state")),config:draft.config,defaultSettings:draft.defaultSettings)
     }
 
-    func nodeOptionsDraft(nodeID: String) throws -> NodeOptionsDraft {
-        guard let exchange, let conversation,
-              let node = conversation.nodes.first(where: { $0.id.utf8.elementsEqual(nodeID.utf8) }) else { throw ExchangeError.invalid("メッセージがありません") }
-        return NodeOptionsDraft(chatID: conversation.id, nodeID: nodeID, source: exchange.source, original: node.options, value: node.options)
+    func nodeOptionsDraft(nodeID: String, chatID: String? = nil) throws -> NodeOptionsDraft {
+        guard let exchange else { throw ExchangeError.invalid("保存済み会話を選択してください") }
+        let targetChatID = chatID ?? conversation?.id
+        guard let targetChatID,
+              try exchange.source.required("chats").array("chats").contains(where: { try $0.required("id").string("id").utf8.elementsEqual(targetChatID.utf8) }),
+              let targetConversation = conversations.first(where: { $0.id.utf8.elementsEqual(targetChatID.utf8) }),
+              let node = targetConversation.nodes.first(where: { $0.id.utf8.elementsEqual(nodeID.utf8) }) else { throw ExchangeError.invalid("メッセージがありません") }
+        return NodeOptionsDraft(chatID: targetConversation.id, nodeID: nodeID, source: exchange.source, original: node.options, value: node.options)
     }
 
     func saveNodeOptions(_ draft: NodeOptionsDraft, newIDs: [String]? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
-        guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してから設定してください") }
+        guard generation(for: draft.chatID) == nil else { throw ExchangeError.invalid("生成結果を保存してから設定してください") }
         guard let exchange, exchange.source == draft.source else { throw ExchangeError.invalid("会話が変更されました。設定を開き直してください") }
         guard let sourceChat = try exchange.source.required("chats").array("chats").first(where: { try $0.required("id").string("id").utf8.elementsEqual(draft.chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
         let count = try sourceChat["branchTree"] == nil ? sourceChat.required("messages").array("messages").count : 0

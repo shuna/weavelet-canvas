@@ -112,6 +112,45 @@ final class BranchNavigationTests: XCTestCase {
         XCTAssertTrue(state.canNavigateForward)
         XCTAssertNil(ChatState(store: local).branchEditorFocus)
     }
+    func testBranchNodeDetailMovesOnlyOtherPathWithoutFocusAndKeepsFailedSaveAtomic() throws {
+        var rejects = false
+        let local = try store { data, file in
+            if rejects { throw CocoaError(.fileWriteNoPermission) }
+            try data.write(to: file, options: .atomic)
+        }
+        var source = try fixture(), chats = try source.required("chats").array("chats")
+        chats.append(chats[0].replacing("id", with: .string("other-tree")))
+        source = source.replacing("chats", with: .array(chats))
+        let state = ChatState(store: local)
+        try state.importWebData(source.encoded())
+        try state.setChatActiveView(.splitVertical)
+        let prior = try XCTUnwrap(ChatSearch.results(in: source, query: "別分岐の本文", mode: .nodes, chatIDs: ["chat-a"]).first)
+        try state.navigateBranchSearch(prior)
+        XCTAssertEqual(state.branchEditorFocus?.chatID, "chat-a")
+        let before = try state.publicationSnapshot(), beforeSource = try XCTUnwrap(state.exchange?.source)
+        let disk = try Data(contentsOf: local.fileURL)
+        rejects = true
+        XCTAssertThrowsError(try state.openBranchNodeDetail(chatID: "other-tree", nodeID: "n-inactive"))
+        XCTAssertEqual(try state.publicationSnapshot().encoded(), try before.encoded())
+        XCTAssertEqual(state.exchange?.source, beforeSource)
+        XCTAssertEqual(try Data(contentsOf: local.fileURL), disk)
+        XCTAssertTrue(state.canNavigateBack)
+        XCTAssertEqual(state.branchEditorFocus?.chatID, "chat-a")
+        rejects = false
+
+        try state.openBranchNodeDetail(chatID: "other-tree", nodeID: "n-inactive")
+        XCTAssertEqual(state.selectedConversationID, "chat-a")
+        XCTAssertEqual(state.chatActiveView, .splitVertical)
+        XCTAssertTrue(state.canNavigateBack)
+        XCTAssertNil(state.branchEditorFocus)
+        let changed = try XCTUnwrap(state.exchange?.source)
+        XCTAssertEqual(try changed.required("chats").array("chats")[0], try beforeSource.required("chats").array("chats")[0])
+        XCTAssertEqual(try changed.required("chats").array("chats")[2]["branchTree"]?["activePath"], .array(["n-system", "n-user", "n-inactive"].map(OrderedJSON.string)))
+        XCTAssertEqual(ChatState(store: local).exchange?.source, changed)
+        let records = try SyncRecords.toRecords(state.publicationSnapshot())
+        XCTAssertEqual(try SyncRecords.canonical(SyncRecords.toRecords(SyncRecords.fromRecords(records))), try SyncRecords.canonical(records))
+    }
+
     func testBranchSearchMovesOtherChatWithoutSelectingItAndKeepsFailedSaveAtomic() throws {
         var rejects = false
         let local = try store { data, file in

@@ -456,6 +456,7 @@ struct BranchEditorView: View {
     @State private var nodeDrag = BranchNodeDragSession()
     @State private var pendingDrop: BranchClipboardDraft?
     @State private var pruningDrafts: [NodeRemovalDraft]?
+    @State private var nodeDetail: BranchNodeDetailRequest?
 
     var body: some View {
         let key = BranchLayoutKey(state: state)
@@ -551,6 +552,7 @@ struct BranchEditorView: View {
                 }
             }
         }
+        .sheet(item:$nodeDetail) { request in BranchNodeDetailView(state:state,request:request) }
         .sheet(item: $comparison) { request in BranchDiffView(state: state, request: request) }
         .sheet(item:$selectionDraft) { draft in BranchClipboardView(state:state,draft:draft) }
         .confirmationDialog("表示中の会話の非表示の枝を整理",isPresented:Binding(get:{ pruningDrafts != nil },set:{ if !$0 { pruningDrafts = nil } }),titleVisibility:.visible,presenting:pruningDrafts) { drafts in
@@ -569,7 +571,7 @@ struct BranchEditorView: View {
         } message: { _ in
             Text("ドラッグしたメッセージから枝の末尾までを、ドロップ先のメッセージの後へ追加します。")
         }
-        .onDisappear { nodeDrag.current = nil; pendingDrop = nil; pruningDrafts = nil }
+        .onDisappear { nodeDrag.current = nil; pendingDrop = nil; pruningDrafts = nil; nodeDetail = nil }
         .onChange(of: key) { _, _ in
             nodeDrag.current = nil; pendingDrop = nil; pruningDrafts = nil
             selectedNodes.removeAll()
@@ -695,6 +697,12 @@ struct BranchEditorView: View {
                             }
                         }
                         catch { self.error = error.localizedDescription }
+                    }, showDetail: {
+                        guard sourceKey.isCurrent(in:state) else { return }
+                        do {
+                            try state.openBranchNodeDetail(chatID:nodeKey.chatID,nodeID:node.id)
+                            nodeDetail = BranchNodeDetailRequest(chatID:nodeKey.chatID,nodeID:node.id)
+                        } catch { self.error = error.localizedDescription }
                     }, configure: { performMenu(node, key: nodeKey) { configure(node.id) } },
                        deleteBranch: { performMenu(node, key: nodeKey) { deleteBranch(node.id) } },
                        clipboard: { operation in performMenu(node, key: nodeKey) { clipboard(node.id, operation) } }, compareCurrent: {
@@ -830,6 +838,7 @@ private struct BranchNodeCard: View {
     let canDelete: Bool
     let hasClipboard: Bool
     let select: () -> Void
+    let showDetail: () -> Void
     let configure: () -> Void
     let deleteBranch: () -> Void
     let clipboard: (BranchClipboardOperation) -> Void
@@ -844,31 +853,51 @@ private struct BranchNodeCard: View {
             card
         }
     }
-    private var nodeButton: some View {
-        Button(action: select) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        if selecting { Image(systemName:selected ? "checkmark.circle.fill" : "circle").foregroundStyle(selected ? Color.accentColor : .secondary) }
-                        Text(node.label ?? node.role.capitalized).font(.caption.bold()).lineLimit(1)
-                        Spacer(minLength: 4)
-                        if node.active { Image(systemName: "checkmark.circle.fill").accessibilityLabel("現在の経路") }
-                    }
-                    Text(preview.isEmpty ? "本文なし" : preview).font(.caption).lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(10)
-                .frame(width: dragProvider == nil ? 236 : 214, height: 80, alignment: .topLeading)
+    private var nodeTitle: some View {
+        HStack {
+            if selecting { Image(systemName:selected ? "checkmark.circle.fill" : "circle").foregroundStyle(selected ? Color.accentColor : .secondary) }
+            Text(node.label ?? node.role.capitalized).font(.caption.bold()).lineLimit(1)
+            Spacer(minLength:4)
+            if node.active { Image(systemName:"checkmark.circle.fill").accessibilityLabel("現在の経路") }
+        }
+    }
+    private var previewText: some View {
+        Text(preview.isEmpty ? "本文なし" : preview).font(.caption).lineLimit(2)
+            .frame(maxWidth:.infinity,alignment:.leading)
+    }
+    @ViewBuilder private var nodeButton: some View {
+        if selecting {
+            Button(action:select) {
+                VStack(alignment:.leading,spacing:4) { nodeTitle; previewText }
+                    .padding(10).frame(width:236,height:80,alignment:.topLeading)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(node.label ?? node.role)、\(preview)")
             .accessibilityAddTraits(selected ? .isSelected : [])
-            .accessibilityHint(selecting ? "タップして範囲の選択を切り替えます" : "")
+            .accessibilityHint("タップして範囲の選択を切り替えます")
+        } else {
+            VStack(spacing:0) {
+                Button(action:select) {
+                    nodeTitle.padding(.horizontal,10).frame(height:32).contentShape(Rectangle())
+                }.accessibilityLabel("\(node.label ?? node.role)をチャットで表示")
+                Button(action:showDetail) {
+                    previewText.padding(.horizontal,10).frame(height:48,alignment:.topLeading).contentShape(Rectangle())
+                }.accessibilityLabel("メッセージ詳細：\(preview.isEmpty ? "本文なし" : preview)")
+            }
+            .frame(width:dragProvider == nil ? 236 : 214,height:80)
+            .buttonStyle(.plain)
+        }
     }
     private var card: some View {
         HStack(spacing:0) {
             if let dragProvider { BranchNodeDragHandle(itemProvider:dragProvider).frame(width:22,height:80) }
             nodeButton
             Menu {
+                if !selecting {
+                    Button("チャットで表示",systemImage:"bubble.left",action:select)
+                    Button("メッセージ詳細",systemImage:"doc.text",action:showDetail)
+                    Divider()
+                }
                 Button("ラベル・スター・ピン留め", systemImage: "slider.horizontal.3", action: configure)
                     .disabled(!canEdit)
                 Divider()
@@ -895,5 +924,91 @@ private struct BranchNodeCard: View {
         .frame(width: 280, height: 80)
         .background(selected ? Color.accentColor.opacity(0.14) : Color(uiColor:.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(dropTargeted ? Color.accentColor : node.active ? Color.blue : Color.secondary.opacity(0.5), lineWidth: dropTargeted ? 3 : node.active ? 2 : 1))
+    }
+}
+
+
+private struct BranchNodeDetailRequest: Identifiable {
+    let id = UUID()
+    let chatID: String
+    let nodeID: String
+}
+
+private struct BranchNodeDetailView: View {
+    @ObservedObject var state: ChatState
+    let request: BranchNodeDetailRequest
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var error: String?
+
+    private var node: MessageNode? {
+        state.conversations.first { $0.id.utf8.elementsEqual(request.chatID.utf8) }?.nodes.first {
+            $0.id.utf8.elementsEqual(request.nodeID.utf8)
+        }
+    }
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                if let node {
+                    VStack(alignment:.leading,spacing:16) {
+                        HStack(alignment:.top,spacing:4) {
+                            VStack(alignment:.leading,spacing:4) {
+                                Text(node.role.capitalized).font(.subheadline.bold())
+                                if !node.options.label.isEmpty { Text(node.options.label).foregroundStyle(.secondary) }
+                            }
+                            Spacer(minLength:4)
+                            Button { saveOption { $0.starred.toggle() } } label: {
+                                Image(systemName:node.options.starred ? "star.fill" : "star").frame(width:44,height:44)
+                            }
+                            .foregroundStyle(node.options.starred ? Color.yellow : Color.secondary)
+                            .accessibilityLabel(node.options.starred ? "スターを解除" : "スターを付ける")
+                            .accessibilityValue(node.options.starred ? "オン" : "オフ")
+                            .disabled(state.generation(for:request.chatID) != nil)
+                            Button { saveOption { $0.pinned.toggle() } } label: {
+                                Image(systemName:node.options.pinned ? "pin.fill" : "pin").frame(width:44,height:44)
+                            }
+                            .foregroundStyle(node.options.pinned ? Color.accentColor : Color.secondary)
+                            .accessibilityLabel(node.options.pinned ? "ピン留めを解除" : "ピン留め")
+                            .accessibilityValue(node.options.pinned ? "オン" : "オフ")
+                            .disabled(state.generation(for:request.chatID) != nil)
+                        }.buttonStyle(.plain)
+                        if let generation = state.generation(for:request.chatID,nodeID:request.nodeID) {
+                            Text(generation.output.text).textSelection(.enabled)
+                        } else {
+                            ForEach(Array(node.parts.enumerated()),id:\.offset) { _, part in detailPart(part) }
+                        }
+                        if let error { Text(error).font(.caption).foregroundStyle(.red) }
+                    }
+                    .frame(maxWidth:.infinity,alignment:.leading).padding(16)
+                } else {
+                    ContentUnavailableView("メッセージがありません",systemImage:"doc.text")
+                }
+            }
+            .navigationTitle("メッセージ詳細")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(colorScheme,for:.navigationBar)
+            .toolbar {
+                ToolbarItem(placement:.topBarTrailing) {
+                    Button { dismiss() } label: {
+                        Image(systemName:"xmark").foregroundStyle(colorScheme == .dark ? Color.white : Color.black)
+                            .frame(width:44,height:44)
+                    }.buttonStyle(.plain).accessibilityLabel("閉じる")
+                }
+            }
+        }
+    }
+    @ViewBuilder private func detailPart(_ part: MessagePart) -> some View {
+        switch part {
+        case .text(let text): Text(text).textSelection(.enabled)
+        case .image(let url,let detail): AttachmentImageView(url:url,detail:detail,allowsExpansion:false)
+        default: EmptyView()
+        }
+    }
+    private func saveOption(_ update: (inout NodeOptions.Value) -> Void) {
+        do {
+            var draft = try state.nodeOptionsDraft(nodeID:request.nodeID,chatID:request.chatID)
+            update(&draft.value)
+            try state.saveNodeOptions(draft)
+        } catch { self.error = error.localizedDescription }
     }
 }

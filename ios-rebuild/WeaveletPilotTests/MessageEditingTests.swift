@@ -1098,6 +1098,21 @@ final class MessageEditingTests: XCTestCase {
         XCTAssertThrowsError(try state.undoMessageEdit(now: 1000)); XCTAssertThrowsError(try state.redoMessageEdit(now: 1000))
         XCTAssertEqual(state.generation?.id, generation.id); XCTAssertEqual(state.generation?.output.text, generation.output.text)
         XCTAssertEqual(try state.publicationSnapshot(), before); XCTAssertEqual(try Data(contentsOf: store.fileURL), disk)
+        state.selectedConversationID = "other"
+        let optionsBefore = try state.publicationSnapshot(), optionsDisk = try Data(contentsOf:store.fileURL)
+        var targetOptions = try state.nodeOptionsDraft(nodeID:"middle",chatID:"target")
+        targetOptions.value.starred.toggle()
+        XCTAssertThrowsError(try state.saveNodeOptions(targetOptions,now:1100))
+        XCTAssertEqual(try state.publicationSnapshot(),optionsBefore); XCTAssertEqual(try Data(contentsOf:store.fileURL),optionsDisk)
+        let targetBefore = try XCTUnwrap(state.exchange).source.required("chats").array("chats").first { $0["id"] == .string("target") }
+        var otherOptions = try state.nodeOptionsDraft(nodeID:dropTarget,chatID:"other")
+        otherOptions.value.starred.toggle()
+        try state.saveNodeOptions(otherOptions,now:1200)
+        XCTAssertEqual(state.selectedConversationID,"other")
+        XCTAssertEqual(state.generation(for:"target")?.id,generation.id)
+        XCTAssertEqual(state.generation(for:"target")?.output.text,generation.output.text)
+        XCTAssertEqual(try XCTUnwrap(state.exchange).source.required("chats").array("chats").first { $0["id"] == .string("target") },targetBefore)
+        state.selectedConversationID = "target"
         state.stopGeneration()
     }
 
