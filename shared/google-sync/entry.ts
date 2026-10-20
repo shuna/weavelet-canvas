@@ -1,3 +1,4 @@
+export { aiTaskTarget } from './aiTask';
 import { setHistoryYield } from './adapters/processing';
 export { messageDisplayIndexes, splitPanelRatio } from './advancedDisplay';
 export { enterSubmissionOperation } from './enterSubmission';

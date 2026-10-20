@@ -5,9 +5,10 @@ import { calculateUsageCostCore, mergeTotalTokenUsed, parseTokenKey, summarizeUs
 
 export function usageCost(json: string): string {
   const input = JSON.parse(json) as { state: ReasoningModelState; totalTokenUsed: TotalTokenUsed;
-    liveTokenUsed?: TotalTokenUsed };
-  const totals = input.liveTokenUsed
-    ? mergeTotalTokenUsed(input.totalTokenUsed ?? {}, input.liveTokenUsed) : input.totalTokenUsed ?? {};
+    liveTokenUsed?: TotalTokenUsed; liveTokenUsages?: TotalTokenUsed[] };
+  const live = input.liveTokenUsages?.reduce(mergeTotalTokenUsed, input.liveTokenUsed ?? {}) ?? input.liveTokenUsed;
+  const totals = live
+    ? mergeTotalTokenUsed(input.totalTokenUsed ?? {}, live) : input.totalTokenUsed ?? {};
   const rows = Object.entries(totals).map(([key, usage]) => {
     const { modelId, providerId } = parseTokenKey(key);
     const costEntry = getModelCostCore(input.state ?? {}, modelId, providerId);

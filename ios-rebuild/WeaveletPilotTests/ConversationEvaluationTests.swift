@@ -285,7 +285,7 @@ final class ConversationEvaluationTests: XCTestCase {
         let before = try Data(contentsOf:store.fileURL)
         reject = true
         let failedSave = expectation(description:"generation save failed")
-        let subscription = app.$generation.dropFirst().filter { $0?.running == false }.first().sink { _ in failedSave.fulfill() }
+        let subscription = app.$generations.dropFirst().filter { $0[Data("auto-chat".utf8)]?.running == false }.first().sink { _ in failedSave.fulfill() }
         await fulfillment(of:[failedSave],timeout:5)
         withExtendedLifetime(subscription) {}
         XCTAssertNotNil(app.generation)

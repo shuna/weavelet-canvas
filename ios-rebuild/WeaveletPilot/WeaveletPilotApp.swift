@@ -185,14 +185,13 @@ struct ChatView: View {
                         do { try state.createChat() }
                         catch { errorMessage = error.localizedDescription }
                     }
-                    .disabled(state.generation != nil)
                     if state.canNavigateBack || state.canNavigateForward {
                     Button("戻る", systemImage: "chevron.backward") {
                         do { try state.moveNavigation(.back) } catch { errorMessage = error.localizedDescription }
-                    }.disabled(!state.canNavigateBack || state.generation != nil)
+                    }.disabled(!state.canNavigateBack)
                     Button("進む", systemImage: "chevron.forward") {
                         do { try state.moveNavigation(.forward) } catch { errorMessage = error.localizedDescription }
-                    }.disabled(!state.canNavigateForward || state.generation != nil)
+                    }.disabled(!state.canNavigateForward)
                     }
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
@@ -340,13 +339,13 @@ struct ChatView: View {
                         }.frame(minHeight: 44).disabled(state.exchange == nil || state.generation != nil)
                         Button("タイトルの自動生成") {
                             do { titleSettingsDraft = try state.titleSettingsDraft() } catch { state.generationError = error.localizedDescription }
-                        }.disabled(state.generation != nil)
+                        }.disabled(state.hasGenerations)
                         Button("新規会話の既定設定") {
                             do { defaultConfigDraft = try state.defaultChatConfigDraft() }
                             catch { state.generationError = error.localizedDescription }
-                        }.disabled(state.generation != nil)
+                        }.disabled(state.hasGenerations)
                         Button("remote生成設定") { showsRemoteSettings = true }
-                            .disabled(state.generation != nil)
+                            .disabled(state.hasGenerations)
                     }
                     Section("同期・データ") {
                         syncButtons
@@ -443,26 +442,26 @@ struct ChatView: View {
             }
         }
         .frame(minWidth: 44, minHeight: 44)
-        .disabled(state.generation != nil || isPreparingRecovery)
+        .disabled(state.hasGenerations || isPreparingRecovery)
     }
     @ViewBuilder private var syncButtons: some View {
         Button("Google同期") {
             if googleConnection == nil { googleConnection = GoogleSyncConnection(state: state) }
             shownGoogleConnection = googleConnection
-        }.disabled(state.generation != nil)
+        }.disabled(state.hasGenerations)
         Button("CloudKit同期") {
             if cloudKitConnection == nil { cloudKitConnection = CloudKitSyncConnection(state:state) }
             shownCloudKitConnection = cloudKitConnection
-        }.disabled(state.generation != nil)
+        }.disabled(state.hasGenerations)
         Button("フォルダー同期・iCloud Drive") {
             if folderConnection == nil { folderConnection = FolderSyncConnection(state:state) }
             shownFolderConnection = folderConnection
-        }.disabled(state.generation != nil)
+        }.disabled(state.hasGenerations)
     }
     private var libraryFooter: some View {
         HStack {
             Menu("同期", systemImage: "arrow.triangle.2.circlepath") { syncButtons }
-                .disabled(state.generation != nil)
+                .disabled(state.hasGenerations)
                 .frame(minWidth: 44, minHeight: 44)
             Spacer()
             fileMenu
@@ -905,7 +904,7 @@ struct ChatView: View {
                     .accessibilityLabel("送信")
                     .foregroundStyle(Color.accentColor)
                     .frame(minWidth:44,minHeight:44)
-                    .disabled(state.generation != nil || state.isRecoveringStream)
+                    .disabled(state.generation != nil || state.hasRunningLocalGeneration || state.isRecoveringStream)
                 }
             }
             if let parts = try? state.composerDraft(chatID:conversation.id).parts.array("composer parts") {
@@ -984,7 +983,7 @@ struct ChatView: View {
     }
 
     private func generation(at node: MessageNode, in conversation: Conversation) -> ActiveGeneration? {
-        guard let generation = state.generation,
+        guard let generation = state.generation(for: conversation.id),
               generation.chatID.utf8.elementsEqual(conversation.id.utf8),
               case .string(let target) = generation.plan?["targetNodeId"],
               target.utf8.elementsEqual(node.id.utf8) else { return nil }
@@ -1639,7 +1638,6 @@ struct ConversationLibraryView<Footer: View>: View {
                     try state.navigate(chatID:result.chatID,nodeID:result.nodeID,source:mode == .grep ? .grep : .search)
                     onSelect()
                 }
-                .disabled(state.generation != nil)
                 .transition(reduceMotion ? .opacity : .move(edge:.top).combined(with:.opacity))
                 .zIndex(1)
             } else {
@@ -1670,7 +1668,7 @@ struct ConversationLibraryView<Footer: View>: View {
                     Label("会話・フォルダを検索", systemImage: "magnifyingglass").foregroundStyle(Color(uiColor:.secondaryLabel))
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 }
-                .disabled(state.exchange == nil || state.generation != nil)
+                .disabled(state.exchange == nil)
                 .padding(.horizontal)
                 .background(.bar)
                 .transition(reduceMotion ? .opacity : .move(edge:.top).combined(with:.opacity))
@@ -1703,7 +1701,7 @@ struct ConversationLibraryView<Footer: View>: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("新規フォルダ", systemImage: "folder.badge.plus") { perform { try state.applyFolder(.create(id: UUID().uuidString.lowercased())) } }
-                        .disabled(state.generation != nil)
+                        .disabled(state.hasGenerations)
                 }
                 if !selected.isEmpty {
                     ToolbarItem(placement: .bottomBar) {
@@ -1713,7 +1711,7 @@ struct ConversationLibraryView<Footer: View>: View {
                             Image(systemName: "folder").frame(minWidth: 44, minHeight: 44)
                         }
                         .accessibilityLabel("選択した\(selected.count)件を移動")
-                        .disabled(state.generation != nil)
+                        .disabled(state.hasGenerations)
                     }
                     ToolbarItem(placement: .bottomBar) {
                         Button(role: .destructive) {
@@ -1723,7 +1721,7 @@ struct ConversationLibraryView<Footer: View>: View {
                             Image(systemName: "trash").frame(minWidth: 44, minHeight: 44)
                         }
                         .accessibilityLabel("選択した\(selected.count)件を削除")
-                        .disabled(state.generation != nil)
+                        .disabled(state.hasGenerations)
                     }
                 }
             }
@@ -1808,6 +1806,7 @@ struct ConversationLibraryView<Footer: View>: View {
                 .buttonStyle(.borderless)
                 .accessibilityLabel("選択対象: \(conversation.title)")
                 .accessibilityValue(selected.contains(conversation.identity) ? "選択中" : "未選択")
+                .disabled(state.hasGenerations)
             } else {
                 Image(systemName: "bubble.left")
                     .frame(width: 24)
@@ -1852,14 +1851,13 @@ struct ConversationLibraryView<Footer: View>: View {
                     Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44)
                 }
                 .accessibilityLabel("会話の操作: \(conversation.title)")
+                .disabled(state.hasGenerations)
             }
             }
-            .disabled(state.generation != nil)
-            if let generation = state.generation, generation.running,
-               generation.chatID.utf8.elementsEqual(conversation.id.utf8) {
+            if let generation = state.generation(for: conversation.id), generation.running {
                 Button {
-                    guard state.generation?.id == generation.id else { return }
-                    state.stopGeneration()
+                    guard state.generation(for: conversation.id)?.id == generation.id else { return }
+                    state.stopGeneration(chatID: conversation.id)
                 } label: {
                     Image(systemName: "stop.circle").frame(minWidth: 44, minHeight: 44)
                 }
@@ -1874,7 +1872,7 @@ struct ConversationLibraryView<Footer: View>: View {
     private func folderTree(_ folder: ChatFolderRow) -> AnyView {
         AnyView(Group {
             folderHeader(folder)
-                .disabled(state.generation != nil)
+                .disabled(state.hasGenerations)
                 .padding(.leading, CGFloat(folder.depth) * 16)
             if folder.expanded {
                 ForEach(folders.filter { $0.displayParentID.utf8.elementsEqual(folder.id.utf8) }, id: \.identity) { child in
@@ -2002,7 +2000,7 @@ struct FileImportView: View {
                 Section {
                     Button(isSaving ? "保存中" : mode == .replace ? "置換を確認" : "選択項目を取り込む") {
                         if mode == .replace { confirmsReplacement = true } else { commit() }
-                    }.disabled(isSaving || unavailableSelection || (mode == .append && selectedChats.isEmpty && selectedFolders.isEmpty) || state.generation != nil)
+                    }.disabled(isSaving || unavailableSelection || (mode == .append && selectedChats.isEmpty && selectedFolders.isEmpty) || state.hasGenerations)
                 }
             }
             .disabled(isSaving)
@@ -2128,7 +2126,7 @@ struct ChatExportView: View {
                         do { exported(try state.exportWebData(format:format,scope:scope,compressed:format == .v3 && compressed)); dismiss() }
                         catch { errorMessage = error.localizedDescription }
                     }
-                }.disabled(state.generation != nil || state.exchange == nil)
+                }.disabled(state.hasGenerations || state.exchange == nil)
                 if exportTask != nil { ProgressView("画像を作成中") }
             }
             .disabled(exportTask != nil)
@@ -2188,7 +2186,7 @@ struct BranchClipboardView: View {
                 Button(label) {
                     if draft.operation == .cut || draft.operation == .move { showsConfirmation = true } else { save() }
                 }
-                .disabled(state.generation != nil || (usesTarget && target?.nodes.isEmpty != false) || (draft.operation == .paste && !state.hasBranchClipboard))
+                .disabled(state.hasGenerations || (usesTarget && target?.nodes.isEmpty != false) || (draft.operation == .paste && !state.hasBranchClipboard))
             }
             .navigationTitle("メッセージ範囲")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
@@ -2532,7 +2530,7 @@ private struct ProxyStatusView: View {
                             if !recoverable { Text("保存先のバブルまたは内容が変更されています。自動で上書きしません。").foregroundStyle(.orange) }
                             if recoverable && recoveryGaps[id] != .bool(true) {
                                 Button("このリクエストを復旧") { recover(id) }
-                                    .disabled(busy || state.generation != nil || state.isRecoveringStream)
+                                    .disabled(busy || state.hasGenerations || state.isRecoveringStream)
                             }
                         }
                         if status["storageDeletion"]?["individual"] == .bool(true) {

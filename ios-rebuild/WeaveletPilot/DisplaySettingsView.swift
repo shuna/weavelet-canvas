@@ -80,6 +80,6 @@ struct DisplaySettingsView: View {
         }
         .navigationTitle("外観と本文の表示")
         .navigationBarTitleDisplayMode(.inline)
-        .disabled(state.generation != nil)
+        .disabled(state.hasGenerations)
     }
 }

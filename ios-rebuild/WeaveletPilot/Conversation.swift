@@ -139,7 +139,7 @@ final class ChatState: ObservableObject {
     @Published private(set) var exchange: WebExchange?
     @Published private(set) var document: SyncDocument?
     @Published var persistenceError: String?
-    @Published private(set) var generation: ActiveGeneration?
+    @Published private(set) var generations: [Data: ActiveGeneration] = [:]
     @Published private(set) var remoteSettings = RemoteSettings()
     @Published var openRouterVerificationError: String?
     private var openRouterVerificationTasks: [Data:Task<Void,Never>] = [:]
@@ -152,14 +152,14 @@ final class ChatState: ObservableObject {
     private var openRouterCreditRequestID: UUID?
     private var openRouterCreditCredential: RemoteCredentialRecord?
     private var openRouterCreditProviderSnapshot: OrderedJSON?
-    @Published var generationError: String?
+    @Published private var generationErrors: [Data:String] = [:]
     @Published var streamRecoveryError: String?
     @Published private(set) var isRecoveringStream = false
     private var streamRecoveryTask: Task<Void,Never>?
-    @Published private var failedGenerationRetry: FailedGenerationRetry?
+    @Published private var failedGenerationRetries: [Data:FailedGenerationRetry] = [:]
     @Published var automaticEvaluationError: String?
     private var automaticEvaluationTasks: [UUID: [UUID:Task<Void,Never>]] = [:]
-    private var automaticEvaluationContext: (id: UUID, chatID: String, nodeID: String, requestPath: [String], userContent: OrderedJSON, record: RemoteCredentialRecord?, client: RemoteClient, read: ProviderModels.CredentialReader)?
+    private var automaticEvaluationContexts: [UUID: (chatID: String, nodeID: String, requestPath: [String], userContent: OrderedJSON, record: RemoteCredentialRecord?, client: RemoteClient, read: ProviderModels.CredentialReader)] = [:]
     @Published private(set) var inputRole = "user"
     @Published private var composerDrafts: [Data:ComposerDraft] = [:]
     @Published private var assistantPrefills: [Data:String] = [:]
@@ -171,16 +171,17 @@ final class ChatState: ObservableObject {
     private var evaluationTasks: [SummaryIdentity:Task<Void,Never>] = [:]
     @Published var titleError: String?
     private var titleTasks: [Data:(id:UUID,task:Task<Void,Never>)] = [:]
-    private var pendingTitleContext: (id:UUID,legacy:RemoteCredentialRecord,client:RemoteClient,read:ProviderModels.CredentialReader)?
-    private var generationTask: Task<Void, Never>?
+    private var pendingTitleContexts: [UUID:(legacy:RemoteCredentialRecord,client:RemoteClient,read:ProviderModels.CredentialReader)] = [:]
+    private var generationTasks: [UUID: Task<Void, Never>] = [:]
     private var streamStatusBridge: SharedWebOperations.Session?
+    private var generationTargetBridge: SharedWebOperations.Session?
     private let store: LocalStateStore?
     private let localGenerate: LocalLlama.Generator
     private let localEvaluationGenerate: LocalLlama.Generator?
     private let tokenCounting: NativeTokenCounting
-    private var liveUsageTask: Task<Void,Never>?
-    private var liveUsageVersion = 0
-    @Published private var liveTokenCounts: (generationID: UUID, source: OrderedJSON, parts: OrderedJSON, counts: OrderedJSON)?
+    private var liveUsageTasks: [UUID: Task<Void,Never>] = [:]
+    private var liveUsageVersions: [UUID: Int] = [:]
+    @Published private var liveTokenCounts: [UUID: (source: OrderedJSON, parts: OrderedJSON, counts: OrderedJSON)] = [:]
     private let localModerationClassify: NativeLocalModeration.Classifier?
     private var initialLoadFailed = false
     @Published private(set) var navigationFocus: NavigationFocus?
@@ -191,8 +192,59 @@ final class ChatState: ObservableObject {
     private var navigationHistory: OrderedJSON?
     private var branchCandidates: [BranchNavigation.ChatCandidates] = []
     @Published private var editingHistory: MessageEditing.HistoryState?
-    var canUndoMessageEdit: Bool { generation == nil && (editingHistory?.canUndo ?? false) }
-    var canRedoMessageEdit: Bool { generation == nil && (editingHistory?.canRedo ?? false) }
+    var generation: ActiveGeneration? { generations[Data(selectedID.utf8)] }
+    var generationError: String? {
+        get { generationErrors[Data(selectedID.utf8)] }
+        set { generationErrors[Data(selectedID.utf8)] = newValue }
+    }
+    private func setGenerationError(_ error: String?, chatID: String) { generationErrors[Data(chatID.utf8)] = error }
+    private var failedGenerationRetry: FailedGenerationRetry? {
+        get { failedGenerationRetries[Data(selectedID.utf8)] }
+        set {
+            if let newValue { failedGenerationRetries[Data(newValue.chatID.utf8)] = newValue }
+            else { failedGenerationRetries.removeValue(forKey:Data(selectedID.utf8)) }
+        }
+    }
+    func generation(for chatID: String) -> ActiveGeneration? { generations[Data(chatID.utf8)] }
+    var hasGenerations: Bool { !generations.isEmpty }
+    var hasRunningLocalGeneration: Bool { generations.values.contains { $0.running && !$0.usesRemoteTransport } }
+    var canUndoMessageEdit: Bool { !hasGenerations && (editingHistory?.canUndo ?? false) }
+    var canRedoMessageEdit: Bool { !hasGenerations && (editingHistory?.canRedo ?? false) }
+
+    private func generation(_ id: UUID) -> ActiveGeneration? {
+        generations.values.first { $0.id == id }
+    }
+    private func setGeneration(_ value: ActiveGeneration?) {
+        guard let value else { return }
+        generations[Data(value.chatID.utf8)] = value
+    }
+    private func removeGeneration(id: UUID) {
+        guard let current = generation(id) else { return }
+        generations.removeValue(forKey: Data(current.chatID.utf8))
+        pendingTitleContexts.removeValue(forKey: id)
+        liveUsageTasks.removeValue(forKey: id)?.cancel()
+        liveUsageVersions.removeValue(forKey: id)
+        liveTokenCounts.removeValue(forKey: id)
+    }
+    private func generationTargetIsCurrent(_ current: ActiveGeneration, in source: OrderedJSON? = nil) throws -> Bool {
+        let source = source ?? exchange?.source
+        guard let plan = current.plan, let source,
+              let before = try current.baseSource.required("chats").array("chats").first(where: { $0["id"] == .string(current.chatID) }),
+              let latest = try source.required("chats").array("chats").first(where: { $0["id"] == .string(current.chatID) }),
+              let nodeID = try plan["targetNodeId"]?.string("target node") else { return false }
+        let dependencies = try plan["requestPath"]?.array("request path").map { try $0.string("node ID") }.filter { !$0.utf8.elementsEqual(nodeID.utf8) } ?? []
+        var boundary = SharedWebProjection()
+        let ticket = OrderedJSON.object([
+            .init(key:"kind",value:.string("generation")), .init(key:"chatId",value:.string(current.chatID)),
+            .init(key:"nodeId",value:.string(nodeID)), .init(key:"dependencyIds",value:.array(dependencies.map(OrderedJSON.string)))])
+        if generationTargetBridge == nil { generationTargetBridge = try SharedWebOperations.Session() }
+        let result = try generationTargetBridge!.call("aiTaskTarget", .object([
+            .init(key:"ticket",value:ticket),
+            .init(key:"before",value:.object([.init(key:"chats",value:.array([try boundary.chat(before)]))])),
+            .init(key:"current",value:.object([.init(key:"chats",value:.array([try boundary.chat(latest)]))]))]))
+        guard result == .bool(true) else { return false }
+        return latest["branchTree"]?["nodes"]?[nodeID]?["streamState"]?["requestId"] == .string(current.id.uuidString.lowercased())
+    }
 
     init(store: LocalStateStore? = nil, localGenerate: LocalLlama.Generator? = nil, localClassify: NativeLocalModeration.Classifier? = nil, tokenCounting: NativeTokenCounting? = nil) {
         self.store = store
@@ -270,6 +322,7 @@ final class ChatState: ObservableObject {
     var conversation: Conversation? { conversations.first { $0.id.utf8.elementsEqual(selectedID.utf8) } }
 
     func importWebData(_ data: Data) throws {
+        guard !hasGenerations else { throw ExchangeError.invalid("生成中は取り込めません") }
         let rawV3 = try OrderedJSON.decode(NativeGzip.isCompressed(data) ? NativeGzip.decompress(data) : data)
         let candidate = try document.map { try $0.importingV3(rawV3) } ?? SyncDocument(v3: rawV3)
         let imported = try WebExchange(source: candidate.uiProjection())
@@ -290,7 +343,7 @@ final class ChatState: ObservableObject {
     }
 
     func prepareImport(data: Data, filename: String, allowPartialImport: Bool = false) async throws -> ChatImportPreview {
-        guard generation == nil else { throw ExchangeError.invalid("生成中は取り込めません") }
+        guard !hasGenerations else { throw ExchangeError.invalid("生成中は取り込めません") }
         let baseline = document?.snapshot
         let unpacked = try NativeGzip.isCompressed(data) ? NativeGzip.decompress(data) : data
         let raw = try OrderedJSON.decode(NativeLegacySnapshot.decode(unpacked))
@@ -322,7 +375,7 @@ final class ChatState: ObservableObject {
             source:source,baselineSnapshot:baseline,baselineSidecar:document?.v3Sidecar,baselineRootOrder:document?.v3RootOrder)
     }
     func commitImport(_ preview: ChatImportPreview, mode: ChatImportMode, selectedChatIDs: [String], selectedFolderIDs: [String], includeSettings: Bool) async throws {
-        guard generation == nil else { throw ExchangeError.invalid("生成中は取り込めません") }
+        guard !hasGenerations else { throw ExchangeError.invalid("生成中は取り込めません") }
         guard try document?.snapshot.encoded() == preview.baselineSnapshot?.encoded(),
               try document?.v3Sidecar.encoded() == preview.baselineSidecar?.encoded(),
               document?.v3RootOrder == preview.baselineRootOrder else { throw ExchangeError.invalid("取り込み準備後に保存データが変更されています") }
@@ -399,7 +452,7 @@ final class ChatState: ObservableObject {
     }
 
     func navigate(chatID: String, nodeID: String? = nil, source: BranchNavigation.Source) throws {
-        guard generation == nil, let exchange else { throw ExchangeError.invalid("生成結果を保存してから会話を移動してください") }
+        guard let exchange else { throw ExchangeError.invalid("保存済み会話がありません") }
         let history = try currentNavigationHistory(in: exchange.source)
         let path = conversations.first { $0.id.utf8.elementsEqual(chatID.utf8) }?.visibleMessages.map(\.id)
         let target = try BranchNavigation.navigate(in: exchange.source, chatID: chatID, nodeID: nodeID, source: source, viewingPath: path)
@@ -411,7 +464,7 @@ final class ChatState: ObservableObject {
 
     func navigateBranchSearch(_ result: ChatSearchResult) throws {
         guard let nodeID = result.nodeID else { throw ExchangeError.invalid("移動先のメッセージがありません") }
-        guard generation == nil, let exchange else { throw ExchangeError.invalid("生成結果を保存してから会話を移動してください") }
+        guard let exchange else { throw ExchangeError.invalid("保存済み会話がありません") }
         let current = try currentNavigationHistory(in: exchange.source)
         let target = try BranchNavigation.navigate(in: exchange.source, chatID: result.chatID, nodeID: nodeID, source: .search)
         guard target.status == .reached else { throw ExchangeError.invalid("移動先の会話またはメッセージがありません") }
@@ -422,7 +475,7 @@ final class ChatState: ObservableObject {
     }
 
     func moveNavigation(_ direction: BranchNavigation.HistoryAction) throws {
-        guard generation == nil, let exchange, direction == .back || direction == .forward else { throw ExchangeError.invalid("現在は履歴を移動できません") }
+        guard let exchange, direction == .back || direction == .forward else { throw ExchangeError.invalid("現在は履歴を移動できません") }
         let current = try currentNavigationHistory(in: exchange.source)
         let next = try BranchNavigation.history(current.history, action: direction, in: exchange.source)
         guard next.history != current.history, let entry = next.entry else { return }
@@ -461,6 +514,7 @@ final class ChatState: ObservableObject {
             defaultSettings:(settings.required("defaultSystemMessage").string("system message"),settings.required("defaultImageDetail").string("image detail")))
     }
     func saveDefaultChatConfig(_ draft: ChatConfigDraft) throws {
+        guard !hasGenerations else { throw ExchangeError.invalid("生成結果を保存してから設定してください") }
         guard let settings = draft.defaultSettings else { throw ExchangeError.invalid("新規会話の設定ではありません") }
         guard try syncInputSnapshot().encoded() == draft.snapshot.encoded() else { throw ExchangeError.invalid("保存データが変更されています。設定を開き直してください") }
         let roots = OrderedJSON.object([
@@ -480,12 +534,12 @@ final class ChatState: ObservableObject {
     }
 
     @MainActor func refreshProviderModels(providerID: String, expectedSnapshot: OrderedJSON, client: ProviderModelClient = ProviderModelClient(), readCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) async throws {
-        guard generation == nil, try syncInputSnapshot().encoded() == expectedSnapshot.encoded() else { throw ExchangeError.invalid("保存データが変更されています。モデル一覧を開き直してください") }
+        guard !hasGenerations, try syncInputSnapshot().encoded() == expectedSnapshot.encoded() else { throw ExchangeError.invalid("保存データが変更されています。モデル一覧を開き直してください") }
         let state = try expectedSnapshot.required("state")
         guard let provider = try ProviderModels.providers(in:state).first(where:{ $0.id.utf8.elementsEqual(providerID.utf8) }) else { throw ExchangeError.invalid("provider設定がありません") }
         let models = try await client.fetch(provider,readCredential:readCredential)
         try Task.checkCancellation()
-        guard generation == nil, try syncInputSnapshot().encoded() == expectedSnapshot.encoded() else { throw ExchangeError.invalid("モデル取得中に保存データが変更されました。既存一覧を維持しています") }
+        guard !hasGenerations, try syncInputSnapshot().encoded() == expectedSnapshot.encoded() else { throw ExchangeError.invalid("モデル取得中に保存データが変更されました。既存一覧を維持しています") }
         let roots = try ProviderModels.cacheChanges(state:state,providerID:providerID,models:models)
         try applySnapshot(.object([.init(key:"version",value:expectedSnapshot.required("version")),.init(key:"state",value:roots)]))
     }
@@ -901,7 +955,7 @@ final class ChatState: ObservableObject {
 
     func startGeneration(_ draft: MessageGenerationDraft, record: RemoteCredentialRecord? = nil, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil,
                          readProviderCredential: @escaping ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
-        guard generation == nil, !isRecoveringStream, let exchange else { throw ExchangeError.invalid("生成結果の保存・復旧が終わってから操作してください") }
+        guard generation(for:draft.chatID) == nil, !isRecoveringStream, let exchange else { throw ExchangeError.invalid("この会話の生成結果の保存・復旧が終わってから操作してください") }
         guard try draft.source.encoded() == exchange.source.encoded() else { throw ExchangeError.invalid("会話が変更されています。操作を開き直してください") }
         let now = Date().timeIntervalSince1970 * 1000
         var history: MessageEditing.HistoryState?
@@ -924,7 +978,7 @@ final class ChatState: ObservableObject {
         try startGeneration(prepared:ComposerContent.prepare(parts),record:record,client:client,nodeIDs:nodeIDs,readProviderCredential:readProviderCredential)
     }
     private func startGeneration(prepared: ComposerDraft, role: String = "user", record: RemoteCredentialRecord? = nil, client: RemoteClient, nodeIDs: [String]?, readProviderCredential: @escaping ProviderModels.CredentialReader) throws {
-        guard generation == nil, !isRecoveringStream, let exchange, let conversation else { throw ExchangeError.invalid("保存済み会話を選択し、生成・復旧の終了を待ってください") }
+        guard generation(for:selectedID) == nil, !isRecoveringStream, let exchange, let conversation else { throw ExchangeError.invalid("保存済み会話を選択し、この会話の生成・復旧の終了を待ってください") }
         guard prepared.hasMeaningfulContent else { throw ExchangeError.invalid("本文または画像を入力してください") }
         let sourceChat = try exchange.source.required("chats").array("chats").first { try $0.required("id").string("ID").utf8.elementsEqual(conversation.id.utf8) }!
         let count = try sourceChat["branchTree"] == nil ? sourceChat.required("messages").array("messages").count + 1 : 1
@@ -947,13 +1001,16 @@ final class ChatState: ObservableObject {
     private func beginGeneration(source: OrderedJSON, chatID: String, path: [String], history: MessageEditing.HistoryState?, plan: OrderedJSON?, regenerate: Bool,
                                  record: RemoteCredentialRecord? = nil, client: RemoteClient, readProviderCredential: @escaping ProviderModels.CredentialReader, now: Double,
                                  titleAfterAppend: Bool = false) throws {
+        guard !hasRunningLocalGeneration else { throw ExchangeError.invalid("ローカル生成の終了を待ってください") }
         let sourceChat = try source.required("chats").array("chats").first { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }!
         let savedState = try publicationSnapshot().required("state")
         let modelState = ChatConfig.modelState(in:savedState)
         if sourceChat["config"]?["modelSource"] == .string("local") {
+            guard !hasGenerations else { throw ExchangeError.invalid("ローカル生成は他の生成の終了後に開始してください") }
             try beginLocalGeneration(source:source,chat:sourceChat,chatID:chatID,path:path,history:history,plan:plan,now:now,titleAfterAppend:titleAfterAppend)
             return
         }
+        guard generation(for:chatID) == nil else { throw ExchangeError.invalid("この会話ではすでに生成中です") }
         let legacy = try record ?? RemoteCredentials.load()
         let proxy = try legacy.proxy?.validated()
         let credential = try ProviderModels.generationCredential(config:sourceChat["config"] ?? .object([]),state:savedState,legacy:legacy,read:readProviderCredential)
@@ -968,19 +1025,17 @@ final class ChatState: ObservableObject {
         guard let plan else { throw ExchangeError.invalid("生成先がありません") }
         let started = try startingStreamState(source:source,chatID:chatID,plan:plan,id:id,proxy:proxy != nil,now:now)
         try applyLibrary(started, selectedID: chatID, resetViewFor: chatID, editing: history, now: now)
-        generation = ActiveGeneration(id: id, chatID: chatID, baseSource: try publishedSource(), path: path, plan: plan, titleAfterAppend: titleAfterAppend)
+        setGeneration(ActiveGeneration(id: id, chatID: chatID, baseSource: try publishedSource(), path: path, plan: plan, titleAfterAppend: titleAfterAppend))
         generationError = nil
         automaticEvaluationError = nil
-        let requestChat = try publishedSource().required("chats").array("chats").first { $0["id"] == .string(chatID) }
-        pendingTitleContext = (id,legacy,client,readProviderCredential)
+        pendingTitleContexts[id] = (legacy,client,readProviderCredential)
         startLiveTokenCounting(generationID:id)
-        generationTask = Task { @MainActor [weak self] in
+        generationTasks[id] = Task { @MainActor [weak self] in
             guard let self else { return }
             @MainActor func check() throws {
                 try Task.checkCancellation()
-                guard self.generation?.id == id, self.generation?.running == true,
-                      self.exchange?.source == self.generation?.baseSource,
-                      try self.generation?.baseSource.required("chats").array("chats").first(where:{ $0["id"] == .string(chatID) }) == requestChat,
+                guard let current = self.generation(id), current.running,
+                      try self.generationTargetIsCurrent(current),
                       try ChatConfig.modelState(in:self.publicationSnapshot().required("state")) == modelState,
                       try self.publicationSnapshot().required("state")["providers"] == savedState["providers"],
                       try self.publicationSnapshot().required("state")["apiVersion"] == savedState["apiVersion"] else { throw CancellationError() }
@@ -1003,23 +1058,23 @@ final class ChatState: ObservableObject {
                 let userContent = try ConversationEvaluation.transmittedUserContent(messages)
                 if let userContent {
                     let nodeID = try plan.required("targetNodeId").string("target node")
-                    self.automaticEvaluationContext = (id,chatID,nodeID,path,userContent,legacy,client,readProviderCredential)
+                    self.automaticEvaluationContexts[id] = (chatID,nodeID,path,userContent,legacy,client,readProviderCredential)
                     self.startAutomaticEvaluation(phase:"pre-send",generationID:id)
                 }
                 var savedCursor: OrderedJSON?
                 var savedComplete: Bool?
                 try await client.complete(request, streaming: streaming, proxy:proxy, providerID:sourceChat["config"]?["providerId"].flatMap { try? $0.string("provider ID") }, proxySessionID:chatID + ":" + id.uuidString.lowercased(),onProxyCheckpoint:{ [weak self] output in
-                    guard let self, let current = self.generation, current.id == id, current.running,
-                          self.exchange?.source == current.baseSource else { throw CancellationError() }
+                    guard let self, let current = self.generation(id), current.running,
+                          try self.generationTargetIsCurrent(current) else { throw CancellationError() }
                     let cursor = output.proxyReceipt?.decoder?["lastEventId"] ?? .number("0")
                     let complete = output.proxyReceipt?.complete == true
                     guard cursor != savedCursor || complete != savedComplete else { return }
                     try self.proxyRecoveryStore.upsert(self.makeProxyRecoveryRecord(current,output:output))
                     savedCursor = cursor; savedComplete = complete
                 }) { [weak self] output in
-                    guard let self, self.generation?.id == id, self.generation?.running == true,
-                          self.exchange?.source == self.generation?.baseSource else { return }
-                    self.generation?.output = output
+                    guard let self, var current = self.generation(id), current.running,
+                          (try? self.generationTargetIsCurrent(current)) == true else { return }
+                    current.output = output; self.setGeneration(current)
                 }
                 try await self.prepareGenerationTokenCounts(id:id)
                 self.finishGeneration(id:id,error:nil)
@@ -1041,7 +1096,7 @@ final class ChatState: ObservableObject {
         try? publicationSnapshot()["state"]?["activeLocalModels"]?[task]?.string("model ID")
     }
     func saveLocalModelRole(task: String? = nil, modelID: String? = nil, enabled: Bool? = nil) throws {
-        guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してからモデル設定を変更してください") }
+        guard !hasGenerations else { throw ExchangeError.invalid("生成結果を保存してからモデル設定を変更してください") }
         let roots = try syncInputSnapshot().required("state")
         let projected = OrderedJSON.object(["localModelEnabled","activeLocalModels"].compactMap { key in roots[key].map { .init(key:key,value:$0) } })
         var fields: [JSONField] = [.init(key:"state",value:projected)]
@@ -1055,7 +1110,7 @@ final class ChatState: ObservableObject {
     }
 
     @MainActor func importSingleGGUF(_ source: URL) async throws -> String {
-        guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してからモデルを登録してください") }
+        guard !hasGenerations else { throw ExchangeError.invalid("生成結果を保存してからモデルを登録してください") }
         let roots = try syncInputSnapshot().required("state")
         let models = try roots["localModels"]?.array("local models") ?? []
         let active = roots["activeLocalModels"] ?? .object([])
@@ -1139,15 +1194,15 @@ final class ChatState: ObservableObject {
             guard let plan else { throw ExchangeError.invalid("生成先がありません") }
             let started = try startingStreamState(source:source,chatID:chatID,plan:plan,id:id,proxy:false,now:now)
             try applyLibrary(started,selectedID:chatID,resetViewFor:chatID,editing:history,now:now)
-            generation = ActiveGeneration(id:id,chatID:chatID,baseSource:try publishedSource(),path:path,plan:plan,output:output,usesRemoteTransport:false,titleAfterAppend:titleAfterAppend)
+            setGeneration(ActiveGeneration(id:id,chatID:chatID,baseSource:try publishedSource(),path:path,plan:plan,output:output,usesRemoteTransport:false,titleAfterAppend:titleAfterAppend))
             generationError = nil
             automaticEvaluationError = nil
             if let userContent {
                 let nodeID = try plan.required("targetNodeId").string("target node")
-                automaticEvaluationContext = (id,chatID,nodeID,path,userContent,nil,RemoteClient(),RemoteCredentials.load(providerID:))
+                automaticEvaluationContexts[id] = (chatID,nodeID,path,userContent,nil,RemoteClient(),RemoteCredentials.load(providerID:))
                 startAutomaticEvaluation(phase:"pre-send",generationID:id)
             }
-            generationTask = Task { @MainActor [weak self] in
+            generationTasks[id] = Task { @MainActor [weak self] in
                 guard let self else { return }
                 defer { self.consumeAssistantPrefill(key:prefillKey,prefix:prefix) }
                 do {
@@ -1164,51 +1219,56 @@ final class ChatState: ObservableObject {
     }
 
     @MainActor private func receiveLocalOutput(_ text: String, id: UUID, input: OrderedJSON) throws -> Bool {
-        guard generation?.id == id, generation?.running == true, exchange?.source == generation?.baseSource else { return true }
-        return try generation!.output.consumeLocal(text,input:input)
+        guard var current = generation(id), current.running, try generationTargetIsCurrent(current) else { return true }
+        let finished = try current.output.consumeLocal(text,input:input)
+        setGeneration(current)
+        return finished
     }
 
     func stopGeneration() {
-        guard let generation, generation.running else { return }
-        cancelAutomaticEvaluation(generationID:generation.id)
-        generationTask?.cancel()
+        stopGeneration(chatID:selectedID)
+    }
+    func stopGeneration(chatID: String) {
+        guard let current = generation(for:chatID), current.running else { return }
+        cancelAutomaticEvaluation(generationID:current.id)
+        generationTasks[current.id]?.cancel()
         do {
-            var output = generation.output
+            var output = current.output
             try output.flush()
-            self.generation?.output = output
-            finishGeneration(id:generation.id,error:nil,completed:false)
-        } catch { finishGeneration(id:generation.id,error:error) }
+            var updated = current; updated.output = output; setGeneration(updated)
+            finishGeneration(id:current.id,error:nil,completed:false)
+        } catch { finishGeneration(id:current.id,error:error) }
     }
 
     func saveGenerationResult() throws {
-        guard let generation, !generation.running else { throw ExchangeError.invalid("生成結果がありません") }
-        do { try persistGeneration(generation) }
+        guard let current = generation, !current.running else { throw ExchangeError.invalid("生成結果がありません") }
+        do { try persistGeneration(current) }
         catch {
-            cancelAutomaticEvaluation(generationID:generation.id,clearContext:false)
+            cancelAutomaticEvaluation(generationID:current.id,clearContext:false)
             throw error
         }
         generationError = nil
     }
 
     private func finishGeneration(id: UUID, error: Error?, completed: Bool = true) {
-        liveUsageVersion += 1; liveUsageTask = nil; liveTokenCounts = nil
-        guard var current = generation, current.id == id, current.running, exchange?.source == current.baseSource else { return }
+        liveUsageVersions[id, default: 0] += 1; liveUsageTasks[id] = nil; liveTokenCounts.removeValue(forKey:id)
+        guard var current = generation(id), current.running, (try? generationTargetIsCurrent(current)) == true else { return }
         current.running = false
         current.completedSuccessfully = completed && error == nil
         current.failed = error != nil
-        generation = current
-        generationTask = nil
-        if let error { generationError = "生成を完了できませんでした。\n" + error.localizedDescription }
+        setGeneration(current)
+        generationTasks[id] = nil
+        if let error { setGenerationError("生成を完了できませんでした。\n" + error.localizedDescription, chatID:current.chatID) }
         do { try persistGeneration(current) }
         catch {
             cancelAutomaticEvaluation(generationID:id,clearContext:false)
-            generationError = "生成結果を保存できませんでした。部分本文を保持しています。\n" + error.localizedDescription
+            setGenerationError("生成結果を保存できませんでした。部分本文を保持しています。\n" + error.localizedDescription, chatID:current.chatID)
         }
     }
 
     private func persistGeneration(_ current: ActiveGeneration) throws {
-        let titleContext = pendingTitleContext?.id == current.id ? pendingTitleContext : nil
-        guard exchange?.source == current.baseSource else { throw ExchangeError.invalid("生成開始後に会話が変更されています") }
+        let titleContext = pendingTitleContexts[current.id]
+        guard let latest = exchange?.source, try generationTargetIsCurrent(current, in:latest) else { throw ExchangeError.invalid("生成先が変更されているため、結果を保存できません") }
         guard let plan = current.plan else { throw ExchangeError.invalid("生成先がありません") }
         var endFields: [JSONField] = [.init(key:"operation",value:.string("endReason")),
             .init(key:"failed",value:.bool(current.failed)),.init(key:"completed",value:.bool(current.completedSuccessfully))]
@@ -1216,22 +1276,22 @@ final class ChatState: ObservableObject {
         let stream = try OrderedJSON.object([.init(key:"reason",value:SharedWebOperations.call("streamStatus",.object(endFields)))])
         if try current.output.isEmpty && current.output.observation.object("observation").isEmpty {
             cancelAutomaticEvaluation(generationID:current.id)
-            let source = try MessageEditing.streamState(in:current.baseSource,chatID:current.chatID,plan:plan,stream:stream,now:Date().timeIntervalSince1970 * 1000)
+            let source = try MessageEditing.streamState(in:latest,chatID:current.chatID,plan:plan,stream:stream,now:Date().timeIntervalSince1970 * 1000)
             if current.output.proxyReceipt != nil {
                 try proxyRecoveryStore.upsert(makeProxyRecoveryRecord(current,output:current.output))
             }
-            try applyLibrary(source,selectedID:current.chatID,editing:editingHistory,openRouterStats:try queuedOpenRouterStats(current,now:Date().timeIntervalSince1970 * 1000))
+            try applyLibrary(source,selectedID:selectedID,resetViewFor:current.chatID,editing:editingHistory,openRouterStats:try queuedOpenRouterStats(current,now:Date().timeIntervalSince1970 * 1000))
             if current.output.proxyReceipt != nil && !current.failed {
                 do { try proxyRecoveryStore.remove(current.id.uuidString.lowercased()) }
                 catch { streamRecoveryError = "保存済み応答の復旧記録を整理できませんでした。\n" + error.localizedDescription }
             }
             rememberFailedGeneration(current)
-            generation = nil
+            removeGeneration(id:current.id)
             return
         }
         let now = Date().timeIntervalSince1970 * 1000
         var history: MessageEditing.HistoryState?
-        let finalized = try MessageEditing.generation(in:current.baseSource,chatID:current.chatID,operation:"finalize",viewingPath:current.path,plan:plan,
+        let finalized = try MessageEditing.generation(in:latest,chatID:current.chatID,operation:"finalize",viewingPath:current.path,plan:plan,
             parts:current.output.parts,stream:stream,now:now,history:editingHistory) { history = $0 }
         guard finalized.output["status"] == .string("updated") else { throw ExchangeError.invalid("生成先が変更されているため、結果を保存できません") }
         var source = finalized.source
@@ -1243,9 +1303,9 @@ final class ChatState: ObservableObject {
             let hash = try chat?.required("branchTree").required("nodes").required(target).required("contentHash")
             try proxyRecoveryStore.upsert(makeProxyRecoveryRecord(current,output:current.output).replacing("appliedHash",with:hash ?? .null))
         }
-        try applyLibrary(source, selectedID: current.chatID, resetViewFor: current.chatID, tokenUsage:accounting.usage, editing: history, openRouterStats:try queuedOpenRouterStats(current,now:now), now: now)
+        try applyLibrary(source, selectedID: selectedID, resetViewFor: current.chatID, tokenUsage:accounting.usage, editing: history, openRouterStats:try queuedOpenRouterStats(current,now:now), now: now)
         rememberFailedGeneration(current)
-        generation = nil
+        removeGeneration(id:current.id)
         if let receipt = current.output.proxyReceipt, current.completedSuccessfully || !current.failed {
             do { try proxyRecoveryStore.remove(current.id.uuidString.lowercased()) }
             catch { streamRecoveryError = "保存済み応答の復旧記録を整理できませんでした。\n" + error.localizedDescription }
@@ -1254,7 +1314,7 @@ final class ChatState: ObservableObject {
                 Task { await control.proxyControl(settings:receipt.settings,sessionID:receipt.sessionID,operation:"ack") }
             }
         }
-        if current.completedSuccessfully, automaticEvaluationContext?.id == current.id {
+        if current.completedSuccessfully, automaticEvaluationContexts[current.id] != nil {
             cancelledAutomaticEvaluationIDs.remove(current.id)
             startAutomaticEvaluation(phase:"post-receive",generationID:current.id)
         } else { cancelAutomaticEvaluation(generationID:current.id) }
@@ -1332,7 +1392,7 @@ final class ChatState: ObservableObject {
     func cancelProxyRecovery() { streamRecoveryTask?.cancel() }
 
     @MainActor func recoverProxyStreams(record credential: RemoteCredentialRecord? = nil, client: RemoteClient? = nil, sessionID: String? = nil) async throws {
-        guard generation == nil, !isRecoveringStream, !initialLoadFailed, exchange != nil else { return }
+        guard !hasGenerations, !isRecoveringStream, !initialLoadFailed, exchange != nil else { return }
         let records = try proxyRecoveryStore.records()
         streamRecoveryError = nil
         guard !records.isEmpty else { return }
@@ -1349,6 +1409,7 @@ final class ChatState: ObservableObject {
             // Never send a token to an endpoint recovered from disk or imported data.
             let recordedEndpoint = try original.required("proxyEndpoint").string("proxy endpoint")
             let canFetch = settings?.endpoint.utf8.elementsEqual(recordedEndpoint.utf8) == true
+            if settings != nil && !canFetch { retained += 1; continue }
             let reconstruction = settings ?? RemoteProxySettings(enabled:true,endpoint:recordedEndpoint)
             var output = try RemoteOutput(proxyCheckpoint:original.required("checkpoint"),settings:reconstruction,
                 sessionID:original.required("proxySessionId").string("proxy session"),complete:complete)
@@ -1360,12 +1421,12 @@ final class ChatState: ObservableObject {
                 var attempt = 0
                 while true {
                     try Task.checkCancellation()
-                    guard generation == nil, try proxyRecoveryTarget(latest) else { throw CancellationError() }
+                    guard !hasGenerations, try proxyRecoveryTarget(latest) else { throw CancellationError() }
                     output = try RemoteOutput(proxyCheckpoint:output.proxyCheckpoint,settings:reconstruction,
                         sessionID:original.required("proxySessionId").string("proxy session"),complete:false)
                     do {
                         try await (client?.auxiliaryClient() ?? RemoteClient()).recoverProxy(output,onCheckpoint:{ [weak self] next in
-                            guard let self, self.generation == nil, try self.proxyRecoveryTarget(latest) else { throw CancellationError() }
+                            guard let self, !self.hasGenerations, try self.proxyRecoveryTarget(latest) else { throw CancellationError() }
                             let previousCursor = latest["checkpoint"]?["decoder"]?["lastEventId"] ?? .number("0")
                             let previousComplete = latest["proxyComplete"] == .bool(true)
                             latest = try self.updatingProxyRecord(latest,output:next)
@@ -1392,7 +1453,7 @@ final class ChatState: ObservableObject {
                 }
             }
             try Task.checkCancellation()
-            guard generation == nil, try proxyRecoveryTarget(latest), let source = exchange?.source else { retained += 1; continue }
+            guard !hasGenerations, try proxyRecoveryTarget(latest), let source = exchange?.source else { retained += 1; continue }
             try output.flush()
             let chatID = try latest.required("chatId").string("chat ID")
             let plan = try latest.required("plan")
@@ -1444,14 +1505,14 @@ final class ChatState: ObservableObject {
     }
 
     @MainActor private func prepareGenerationTokenCounts(id: UUID) async throws {
-        guard let current = generation, current.id == id, current.usesRemoteTransport, usageCountingEnabled else { return }
+        guard let current = generation(id), current.usesRemoteTransport, usageCountingEnabled else { return }
         let usagePlan = try generationTokenPlan(current)
         guard usagePlan != .null, usagePlan["kind"] == .string("estimated") else { return }
         let counts = try await tokenCounting.counts(plan:usagePlan)
         try Task.checkCancellation()
-        guard generation?.id == id, generation?.output.parts == current.output.parts,
-              let latest = generation, exchange?.source == latest.baseSource, try generationTokenPlan(latest) == usagePlan else { throw CancellationError() }
-        generation?.tokenCounts = counts
+        guard var latest = generation(id), latest.output.parts == current.output.parts,
+              try generationTargetIsCurrent(latest), try generationTokenPlan(latest) == usagePlan else { throw CancellationError() }
+        latest.tokenCounts = counts; setGeneration(latest)
     }
 
     private func generationTokenPlan(_ current: ActiveGeneration) throws -> OrderedJSON {
@@ -1468,16 +1529,16 @@ final class ChatState: ObservableObject {
     }
 
     private func startLiveTokenCounting(generationID: UUID) {
-        liveUsageVersion += 1; liveTokenCounts = nil
-        let version = liveUsageVersion
-        guard usageCountingEnabled else { liveUsageTask = nil; return }
-        liveUsageTask = Task { @MainActor [weak self] in
+        liveUsageVersions[generationID, default:0] += 1; liveTokenCounts.removeValue(forKey:generationID)
+        let version = liveUsageVersions[generationID]!
+        guard usageCountingEnabled else { liveUsageTasks[generationID] = nil; return }
+        liveUsageTasks[generationID] = Task { @MainActor [weak self] in
             guard let self else { return }
             var promptSource: OrderedJSON?
             var promptCount: Int?
             var promptModel: String?
             var encoderReady = self.tokenCounting.isReady
-            while let current = self.generation, current.id == generationID, current.running, self.usageCountingEnabled, self.liveUsageVersion == version {
+            while let current = self.generation(generationID), current.running, self.usageCountingEnabled, self.liveUsageVersions[generationID] == version {
                 do {
                     guard let chat = try current.baseSource.required("chats").array("chats").first(where:{ $0["id"] == .string(current.chatID) }) else { throw CancellationError() }
                     var boundary = SharedWebProjection()
@@ -1495,9 +1556,9 @@ final class ChatState: ObservableObject {
                     else { completion = 0 }
                     let counts = OrderedJSON.object([.init(key:"promptTokens",value:.number(String(promptCount!))),.init(key:"completionTokens",value:.number(String(completion)))])
                     try Task.checkCancellation()
-                    guard self.liveUsageVersion == version, self.generation?.id == generationID, self.generation?.running == true, self.usageCountingEnabled else { return }
-                    if self.generation?.baseSource == current.baseSource, self.generation?.output.parts == current.output.parts {
-                        self.liveTokenCounts = (generationID,current.baseSource,current.output.parts,counts)
+                    guard self.liveUsageVersions[generationID] == version, let latest = self.generation(generationID), latest.running, self.usageCountingEnabled else { return }
+                    if latest.baseSource == current.baseSource, latest.output.parts == current.output.parts {
+                        self.liveTokenCounts[generationID] = (current.baseSource,current.output.parts,counts)
                     }
                     let delay = try SharedWebOperations.call("tokenizerOperation",.object([.init(key:"operation",value:.string("throttle"))])).number("live interval")
                     try await Task.sleep(nanoseconds:UInt64(delay * 1_000_000))
@@ -1535,7 +1596,9 @@ final class ChatState: ObservableObject {
         guard !initialLoadFailed else { throw ExchangeError.invalid("保存ファイルを復旧してから設定してください") }
         guard usageCountingEnabled != enabled else { return }
         try applyLibrary(exchange?.source ?? ChatLibrary.emptySource,selectedID:selectedID,preserveGeneration:true,usageEnabled:enabled)
-        if let generation, generation.running { startLiveTokenCounting(generationID:generation.id) }
+        for current in generations.values where current.running && current.usesRemoteTransport {
+            startLiveTokenCounting(generationID:current.id)
+        }
     }
     func resetUsageTotals() throws {
         guard !initialLoadFailed else { throw ExchangeError.invalid("保存ファイルを復旧してから設定してください") }
@@ -1544,34 +1607,39 @@ final class ChatState: ObservableObject {
     func usageCostReport() throws -> OrderedJSON {
         let roots = try publicationSnapshot().required("state")
         var fields: [JSONField] = [.init(key:"state",value:ChatConfig.modelState(in:roots)),.init(key:"totalTokenUsed",value:roots["totalTokenUsed"] ?? .object([]))]
-        if let current = generation, current.running,
-           let chat = try current.baseSource.required("chats").array("chats").first(where: { $0["id"].flatMap { try? $0.string("id") }?.utf8.elementsEqual(current.chatID.utf8) == true }) {
+        var overlays: [OrderedJSON] = []
+        for current in generations.values where current.running {
+            guard let chat = try current.baseSource.required("chats").array("chats").first(where: { $0["id"].flatMap { try? $0.string("id") }?.utf8.elementsEqual(current.chatID.utf8) == true }) else { continue }
             var boundary = SharedWebProjection()
             let config = try chat["config"] ?? ChatDefaults.webInitial().config
             var input = try SharedGenerationContext.fields(source:current.baseSource,chat:chat,config:config,path:current.path,boundary:&boundary)
             input.append(.init(key:"completionParts",value:current.output.parts))
-            if let liveTokenCounts, liveTokenCounts.generationID == current.id, liveTokenCounts.source == current.baseSource, liveTokenCounts.parts == current.output.parts {
-                input.append(.init(key:"counts",value:liveTokenCounts.counts))
+            if let live = liveTokenCounts[current.id], live.source == current.baseSource, live.parts == current.output.parts {
+                input.append(.init(key:"counts",value:live.counts))
             }
             let overlay = try SharedWebOperations.call("generationLiveUsage",.object(input))
-            fields.append(.init(key:"liveTokenUsed",value:overlay))
+            overlays.append(overlay)
         }
+        fields.append(.init(key:"liveTokenUsages",value:.array(overlays)))
         return try SharedWebOperations.call("usageCost",.object(fields))
     }
 
     private func invalidateGeneration() {
-        failedGenerationRetry = nil
-        liveUsageVersion += 1; liveUsageTask = nil; liveTokenCounts = nil
-        if let current = generation, current.running { cancelAutomaticEvaluation(generationID:current.id) }
-        pendingTitleContext = nil
-        generationTask?.cancel()
-        generationTask = nil
-        generation = nil
+        failedGenerationRetries.removeAll()
+        generationErrors.removeAll()
+        for current in generations.values {
+            liveUsageVersions[current.id, default:0] += 1; liveUsageTasks[current.id] = nil; liveTokenCounts.removeValue(forKey:current.id)
+            if current.running { cancelAutomaticEvaluation(generationID:current.id) }
+            generationTasks[current.id]?.cancel()
+        }
+        pendingTitleContexts.removeAll()
+        generationTasks.removeAll()
+        generations.removeAll()
     }
 
     func createChat(defaults: ChatDefaults? = nil, id: String = UUID().uuidString.lowercased(), folder: String? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         let source = exchange?.source ?? ChatLibrary.emptySource
-        var created = try ChatLibrary.create(in: source, id: id, defaults: defaults ?? ChatDefaults.saved(in:syncInputSnapshot().required("state")), folder: folder)
+        var created = try ChatLibrary.create(in: source, id: id, defaults: defaults ?? ChatDefaults.saved(in:(document?.snapshot ?? SyncDocument(v3:ChatLibrary.emptySource).snapshot).required("state")), folder: folder)
         if let folder { created = try ChatFolders.apply(in: created, operation: .move(chatIDs: [id], folderID: folder)) }
         try applyLibrary(created, selectedID: id, now: now)
     }
@@ -1634,14 +1702,14 @@ final class ChatState: ObservableObject {
         let base = try document ?? SyncDocument(v3:exchange?.source ?? ChatLibrary.emptySource)
         try applyDocument(SyncDocument(snapshot:base.snapshot.replacing("state",with:roots),v3Sidecar:base.v3Sidecar,v3RootOrder:base.v3RootOrder))
     }
-    private var summaryGeneratingIDs: [String] {
-        guard let target = generation?.plan?["targetNodeId"], case .string(let id) = target else { return [] }
+    private func summaryGeneratingIDs(chatID: String) -> [String] {
+        guard let target = generation(for:chatID)?.plan?["targetNodeId"], case .string(let id) = target else { return [] }
         return [id]
     }
     func summaryInfo(chatID: String, nodeID: String, mode: String? = nil) throws -> OrderedJSON? {
         guard let exchange else { return nil }
         return try ConversationSummary.describe(source:exchange.source,chatID:chatID,nodeID:nodeID,mode:mode,originNodeID:nodeID,
-            chosenSummaryID:summaryChosen[.init(chatID:chatID,nodeID:nodeID)],generatingNodeIDs:summaryGeneratingIDs)
+            chosenSummaryID:summaryChosen[.init(chatID:chatID,nodeID:nodeID)],generatingNodeIDs:summaryGeneratingIDs(chatID:chatID))
     }
     func summaryDraft(nodeID: String) throws -> ConversationSummaryDraft {
         guard let conversation, let info = try summaryInfo(chatID:conversation.id,nodeID:nodeID) else { throw ExchangeError.invalid("要約する会話がありません") }
@@ -1680,7 +1748,7 @@ final class ChatState: ObservableObject {
         let roots = try publicationSnapshot().required("state")
         let busy = summaryJobs.values.filter { $0.busy && $0.chatID.utf8.elementsEqual(draft.chatID.utf8) }.map { ($0.originNodeID,$0.sourceNodeIDs) }
         guard let prepared = try ConversationSummary.prepare(source:exchange.source,state:roots,chatID:draft.chatID,sourceNodeIDs:sourceNodeIDs,mode:mode,originNodeID:draft.nodeID,
-            format:format,summaryID:UUID().uuidString.lowercased(),now:Date().timeIntervalSince1970 * 1000,config:roots["bubbleSummaryConfig"],generatingNodeIDs:summaryGeneratingIDs,busyJobs:busy,
+            format:format,summaryID:UUID().uuidString.lowercased(),now:Date().timeIntervalSince1970 * 1000,config:roots["bubbleSummaryConfig"],generatingNodeIDs:summaryGeneratingIDs(chatID:draft.chatID),busyJobs:busy,
             legacy:record ?? RemoteCredentials.load(),readProviderCredential:readProviderCredential,promptTokens:0) else { return }
         let key = SummaryIdentity(chatID:draft.chatID,nodeID:draft.nodeID), id = UUID()
         summaryJobs = summaryJobs.filter { _, job in
@@ -1707,7 +1775,7 @@ final class ChatState: ObservableObject {
                 let counts = try await self.tokenCounting.counts(plan:countPlan)
                 try Task.checkCancellation()
                 guard self.summaryJobs[key]?.id == id, let source = self.exchange?.source else { return }
-                guard let result = try ConversationSummary.apply(response,prepared:prepared,source:source,state:self.publicationSnapshot().required("state"),generatingNodeIDs:self.summaryGeneratingIDs,counts:counts) else { throw ExchangeError.invalid("原文や設定が変更されました。生成し直してください") }
+                guard let result = try ConversationSummary.apply(response,prepared:prepared,source:source,state:self.publicationSnapshot().required("state"),generatingNodeIDs:self.summaryGeneratingIDs(chatID:draft.chatID),counts:counts) else { throw ExchangeError.invalid("原文や設定が変更されました。生成し直してください") }
                 var updated = result.source
                 if let summary = result.summary, let summaryID = try summary["id"]?.string("summary") {
                     updated = try ConversationSummary.mutate(source:updated,chatID:draft.chatID,action:"use",summaryID:summaryID,use:result.savesTokens ?? true)
@@ -1747,7 +1815,7 @@ final class ChatState: ObservableObject {
         return try roots["evaluationSettings"] ?? SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("defaults"))])).required("evaluationSettings")
     }
     func saveEvaluationSetting(_ key: String, value: OrderedJSON) throws {
-        guard generation == nil else { throw ExchangeError.invalid("生成終了後に評価設定を変更してください") }
+        guard !hasGenerations else { throw ExchangeError.invalid("生成終了後に評価設定を変更してください") }
         let action: OrderedJSON
         if ["safetyPreSend","safetyPostReceive","qualityPreSend","qualityPostReceive"].contains(key),
            value == .string("auto") || value == .string("manual") {
@@ -1804,13 +1872,13 @@ final class ChatState: ObservableObject {
         if let tasks = automaticEvaluationTasks[generationID], !tasks.isEmpty {
             for task in tasks.values { task.cancel() }
         } else { cancelledAutomaticEvaluationIDs.remove(generationID) }
-        if clearContext, automaticEvaluationContext?.id == generationID { automaticEvaluationContext = nil }
+        if clearContext { automaticEvaluationContexts.removeValue(forKey:generationID) }
     }
 
     private func startAutomaticEvaluation(phase: String, generationID: UUID) {
-        guard let context = automaticEvaluationContext, context.id == generationID,
+        guard let context = automaticEvaluationContexts[generationID],
               let source = exchange?.source, let state = try? publicationSnapshot().required("state") else { return }
-        defer { if phase == "post-receive" { automaticEvaluationContext = nil } }
+        defer { if phase == "post-receive" { automaticEvaluationContexts.removeValue(forKey:generationID) } }
         do {
             let assistantContent = phase == "post-receive" ? try ConversationEvaluation.savedAssistantContent(source:source,chatID:context.chatID,nodeID:context.nodeID) : nil
             let prepared = try ConversationEvaluation.prepareAuto(source:source,state:state,chatID:context.chatID,nodeID:context.nodeID,
@@ -1880,7 +1948,7 @@ final class ChatState: ObservableObject {
 
     func deleteChats(ids: [String], defaults: ChatDefaults? = nil, replacementID: String = UUID().uuidString.lowercased(), now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard let exchange else { throw ExchangeError.invalid("サンプル会話は削除できません") }
-        let source = try ChatLibrary.delete(in: exchange.source, ids: ids, replacementID: replacementID, defaults: defaults ?? ChatDefaults.saved(in:syncInputSnapshot().required("state")))
+        let source = try ChatLibrary.delete(in: exchange.source, ids: ids, replacementID: replacementID, defaults: defaults ?? ChatDefaults.saved(in:(document?.snapshot ?? SyncDocument(v3:ChatLibrary.emptySource).snapshot).required("state")))
         let first = try source.required("chats").array("chats")[0].required("id").string("id")
         try applyLibrary(source, selectedID: first, now: now)
     }
@@ -1931,9 +1999,19 @@ final class ChatState: ObservableObject {
         let nextNavigation = try navigation ?? historySelecting(selectedID, in: changed.source)
         let nextEditing = try editing ?? (navigation != nil ? editingHistory : MessageEditing.invalidatingHistory(editingHistory, before: before, after: changed.source))
         try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selectedID, style: displayStyle))
-        if preserveGeneration, let current = generation {
-            generation = ActiveGeneration(id: current.id, chatID: current.chatID, baseSource: changed.source, path: current.path, plan: current.plan, output: current.output, running: current.running, completedSuccessfully:current.completedSuccessfully, failed:current.failed, usesRemoteTransport:current.usesRemoteTransport, titleAfterAppend:current.titleAfterAppend,tokenCounts:current.tokenCounts)
-        } else { invalidateGeneration() }
+        // A generation owns only its target chat.  Applying a result for another
+        // chat must not cancel it, while an edited target is still rejected.
+        let invalidGenerations = generations.values.filter { (try? generationTargetIsCurrent($0, in:changed.source)) != true }
+        for current in invalidGenerations {
+            generationTasks[current.id]?.cancel()
+            cancelAutomaticEvaluation(generationID:current.id)
+            if current.running {
+                var retained = current
+                retained.running = false; retained.failed = true
+                setGeneration(retained)
+                setGenerationError("生成先が変更されたため、結果は自動保存していません。", chatID:current.chatID)
+            }
+        }
         branchCandidates = candidates
         conversations = views
         self.selectedID = selectedID
@@ -1957,12 +2035,12 @@ final class ChatState: ObservableObject {
         return try document.exportData()
     }
     func exportWebData(format: ChatExport.Format, scope: ChatExport.Scope, compressed: Bool = false) throws -> ChatExport.Artifact {
-        guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してから書き出してください") }
+        guard !hasGenerations else { throw ExchangeError.invalid("生成結果を保存してから書き出してください") }
         let v3 = try OrderedJSON.decode(exportWebData())
         return try ChatExport.make(v3:v3,format:format,scope:scope,chatID:conversation?.id,visiblePath:scope == .all ? nil : conversation?.visibleMessages.map(\.id),compressed:compressed)
     }
     @MainActor func exportChatImage(dark: Bool) async throws -> ChatExport.Artifact {
-        guard generation == nil, let conversation else { throw ExchangeError.invalid("会話の生成結果を保存してから書き出してください") }
+        guard !hasGenerations, let conversation else { throw ExchangeError.invalid("会話の生成結果を保存してから書き出してください") }
         let snapshot = try publicationSnapshot(), path = conversation.visibleMessages.map(\.identity)
         func summaries(_ chat: Conversation) throws -> [Data: OrderedJSON] {
             var values: [Data: OrderedJSON] = [:]
@@ -1973,7 +2051,7 @@ final class ChatState: ObservableObject {
         let artifact = try await ChatImageExport.make(messages: conversation.visibleMessages, title: conversation.title,
             settings: snapshot.required("state"), dark: dark, summaries: presentation)
         try Task.checkCancellation()
-        guard generation == nil, let current = self.conversation,
+        guard !hasGenerations, let current = self.conversation,
               current.id.utf8.elementsEqual(conversation.id.utf8), current.visibleMessages.map(\.identity) == path,
               try publicationSnapshot() == snapshot, try summaries(current) == presentation else { throw ExchangeError.invalid("会話または設定が変更されました。書出しをやり直してください") }
         return artifact
@@ -1992,13 +2070,14 @@ final class ChatState: ObservableObject {
 
     func applySnapshot(_ snapshot: OrderedJSON) throws {
         guard !initialLoadFailed else { throw ExchangeError.invalid("保存ファイルを読めなかったため更新できません。明示的な置換が必要です") }
+        guard !hasGenerations else { throw ExchangeError.invalid("生成中は保存データを置き換えられません") }
         let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
         let candidate = try base.mergingSnapshot(snapshot)
         try applyDocument(candidate)
     }
     func syncInputSnapshot() throws -> OrderedJSON {
         guard !initialLoadFailed else { throw SyncSessionError.invalid("The saved local file could not be loaded; it was not replaced") }
-        guard generation == nil else { throw SyncSessionError.invalid("Wait for the active generation before applying Google sync") }
+        guard !hasGenerations else { throw SyncSessionError.invalid("Wait for active generations before applying Google sync") }
         if let document { return document.snapshot }
         return try SyncDocument(v3:ChatLibrary.emptySource).snapshot
     }

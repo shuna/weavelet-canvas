@@ -30,6 +30,14 @@ describe('shared usage cost report', () => {
     expect(totalTokenUsed['cached:::openrouter'].promptTokens).toBe(1_000_000);
   });
 
+  it('merges all concurrent overlays with the existing Web counter merge without changing saved totals', () => {
+    const totalTokenUsed = { model: usage };
+    const input = { state: { favoriteModels: [{ modelId: 'model', promptPrice: 2, completionPrice: 0, imagePrice: 0 }] },
+      totalTokenUsed, liveTokenUsages: [{ model: usage }, { model: usage }] };
+    expect(report(input).rows[0].cost).toBe(6);
+    expect(totalTokenUsed.model.promptTokens).toBe(1_000_000);
+  });
+
   it('distinguishes unregistered and missing pricing and treats only nonempty free totals as free', () => {
     const state = { favoriteModels: [{ modelId: 'unpriced', providerId: 'openai' },
       { modelId: 'free', providerId: 'openai', promptPrice: 0, completionPrice: 0, imagePrice: 0 }] };

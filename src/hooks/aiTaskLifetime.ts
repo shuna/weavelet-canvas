@@ -1,5 +1,5 @@
 import useStore from '@store/store';
-import type { StoreState } from '@store/store';
+import { aiTaskFingerprint as fingerprint } from '@utils/aiTaskTarget';
 
 type TaskKind = 'generation' | 'recovery' | 'evaluation-pre' | 'evaluation-post' | 'title';
 export interface AiTaskTicket {
@@ -15,18 +15,6 @@ export interface AiTaskTicket {
 }
 const tasks = new Map<string, AiTaskTicket>();
 const targetKey = (ticket: Pick<AiTaskTicket, 'kind' | 'chatId' | 'nodeId'>) => JSON.stringify([ticket.kind, ticket.chatId, ticket.nodeId]);
-
-function fingerprint(ticket: AiTaskTicket, state: StoreState): string | null {
-  const chat = state.chats?.find(chat => chat.id === ticket.chatId);
-  if (!chat || (ticket.nodeId && !chat.branchTree?.nodes[ticket.nodeId])) return null;
-  if (ticket.kind === 'title') return JSON.stringify([chat.title, chat.titleSet]);
-  const nodes = ticket.dependencyIds.map(id => {
-    const node = chat.branchTree?.nodes[id];
-    return node ? [id, node.role, node.contentHash, chat.omittedNodes?.[id] ?? false] : null;
-  });
-  if (nodes.some(node => node === null)) return null;
-  return JSON.stringify([nodes, ticket.kind === 'generation' ? chat.config : null]);
-}
 
 // Register against the same synchronous state used to prepare the request.
 export function beginAiTask(input: Omit<AiTaskTicket, 'status' | 'fingerprint'>): AiTaskTicket {

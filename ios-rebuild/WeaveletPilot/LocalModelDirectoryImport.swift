@@ -3,7 +3,7 @@ import Foundation
 extension ChatState {
     @MainActor private func requireDirectoryImport(_ model: OrderedJSON) throws {
         try Task.checkCancellation()
-        guard generation == nil, !evaluationJobs.values.contains(where: { $0.busy }) else {
+        guard !hasGenerations, !evaluationJobs.values.contains(where: { $0.busy }) else {
             throw ExchangeError.invalid("生成・評価の終了後にモデルフォルダーを選択してください")
         }
         let id = try model.required("id").string("model id")

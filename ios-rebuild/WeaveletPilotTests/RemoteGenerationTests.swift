@@ -1256,7 +1256,7 @@ final class RemoteGenerationTests: XCTestCase {
         XCTAssertNil(state.generation)
         XCTAssertEqual(ChatState(store: store).exchange?.source, state.exchange?.source)
     }
-    func testSourceReplacementInvalidatesOldSessionAndRejectsLateCompletion() async throws {
+    func testRenameKeepsGenerationTargetAndPreservesTitleOnCompletion() async throws {
         let store = try store()
         let state = try state(store,stream:false)
         let client = client()
@@ -1266,10 +1266,12 @@ final class RemoteGenerationTests: XCTestCase {
         try await wait { FakeRemoteProtocol.releaseLast != nil }
         try state.renameChat(id: "remote", title: "New source")
         let changed = state.exchange?.source
+        // Web aiTaskFingerprint excludes the title from generation dependencies.
+        XCTAssertNotNil(state.generation)
         FakeRemoteProtocol.releaseLast?()
-        await Task.yield()
-        XCTAssertNil(state.generation)
-        XCTAssertEqual(state.exchange?.source, changed)
+        try await wait { state.generation == nil }
+        XCTAssertEqual(state.conversation?.title, "New source")
+        XCTAssertNotEqual(state.exchange?.source, changed)
     }
     func testSettingsFailureKeepsRecordAndSavedChatModelWinsWithLegacyFallback() throws {
         let state = ChatState()

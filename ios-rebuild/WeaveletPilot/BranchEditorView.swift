@@ -429,7 +429,7 @@ struct BranchEditorView: View {
                 if let nodeKey = sourceKey.context(chatIndex: node.chatIndex) {
                     let target = compareTarget?.key == nodeKey ? compareTarget?.nodeID : nil
                     let otherNode = target.flatMap { $0.utf8.elementsEqual(node.id.utf8) ? nil : $0 }
-                    BranchNodeCard(node: node, canEdit: state.exchange != nil && state.generation == nil,
+                    BranchNodeCard(node: node, canEdit: state.exchange != nil && state.generation(for: nodeKey.chatID) == nil,
                         canDelete: !(node.role == "system" && nodeKey.isRoot(node.id)),
                         hasClipboard: state.hasBranchClipboard, select: {
                         do {
@@ -457,7 +457,7 @@ struct BranchEditorView: View {
         }
     }
     private func performMenu(_ node: BranchGraph.Node, key: BranchLayoutKey, action: () -> Void) {
-        guard key.isCurrent(in: state), state.generation == nil else { return }
+        guard key.isCurrent(in: state), state.generation(for: key.chatID) == nil else { return }
         do {
             if !state.selectedConversationID.utf8.elementsEqual(key.chatID.utf8) {
                 try state.navigate(chatID: key.chatID, nodeID: node.id, source: .branchEditor)

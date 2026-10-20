@@ -168,7 +168,7 @@ struct PromptLibraryView: View {
         }
         .navigationTitle("プロンプトライブラリ")
         .navigationBarTitleDisplayMode(.inline)
-        .disabled(state.generation != nil)
+        .disabled(state.hasGenerations)
         .onAppear { isVisible = true }
         .onDisappear { isVisible = false; cancelOperation() }
         .task {

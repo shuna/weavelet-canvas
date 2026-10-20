@@ -8453,6 +8453,7 @@ var WeaveletGoogleSync = (() => {
   // shared/google-sync/entry.ts
   var entry_exports = {};
   __export(entry_exports, {
+    aiTaskTarget: () => aiTaskTarget,
     assistantPrefill: () => assistantPrefill,
     branchClipboard: () => branchClipboard,
     branchDiff: () => branchDiff2,
@@ -8525,6 +8526,29 @@ var WeaveletGoogleSync = (() => {
     treeEdit: () => treeEdit,
     usageCost: () => usageCost
   });
+
+  // src/utils/aiTaskTarget.ts
+  function aiTaskFingerprint(ticket, state) {
+    const chat = state.chats?.find((chat2) => chat2.id === ticket.chatId);
+    if (!chat || ticket.nodeId && !chat.branchTree?.nodes[ticket.nodeId])
+      return null;
+    if (ticket.kind === "title")
+      return JSON.stringify([chat.title, chat.titleSet]);
+    const nodes = ticket.dependencyIds.map((id) => {
+      const node = chat.branchTree?.nodes[id];
+      return node ? [id, node.role, node.contentHash, chat.omittedNodes?.[id] ?? false] : null;
+    });
+    if (nodes.some((node) => node === null))
+      return null;
+    return JSON.stringify([nodes, ticket.kind === "generation" ? chat.config : null]);
+  }
+
+  // shared/google-sync/aiTask.ts
+  function aiTaskTarget(json) {
+    const input = JSON.parse(json);
+    const before = aiTaskFingerprint(input.ticket, input.before);
+    return JSON.stringify(before !== null && aiTaskFingerprint(input.ticket, input.current) === before);
+  }
 
   // shared/google-sync/adapters/host.ts
   function host(operation, ...args) {
@@ -26871,7 +26895,8 @@ ${messageContent}---
   // shared/google-sync/usageCost.ts
   function usageCost(json) {
     const input = JSON.parse(json);
-    const totals = input.liveTokenUsed ? mergeTotalTokenUsed(input.totalTokenUsed ?? {}, input.liveTokenUsed) : input.totalTokenUsed ?? {};
+    const live = input.liveTokenUsages?.reduce(mergeTotalTokenUsed, input.liveTokenUsed ?? {}) ?? input.liveTokenUsed;
+    const totals = live ? mergeTotalTokenUsed(input.totalTokenUsed ?? {}, live) : input.totalTokenUsed ?? {};
     const rows = Object.entries(totals).map(([key, usage]) => {
       const { modelId, providerId } = parseTokenKey(key);
       const costEntry = getModelCostCore(input.state ?? {}, modelId, providerId);

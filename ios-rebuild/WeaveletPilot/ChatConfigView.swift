@@ -95,7 +95,7 @@ struct LocalModelSettingsView: View {
             if let fileStatus { Text(fileStatus).font(.footnote) }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
-        .disabled(copying || state.generation != nil || state.evaluationJobs.values.contains { $0.busy })
+        .disabled(copying || state.hasGenerations || state.evaluationJobs.values.contains { $0.busy })
         .navigationTitle("ローカルモデル")
         .navigationBarTitleDisplayMode(.inline)
         .fileImporter(isPresented:$showsImporter,allowedContentTypes:importingDirectoryModel == nil ? [UTType(filenameExtension:"gguf") ?? .data] : [.folder]) { result in
