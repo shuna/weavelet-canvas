@@ -1294,3 +1294,17 @@ nativeはchat/nodeのUTF8一致と既存共有fingerprint・request IDの現行�
 Web関連6件・型検査・Vite build・最終bundle鮮度、Catalyst BranchEditor16＋ParallelGeneration5の21件が成功。共有text選択/空白、Unicode境界、chat/node接続の混線拒否、保存失敗後のpreviewと元source/disk保持・再試行・再起動/exportを確認した。split frame修正後は影響する実画面と最終buildのみ再確認し、未変更の21件を反復していない。保存/同期基盤は未変更で、全項目I/O・実Web→native→Web暗号化同期の既存成功結果を再利用した。ログ /private/tmp/weavelet-live-preview-{generate,web-test,types,web-build,freshness,native-test,final-build}.log。Viteの既存chunk容量警告は残る。
 
 独立Astraの機能一式監査とsplit frameのみの限定再監査は新規P1/P2なし。隔離FAKE Catalystで393pt制約の本文/入力欄整列・編集/取消、左右分割の生成中FAKE partialから完了本文へのcard更新と位置維持、左右入替、上下分割、境界dragで50→41%の領域変化を確認した。狭幅previewは実iPhoneではなくCatalyst上の制約表示である。終了後にprocess不在とbuilt Info.plistのbyte一致復元を確認。長時間streamの性能、実keyboard/文字拡大/VoiceOver全経路、実API/cloudは未確認。iPhone照会/導入・push・main統合は行っていない。全機能/全UIと実オンライン相互運用の最終受入は未完了。
+
+## 分岐図のミニマップと複数ノード選択（2026-10-21）
+
+Web ReactFlowの実callerを調べ、MiniMap pannable/zoomableと範囲選択は有効、node dragは任意配置の永続化ではなく別会話へのcopy/move入口であることを確認した。任意座標の保存機能は追加しない。今回はミニマップと範囲選択を接続し、会話間drag/dropは次の残件とする。
+
+Webの選択順の最初/最後を範囲とし、最後をpaste先とする処理をbranchSelectionへ抽出し、Web keyboard/context menuとnative bridgeで共用した。単一chatIdしか表現しない既存SequenceRangeへ異なる会話の選択を混ぜない。Webでも選択時のchat ID/indexを保持し、再解決で一致する場合のみ操作する。nativeは標準的な選択モードで複数cardを指定し、graph順の対象を既存BranchClipboardViewへ渡す。始点/終点・親子関係・copy/cut/paste/保護/未知属性の処理は既存共有元を使う。矩形ドラッグ選択そのものをSwiftへ再現する方式ではない。会話・layout変更時はruntime選択を解除する。
+
+UIKitの既存viewportへ104x76ptのミニマップを右下に追加した。shared layoutの矩形・会話色・active状態を描画し、表示窓の矩形はUIKitの座標変換で追随する。tap/panは既存中心移動、pinchは既存0.1–2倍の拡縮へ接続する。手動操作後は自動fitを解除し、SwiftUI stateをscroll callbackごとに更新しない。左下の直接操作と読み上げ説明も保持する。保存/sync fieldや依存ライブラリは追加しない。
+
+独立Astraは、無関係な会話の生成中にも既存範囲sheetの保存ボタンが無効になるP2を指摘した。source/targetの生成判定branchClipboardIsBusyを保存とUIの双方で共用し、対象生成中の拒否と別会話生成中のコピー成功を確認。限定再監査（対象判定とミニマップ）は新規P1/P2なし。初回Catalyst compileのCGRect initializer誤記とcatchのerror変数shadowは修正済み。テスト期待値は変更していない。
+
+Web関連8件、型検査、Vite build、共有bundle鮮度、Catalyst最終関連28件（BranchEditor18・MessageEditing5・ParallelGeneration5）が成功。共有選択順/混在chat/Unicode、橋渡し、未知raw属性とmaps、保存失敗/再試行、古いdraft拒否、再起動/export/paste、他会話生成との両立、minimap座標と既存viewportの拡縮上下限/手動zoom保持を確認した。読み上げ要素の明示追加後は最終Catalyst buildと実画面を確認し、未変更28件を反復していない。保存/record/暗号/同期基盤は変更しておらず、全項目I/Oと暗号化同期の既存成功を再利用した。ログ /private/tmp/weavelet-graph-selection-{generate,types,web-test,web-build,freshness,native-test,native-final-test,final-build}.log。
+
+隔離FAKE Catalystの393pt制約表示で選択mode/2件の表示と操作列の非重複、menu-root→menu-leftの始点/終点prefill、コピー後のsheet終了と隔離保存ファイルのnodeIds完全一致を確認した。ミニマップのnode/表示窓描画、tapで上方へ・dragで下方へ移動、全体表示への復帰も実画面で確認。終了後process不在とbuilt Info.plist byte一致復元を確認した。実touch pinch、Web browserの実keyboard/mouse操作、文字拡大/VoiceOver全操作、実API/cloudは未確認。iPhone照会/導入・push・main統合は行っていない。全機能/全UIと実オンライン相互運用の完成とはしない。

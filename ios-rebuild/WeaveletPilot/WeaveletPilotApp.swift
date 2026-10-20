@@ -2183,7 +2183,7 @@ struct BranchClipboardView: View {
                 Button(label) {
                     if draft.operation == .cut || draft.operation == .move { showsConfirmation = true } else { save() }
                 }
-                .disabled(state.hasGenerations || (usesTarget && target?.nodes.isEmpty != false) || (draft.operation == .paste && !state.hasBranchClipboard))
+                .disabled(state.branchClipboardIsBusy(draft) || (usesTarget && target?.nodes.isEmpty != false) || (draft.operation == .paste && !state.hasBranchClipboard))
             }
             .navigationTitle("メッセージ範囲")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }

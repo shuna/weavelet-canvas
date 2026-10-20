@@ -152,6 +152,7 @@
     "src/store/storage/google/driveErrors.ts": "9b2bb2f2e01af94ca336387a55aac5128635a5cc9b204813aa6c34ac0f8a3970",
     "src/utils/branchLayout.ts": "baafa6bbc9248df12c7729313ae92029481e84cbe0a104c504d66f60cc9baef7",
     "src/utils/contentPreview.ts": "a92975c4ffe5ace26a5c381d75f7c153396e5d804ea0b9dd1ddb9964126e3080",
+    "src/utils/branchSelection.ts": "1adebd7821b8721fb3d73ceb3cdb7b7a3864150f9fe6e5056cea2e96b92c388f",
     "src/utils/diffUtils.ts": "94fa0a5a590d7bf21abfb95821d9014984c90e4210702cb709740c43c2404d91",
     "src/utils/branchDiff.ts": "0d7fd12643518dce808580e02c9684d99df23df0a2f980ccd5f6af7c59995615",
     "src/utils/date.ts": "36233be4e64f54ddd34210bb10618a017b76c2ee0bd40f81d049c33a0c966279",
@@ -303,9 +304,10 @@
     "shared/google-sync/library.ts": "c17f54bddd63e50cacf55583f2cc740f62a56f5b165eb3de0a4393cdce89299f",
     "src/utils/branchLayout.ts": "baafa6bbc9248df12c7729313ae92029481e84cbe0a104c504d66f60cc9baef7",
     "src/utils/contentPreview.ts": "a92975c4ffe5ace26a5c381d75f7c153396e5d804ea0b9dd1ddb9964126e3080",
+    "src/utils/branchSelection.ts": "1adebd7821b8721fb3d73ceb3cdb7b7a3864150f9fe6e5056cea2e96b92c388f",
     "src/utils/diffUtils.ts": "94fa0a5a590d7bf21abfb95821d9014984c90e4210702cb709740c43c2404d91",
     "src/utils/branchDiff.ts": "0d7fd12643518dce808580e02c9684d99df23df0a2f980ccd5f6af7c59995615",
-    "shared/google-sync/branchLayout.ts": "62c7941bcf3ffec207bff6b3a864c69c312faa21883a1dc7a7f46ea9d824d1e7",
+    "shared/google-sync/branchLayout.ts": "fa2a1271b83896bf54274eb4089696a0026c5b5c94bf43322dc038b80242d7d0",
     "src/constants/prompt.ts": "291c8c6e5599483daecd8ecf38b3bb4498d42f65eb96665eb7a69c744d007492",
     "src/utils/date.ts": "36233be4e64f54ddd34210bb10618a017b76c2ee0bd40f81d049c33a0c966279",
     "src/utils/prompt.ts": "91810afceac8a5548505eda01ba145b60aba16d997f8c7a73ca3f704500b74ce",
@@ -420,5 +422,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "2223ad2f10bdd22a2d8ef9e381c8fd4d6b661c57503a8c1ebbb102bf68da471b"
+  "bundleSHA256": "49e7b78b612f5847a11398e7a215f830cabeca30834dd9a983ee02d208ee8cf3"
 }

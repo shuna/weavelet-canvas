@@ -100,6 +100,7 @@ struct BranchGraph {
         let preview: String
         let label: String?
         let active: Bool
+        let conversationColor: String
         let x: CGFloat
         let y: CGFloat
     }
@@ -139,6 +140,7 @@ struct BranchGraph {
             return try Node(id: data.required("nodeId").string("node id"), chatIndex: Int(data.required("chatIndex").number("chat index")), role: data.required("role").string("role"),
                 preview: data.required("contentPreview").string("preview"), label: data["label"].flatMap { try? $0.string("label") },
                 active: data.required("isActive").boolean("active"),
+                conversationColor: data.required("conversationColor").string("conversation color"),
                 x: CGFloat(position.required("x").number("x")), y: CGFloat(position.required("y").number("y")))
         }
         edges = try output.required("rfEdges").array("rfEdges").map { item in
@@ -156,32 +158,145 @@ struct BranchViewportRequest {
     let action: Action
 }
 
+struct BranchMiniMapNode: Equatable {
+    let frame: CGRect
+    let active: Bool
+    let conversationColor: String
+}
+
+final class BranchMiniMapView: UIView {
+    private var onMoveViewport: (CGPoint) -> Void
+    private var onScaleViewport: (CGFloat, CGPoint) -> Void
+    private var canvasSize = CGSize.zero
+    private var nodes: [BranchMiniMapNode] = []
+    private(set) var displayedViewport = CGRect.zero
+
+    init(moveViewport: @escaping (CGPoint) -> Void, scaleViewport: @escaping (CGFloat, CGPoint) -> Void) {
+        onMoveViewport = moveViewport; onScaleViewport = scaleViewport
+        super.init(frame:.zero)
+        isOpaque = false
+        backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.9)
+        layer.cornerRadius = 8
+        layer.borderWidth = 1
+        layer.borderColor = UIColor.separator.cgColor
+        isAccessibilityElement = true
+        accessibilityTraits = .image
+        accessibilityLabel = "分岐図の概要。タップまたはドラッグで表示位置を移動し、ピンチで拡大縮小します。"
+        accessibilityHint = "直接の拡大、縮小、全体表示は左下の操作を使用できます。"
+        addGestureRecognizer(UITapGestureRecognizer(target:self,action:#selector(tapped(_:))))
+        let pan = UIPanGestureRecognizer(target:self,action:#selector(panned(_:)))
+        pan.maximumNumberOfTouches = 1
+        addGestureRecognizer(pan)
+        addGestureRecognizer(UIPinchGestureRecognizer(target:self,action:#selector(pinched(_:))))
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    func setHandlers(moveViewport: @escaping (CGPoint) -> Void, scaleViewport: @escaping (CGFloat, CGPoint) -> Void) {
+        onMoveViewport = moveViewport; onScaleViewport = scaleViewport
+    }
+    func update(canvasSize: CGSize, nodes: [BranchMiniMapNode], visibleRect: CGRect) {
+        self.canvasSize = canvasSize; self.nodes = nodes; displayedViewport = visibleRect
+        setNeedsDisplay()
+    }
+    func canvasPoint(at point: CGPoint) -> CGPoint? {
+        guard let transform = transformForCanvas else { return nil }
+        return CGPoint(x:(point.x - transform.origin.x) / transform.scale, y:(point.y - transform.origin.y) / transform.scale)
+    }
+    func moveViewport(to point: CGPoint) {
+        guard let canvasPoint = canvasPoint(at:point) else { return }
+        onMoveViewport(canvasPoint)
+    }
+    func scaleViewport(by scale: CGFloat, around point: CGPoint) {
+        guard let canvasPoint = canvasPoint(at:point) else { return }
+        onScaleViewport(scale,canvasPoint)
+    }
+    private var transformForCanvas: (origin: CGPoint, scale: CGFloat)? {
+        guard canvasSize.width > 0, canvasSize.height > 0 else { return nil }
+        let inset: CGFloat = 5
+        let available = bounds.insetBy(dx:inset,dy:inset)
+        guard available.width > 0, available.height > 0 else { return nil }
+        let scale = min(available.width / canvasSize.width,available.height / canvasSize.height)
+        return (CGPoint(x:available.midX - canvasSize.width * scale / 2,y:available.midY - canvasSize.height * scale / 2),scale)
+    }
+    override func draw(_ rect: CGRect) {
+        guard let context = UIGraphicsGetCurrentContext(), let transform = transformForCanvas else { return }
+        context.saveGState()
+        context.translateBy(x:transform.origin.x,y:transform.origin.y)
+        context.scaleBy(x:transform.scale,y:transform.scale)
+        for node in nodes {
+            (node.active ? UIColor.branchMiniMapColor(node.conversationColor) : UIColor.systemGray).setFill()
+            context.fill(node.frame)
+        }
+        UIColor.label.withAlphaComponent(0.7).setStroke()
+        context.setLineWidth(1 / transform.scale)
+        context.stroke(displayedViewport)
+        context.restoreGState()
+    }
+    @objc private func tapped(_ recognizer: UITapGestureRecognizer) { moveViewport(to:recognizer.location(in:self)) }
+    @objc private func panned(_ recognizer: UIPanGestureRecognizer) {
+        guard recognizer.state == .began || recognizer.state == .changed else { return }
+        moveViewport(to:recognizer.location(in:self))
+    }
+    @objc private func pinched(_ recognizer: UIPinchGestureRecognizer) {
+        guard recognizer.state == .began || recognizer.state == .changed else { return }
+        scaleViewport(by:recognizer.scale,around:recognizer.location(in:self))
+        recognizer.scale = 1
+    }
+}
+
+private extension UIColor {
+    static func branchMiniMapColor(_ hex: String) -> UIColor {
+        let value = hex.drop(while:{ $0 == "#" })
+        guard value.count == 6, let number = UInt32(String(value),radix:16) else { return .systemBlue }
+        return UIColor(red:CGFloat((number >> 16) & 0xff) / 255,green:CGFloat((number >> 8) & 0xff) / 255,blue:CGFloat(number & 0xff) / 255,alpha:1)
+    }
+}
+
 struct BranchGraphViewport<Content: View>: UIViewControllerRepresentable {
     let content: Content
     let canvasSize: CGSize
+    let miniMapNodes: [BranchMiniMapNode]
     let request: BranchViewportRequest?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func makeUIViewController(context: Context) -> BranchGraphViewportController<Content> {
-        BranchGraphViewportController(content: content)
+        BranchGraphViewportController(content: content, miniMapNodes: miniMapNodes)
     }
     func updateUIViewController(_ controller: BranchGraphViewportController<Content>, context: Context) {
-        controller.update(content: content, size: canvasSize, request: request, animated: !reduceMotion)
+        controller.update(content: content, size: canvasSize, miniMapNodes: miniMapNodes, request: request, animated: !reduceMotion)
     }
 }
 
 final class BranchGraphViewportController<Content: View>: UIViewController, UIScrollViewDelegate {
     let scrollView = UIScrollView()
     private let hosting: UIHostingController<Content>
+    private let miniMap: BranchMiniMapView
+    private var miniMapNodes: [BranchMiniMapNode]
     private var canvasSize = CGSize.zero
     private var lastBounds = CGSize.zero
     private var lastRequest: UUID?
     private var pendingRequest: BranchViewportRequest?
     private var followsFit = true
-    init(content: Content) { hosting = UIHostingController(rootView: content); super.init(nibName:nil,bundle:nil) }
+    init(content: Content, miniMapNodes: [BranchMiniMapNode] = []) {
+        hosting = UIHostingController(rootView: content)
+        self.miniMapNodes = miniMapNodes
+        miniMap = BranchMiniMapView(moveViewport:{ _ in },scaleViewport:{ _,_ in })
+        super.init(nibName:nil,bundle:nil)
+        miniMap.setHandlers(moveViewport:{ [weak self] point in
+            self?.followsFit = false
+            self?.centerOn(point,animated:false)
+        },
+                            scaleViewport:{ [weak self] scale, point in
+            guard let self else { return }
+            self.followsFit = false
+            self.zoom(around:point,scale:self.scrollView.zoomScale * scale,animated:false)
+        })
+    }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    override func loadView() { view = scrollView }
+    override func loadView() { view = UIView() }
     override func viewDidLoad() {
         super.viewDidLoad()
+        scrollView.frame = view.bounds
+        scrollView.autoresizingMask = [.flexibleWidth,.flexibleHeight]
+        view.addSubview(scrollView)
         scrollView.delegate = self
         scrollView.backgroundColor = .secondarySystemBackground
         scrollView.minimumZoomScale = 0.1; scrollView.maximumZoomScale = 2
@@ -191,10 +306,13 @@ final class BranchGraphViewportController<Content: View>: UIViewController, UISc
         hosting.view.backgroundColor = .clear
         scrollView.addSubview(hosting.view)
         hosting.didMove(toParent:self)
+        view.addSubview(miniMap)
+        updateMiniMapFrame()
     }
-    func update(content: Content, size: CGSize, request: BranchViewportRequest?, animated: Bool) {
+    func update(content: Content, size: CGSize, miniMapNodes: [BranchMiniMapNode] = [], request: BranchViewportRequest?, animated: Bool) {
         loadViewIfNeeded()
-        hosting.rootView = content
+        view.layoutIfNeeded()
+        hosting.rootView = content; self.miniMapNodes = miniMapNodes
         if size != canvasSize {
             let wasFollowingFit = followsFit
             let zoom = scrollView.zoomScale
@@ -214,17 +332,33 @@ final class BranchGraphViewportController<Content: View>: UIViewController, UISc
             if scrollView.bounds.width > 0 && scrollView.bounds.height > 0 { apply(request,animated:animated) }
             else { pendingRequest = request }
         }
+        updateMiniMap()
     }
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        scrollView.frame = view.bounds
+        updateMiniMapFrame()
         guard scrollView.bounds.size != lastBounds else { return }
         lastBounds = scrollView.bounds.size
         if followsFit { fit(animated:false) } else { updateCanvasInsets() }
         if let pendingRequest { self.pendingRequest = nil; apply(pendingRequest,animated:false) }
+        updateMiniMap()
     }
     func viewForZooming(in scrollView: UIScrollView) -> UIView? { hosting.view }
     func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) { followsFit = false }
-    func scrollViewDidZoom(_ scrollView: UIScrollView) { updateCanvasInsets() }
+    func scrollViewDidZoom(_ scrollView: UIScrollView) { updateCanvasInsets(); updateMiniMap() }
+    func scrollViewDidScroll(_ scrollView: UIScrollView) { updateMiniMap() }
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { followsFit = false }
+    private func updateMiniMap() {
+        guard canvasSize.width > 0, canvasSize.height > 0, hosting.view.superview != nil else { return }
+        miniMap.update(canvasSize:canvasSize,nodes:miniMapNodes,visibleRect:hosting.view.convert(scrollView.bounds,from:scrollView))
+    }
+    private func updateMiniMapFrame() {
+        let size = CGSize(width:104,height:76), insets = view.safeAreaInsets
+        let origin = CGPoint(x:max(10,view.bounds.maxX - insets.right - size.width - 10),
+                             y:max(10,view.bounds.maxY - insets.bottom - size.height - 10))
+        miniMap.frame = CGRect(origin:origin,size:size)
+    }
     private func updateCanvasInsets() {
         // Keep edge nodes centerable, as on the Web graph's pannable canvas.
         scrollView.contentInset = UIEdgeInsets(top:scrollView.bounds.height/2,left:scrollView.bounds.width/2,
@@ -244,6 +378,7 @@ final class BranchGraphViewportController<Content: View>: UIViewController, UISc
         let y = point.y * scrollView.zoomScale - bounds.height / 2
         scrollView.setContentOffset(CGPoint(x:min(max(x,-inset.left),max(-inset.left,size.width-bounds.width+inset.right)),
                                             y:min(max(y,-inset.top),max(-inset.top,size.height-bounds.height+inset.bottom))),animated:animated)
+        updateMiniMap()
     }
     private func fit(animated: Bool) {
         guard canvasSize.width > 0, canvasSize.height > 0, scrollView.bounds.width > 0, scrollView.bounds.height > 0 else { return }
@@ -279,6 +414,9 @@ struct BranchEditorView: View {
     @State private var comparison: BranchDiffRequest?
     @State private var error: String?
     @State private var viewportRequest: BranchViewportRequest?
+    @State private var selecting = false
+    @State private var selectedNodes: Set<BranchGraph.Identity> = []
+    @State private var selectionDraft: BranchClipboardDraft?
 
     var body: some View {
         let key = BranchLayoutKey(state: state)
@@ -302,7 +440,30 @@ struct BranchEditorView: View {
                 .foregroundStyle(Color(uiColor:.label))
                 .frame(minHeight:44)
                 .disabled(state.generation != nil)
-                Spacer()
+                Spacer(minLength:4)
+                Button {
+                    selecting.toggle()
+                    if !selecting { selectedNodes.removeAll() }
+                } label: {
+                    Image(systemName:selecting ? "checkmark.circle.fill" : "checkmark.circle").frame(width:44,height:44)
+                }
+                .accessibilityLabel("範囲選択")
+                .accessibilityValue(selecting ? "選択中、\(selectedNodes.count)件" : "オフ")
+                .disabled(state.exchange == nil)
+                if selecting {
+                    Menu {
+                        Button("選択範囲をコピー",systemImage:"doc.on.doc") { openSelectedRange(.copy) }
+                        Button("選択範囲を切り取り",systemImage:"scissors") { openSelectedRange(.cut) }
+                        if state.hasBranchClipboard {
+                            Button("最後の選択ノードへ貼り付け",systemImage:"doc.on.clipboard") { openSelectedRange(.paste) }
+                        }
+                        Button("選択を解除",systemImage:"xmark") { selectedNodes.removeAll() }
+                    } label: {
+                        Text("\(selectedNodes.count)件").font(.caption).frame(minWidth:44,minHeight:44)
+                    }
+                    .accessibilityLabel("選択範囲の操作")
+                    .disabled(selectedNodes.isEmpty)
+                }
                 Button { showsSearch.toggle() } label: { Image(systemName:"magnifyingglass").frame(width:44,height:44) }
                     .accessibilityLabel("表示中の分岐図を検索")
                     .disabled(state.generation != nil)
@@ -322,7 +483,9 @@ struct BranchEditorView: View {
                     BranchGraphViewport(content:graphCanvas(graph,sourceKey:rendered.key)
                         .disabled(rendered.key != key)
                         .frame(width:max(300,graph.width),height:height),
-                        canvasSize:CGSize(width:max(300,graph.width),height:height),request:viewportRequest)
+                        canvasSize:CGSize(width:max(300,graph.width),height:height),
+                        miniMapNodes:graph.nodes.map { .init(frame:CGRect(x:$0.x,y:$0.y + (rendered.key.entries.count > 1 ? 60 : 0),width:280,height:80),active:$0.active,conversationColor:$0.conversationColor) },
+                        request:viewportRequest)
                         .id(rendered.key.entries.map { Data("\($0.chatIndex):\($0.chatID)".utf8) })
                     .overlay(alignment:.bottomLeading) {
                         HStack(spacing:0) {
@@ -349,7 +512,9 @@ struct BranchEditorView: View {
             }
         }
         .sheet(item: $comparison) { request in BranchDiffView(state: state, request: request) }
+        .sheet(item:$selectionDraft) { draft in BranchClipboardView(state:state,draft:draft) }
         .onChange(of: key) { _, _ in
+            selectedNodes.removeAll()
             compareTarget = nil; comparison = nil; viewportRequest = nil
             if let request = state.branchEditorFocus,
                !key.entries.contains(where:{ $0.chatID.utf8.elementsEqual(request.chatID.utf8) }) {
@@ -431,9 +596,16 @@ struct BranchEditorView: View {
                     let target = compareTarget?.key == nodeKey ? compareTarget?.nodeID : nil
                     let otherNode = target.flatMap { $0.utf8.elementsEqual(node.id.utf8) ? nil : $0 }
                     BranchNodeCard(node: node, preview: livePreviews[node.identity] ?? node.preview,
+                        selecting:selecting,selected:selectedNodes.contains(node.identity),
                         canEdit: state.exchange != nil && state.generation(for: nodeKey.chatID) == nil,
                         canDelete: !(node.role == "system" && nodeKey.isRoot(node.id)),
                         hasClipboard: state.hasBranchClipboard, select: {
+                        if selecting {
+                            guard sourceKey.isCurrent(in:state) else { return }
+                            if selectedNodes.contains(node.identity) { selectedNodes.remove(node.identity) }
+                            else { selectedNodes.insert(node.identity) }
+                            return
+                        }
                         do {
                             if try nodeKey.select(node.id, in: state), state.chatActiveView == .branchEditor {
                                 try state.setChatActiveView(.chat)
@@ -471,6 +643,16 @@ struct BranchEditorView: View {
         }
         return previews
     }
+    private func openSelectedRange(_ operation: BranchClipboardOperation) {
+        guard let rendered, rendered.key.isCurrent(in:state) else { return }
+        let selection = rendered.graph.nodes.filter { selectedNodes.contains($0.identity) }.compactMap { node -> (chatID:String,nodeID:String)? in
+            guard let context = rendered.key.context(chatIndex:node.chatIndex) else { return nil }
+            return (context.chatID,node.id)
+        }
+        guard selection.count == selectedNodes.count else { return }
+        do { selectionDraft = try state.branchClipboardDraft(selectedNodes:selection,operation:operation) }
+        catch { self.error = error.localizedDescription }
+    }
     private func performMenu(_ node: BranchGraph.Node, key: BranchLayoutKey, action: () -> Void) {
         guard key.isCurrent(in: state), state.generation(for: key.chatID) == nil else { return }
         do {
@@ -485,6 +667,8 @@ struct BranchEditorView: View {
 private struct BranchNodeCard: View {
     let node: BranchGraph.Node
     let preview: String
+    let selecting: Bool
+    let selected: Bool
     let canEdit: Bool
     let canDelete: Bool
     let hasClipboard: Bool
@@ -501,6 +685,7 @@ private struct BranchNodeCard: View {
             Button(action: select) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
+                        if selecting { Image(systemName:selected ? "checkmark.circle.fill" : "circle").foregroundStyle(selected ? Color.accentColor : .secondary) }
                         Text(node.label ?? node.role.capitalized).font(.caption.bold()).lineLimit(1)
                         Spacer(minLength: 4)
                         if node.active { Image(systemName: "checkmark.circle.fill").accessibilityLabel("現在の経路") }
@@ -513,6 +698,8 @@ private struct BranchNodeCard: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(node.label ?? node.role)、\(preview)")
+            .accessibilityAddTraits(selected ? .isSelected : [])
+            .accessibilityHint(selecting ? "タップして範囲の選択を切り替えます" : "")
             Menu {
                 Button("ラベル・スター・ピン留め", systemImage: "slider.horizontal.3", action: configure)
                     .disabled(!canEdit)
@@ -537,7 +724,7 @@ private struct BranchNodeCard: View {
             .accessibilityLabel("メッセージ操作")
         }
         .frame(width: 280, height: 80)
-        .background(Color(uiColor:.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+        .background(selected ? Color.accentColor.opacity(0.14) : Color(uiColor:.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(node.active ? Color.blue : Color.secondary.opacity(0.5), lineWidth: node.active ? 2 : 1))
     }
 }

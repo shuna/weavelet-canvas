@@ -753,12 +753,32 @@ final class ChatState: ObservableObject {
         return !ids.isEmpty
     }
     func branchClipboardDraft(nodeID: String, operation: BranchClipboardOperation = .copy) throws -> BranchClipboardDraft {
-        guard let exchange, let conversation, conversation.nodes.contains(where: { $0.id.utf8.elementsEqual(nodeID.utf8) }) else { throw ExchangeError.invalid("対象メッセージがありません") }
-        return try BranchClipboardDraft(source: exchange.source, snapshot: publicationSnapshot(), operation: operation, sourceChatID: conversation.id,
-            fromNodeID: nodeID, toNodeID: nodeID, targetChatID: conversation.id, afterNodeID: nodeID)
+        guard let conversation else { throw ExchangeError.invalid("対象メッセージがありません") }
+        return try branchClipboardDraft(selectedNodes:[(conversation.id,nodeID)],operation:operation)
+    }
+    func branchClipboardDraft(selectedNodes: [(chatID:String,nodeID:String)], operation: BranchClipboardOperation) throws -> BranchClipboardDraft {
+        guard let exchange, !selectedNodes.isEmpty, selectedNodes.allSatisfy({ selected in
+            conversations.contains { chat in chat.id.utf8.elementsEqual(selected.chatID.utf8) &&
+                chat.nodes.contains { $0.id.utf8.elementsEqual(selected.nodeID.utf8) } }
+        }) else { throw ExchangeError.invalid("対象メッセージがありません") }
+        let targets = try SharedWebOperations.call("branchLayout",.object([
+            .init(key:"operation",value:.string("selection")),
+            .init(key:"selectedNodes",value:.array(selectedNodes.map { .object([
+                .init(key:"chatId",value:.string($0.chatID)),.init(key:"nodeId",value:.string($0.nodeID))]) }))]))
+        let target = try targets.required(operation == .paste ? "pasteTarget" : "range")
+        guard target != .null else { throw ExchangeError.invalid("同じ会話の範囲を選んでください") }
+        let chatID = try target.required("chatId").string("chatId")
+        let from = try target.required(operation == .paste ? "afterNodeId" : "fromNodeId").string("fromNodeId")
+        let to = try target.required(operation == .paste ? "afterNodeId" : "toNodeId").string("toNodeId")
+        return try BranchClipboardDraft(source:exchange.source,snapshot:publicationSnapshot(),operation:operation,
+            sourceChatID:chatID,fromNodeID:from,toNodeID:to,targetChatID:chatID,afterNodeID:to)
+    }
+    func branchClipboardIsBusy(_ draft: BranchClipboardDraft) -> Bool {
+        let affected = draft.operation == .paste ? [draft.targetChatID] : draft.operation == .move ? [draft.sourceChatID,draft.targetChatID] : [draft.sourceChatID]
+        return affected.contains { generation(for:$0) != nil }
     }
     func saveBranchClipboard(_ draft: BranchClipboardDraft, newIDs: [String]? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws -> BranchClipboardResult {
-        guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してから範囲を操作してください") }
+        guard !branchClipboardIsBusy(draft) else { throw ExchangeError.invalid("生成結果を保存してから範囲を操作してください") }
         guard let exchange, let document, exchange.source == draft.source, document.snapshot == draft.snapshot else { throw ExchangeError.invalid("会話またはコピーした範囲が変更されました。操作を開き直してください") }
         let clipboard = try document.snapshot.required("state")["branchClipboard"] ?? .null
         // Native allocates an upper-bound UUID pool, never reconstructing the selected tree range.

@@ -1,5 +1,6 @@
 import {layoutBranchEntries, type WorkerInput} from '../../src/utils/branchLayout';
 import {contentPreview} from '../../src/utils/contentPreview';
+import {resolveBranchSelection, type BranchSelectionNode} from '../../src/utils/branchSelection';
 import {ensureBranchTreeState} from '../../src/store/branch-domain';
 import {diffJSONChanges} from '../../src/utils/jsonChanges';
 import type {ChatInterface} from '../../src/types/chat';
@@ -14,9 +15,12 @@ const nativePreview = (value: string) => Array.from(value, scalar =>
   scalar.length === 1 && scalar.charCodeAt(0) >= 0xd800 && scalar.charCodeAt(0) <= 0xdfff ? '\ufffd' : scalar).join('');
 
 export function branchLayout(json: string): string {
-  const input = JSON.parse(json) as WorkerInput | {operation?: string; content?: Array<{type:string;text?:string}>};
+  const input = JSON.parse(json) as WorkerInput | {operation?: string; content?: Array<{type:string;text?:string}>; selectedNodes?: BranchSelectionNode[]};
   if ('operation' in input && input.operation === 'preview') {
     return JSON.stringify({preview:nativePreview(contentPreview(input.content ?? []))});
+  }
+  if ('operation' in input && input.operation === 'selection') {
+    return JSON.stringify(resolveBranchSelection(input.selectedNodes ?? []));
   }
   const output = layoutBranchEntries(input as WorkerInput);
   for (const node of output.rfNodes) node.data.contentPreview = nativePreview(node.data.contentPreview);

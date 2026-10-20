@@ -61,6 +61,51 @@ final class BranchEditorTests: XCTestCase {
         XCTAssertEqual(center.y,edge.y,accuracy:2)
     }
 
+    @MainActor func testMiniMapMapsTapDragAndPinchWithoutChangingGraphInput() {
+        var moved: CGPoint?
+        var scaled: (CGFloat, CGPoint)?
+        let miniMap = BranchMiniMapView(moveViewport:{ moved = $0 },scaleViewport:{ scaled = ($0,$1) })
+        miniMap.frame = CGRect(x:0,y:0,width:104,height:76)
+        let nodes = [
+            BranchMiniMapNode(frame:CGRect(x:0,y:0,width:280,height:80),active:true,conversationColor:"#3b82f6"),
+            BranchMiniMapNode(frame:CGRect(x:600,y:300,width:280,height:80),active:false,conversationColor:"#14b8a6"),
+        ]
+        let original = nodes
+        let visible = CGRect(x:200,y:100,width:300,height:200)
+        miniMap.update(canvasSize:CGSize(width:1000,height:500),nodes:nodes,visibleRect:visible)
+        XCTAssertEqual(miniMap.displayedViewport,visible)
+        miniMap.moveViewport(to:CGPoint(x:miniMap.bounds.midX,y:miniMap.bounds.midY))
+        miniMap.scaleViewport(by:1.25,around:CGPoint(x:miniMap.bounds.midX,y:miniMap.bounds.midY))
+        guard let moved, let scaled else { XCTFail("ミニマップ操作が通知されませんでした"); return }
+        XCTAssertEqual(moved.x,500,accuracy:1)
+        XCTAssertEqual(moved.y,250,accuracy:1)
+        XCTAssertEqual(scaled.0,1.25,accuracy:0.0001)
+        XCTAssertEqual(scaled.1.x,500,accuracy:1)
+        XCTAssertEqual(scaled.1.y,250,accuracy:1)
+        XCTAssertEqual(nodes,original)
+    }
+
+    @MainActor func testMiniMapControlsTheExistingViewportAndKeepsManualZoomAcrossLayout() throws {
+        let controller = BranchGraphViewportController(content:Text("graph"))
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x:0,y:0,width:393,height:600)
+        controller.update(content:Text("graph"),size:CGSize(width:1000,height:500),request:nil,animated:false)
+        controller.viewDidLayoutSubviews()
+        let miniMap = try XCTUnwrap(controller.view.subviews.compactMap { $0 as? BranchMiniMapView }.first)
+        miniMap.scaleViewport(by:100,around:CGPoint(x:miniMap.bounds.midX,y:miniMap.bounds.midY))
+        XCTAssertEqual(controller.scrollView.zoomScale,2,accuracy:0.0001)
+        let location = CGPoint(x:miniMap.bounds.midX+10,y:miniMap.bounds.midY+5)
+        let target = try XCTUnwrap(miniMap.canvasPoint(at:location))
+        miniMap.moveViewport(to:location)
+        XCTAssertEqual(miniMap.displayedViewport.midX,target.x,accuracy:1)
+        XCTAssertEqual(miniMap.displayedViewport.midY,target.y,accuracy:1)
+        XCTAssertEqual(miniMap.displayedViewport.width,393/2,accuracy:1)
+        controller.update(content:Text("changed layout"),size:CGSize(width:1100,height:550),request:nil,animated:false)
+        XCTAssertEqual(controller.scrollView.zoomScale,2,accuracy:0.0001)
+        miniMap.scaleViewport(by:0.0001,around:CGPoint(x:miniMap.bounds.midX,y:miniMap.bounds.midY))
+        XCTAssertEqual(controller.scrollView.zoomScale,0.1,accuracy:0.0001)
+    }
+
     private func fixture() throws -> OrderedJSON {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         return try OrderedJSON.decode(Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/io-corpus.json"))).required("exportV3")

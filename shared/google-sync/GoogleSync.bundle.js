@@ -23551,6 +23551,16 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     return text.length > 80 ? `${text.slice(0, 80)}...` : text;
   }
 
+  // src/utils/branchSelection.ts
+  function resolveBranchSelection(nodes) {
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    return {
+      range: first && last && nodes.every((node) => node.chatId === first.chatId) ? { chatId: first.chatId, fromNodeId: first.nodeId, toNodeId: last.nodeId } : null,
+      pasteTarget: last ? { chatId: last.chatId, afterNodeId: last.nodeId } : null
+    };
+  }
+
   // src/utils/diffUtils.ts
   var import_diff_match_patch3 = __toESM(require_diff_match_patch(), 1);
   function wordDiff(a, b) {
@@ -23592,6 +23602,9 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     const input = JSON.parse(json);
     if ("operation" in input && input.operation === "preview") {
       return JSON.stringify({ preview: nativePreview(contentPreview(input.content ?? [])) });
+    }
+    if ("operation" in input && input.operation === "selection") {
+      return JSON.stringify(resolveBranchSelection(input.selectedNodes ?? []));
     }
     const output2 = layoutBranchEntries(input);
     for (const node of output2.rfNodes)

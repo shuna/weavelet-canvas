@@ -29,6 +29,7 @@ import MessageDetailModal from './MessageDetailModal';
 import BranchStepEdge from './BranchStepEdge';
 import { buildPathToLeaf, buildNodeDiffPaths } from '@utils/branchUtils';
 import { perfStart, perfEnd } from '@utils/perfTrace';
+import { resolveBranchSelection } from '@utils/branchSelection';
 import BranchSearchBar from './BranchSearchBar';
 import { useTranslation } from 'react-i18next';
 
@@ -338,7 +339,7 @@ const BranchEditorCanvas = ({
   const readOnly = useWorkspaceReadOnly();
 
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('dragScroll');
-  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+  const [selectedNodes, setSelectedNodes] = useState<Array<{id:string;chatIndex:number;chatId:string}>>([]);
   const pageDragLockCountRef = useRef(0);
   const touchMoveBlockerRef = useRef<((event: TouchEvent) => void) | null>(null);
   const chats = useStore((state) => state.chats);
@@ -515,13 +516,17 @@ const BranchEditorCanvas = ({
   // Selection change tracking
   const onSelectionChange = useCallback(
     ({ nodes: selNodes }: OnSelectionChangeParams) => {
-      setSelectedNodeIds(
+      setSelectedNodes(
         selNodes
           .filter((n) => n.type === 'messageNode')
-          .map((n) => n.id)
+          .flatMap((n) => {
+            const chatIndex = n.data.chatIndex >= 0 ? n.data.chatIndex : primaryChatIndex;
+            const chat = chats?.[chatIndex];
+            return chat ? [{id:n.id,chatIndex,chatId:chat.id}] : [];
+          })
       );
     },
-    []
+    [primaryChatIndex,chats]
   );
 
   const deleteBranch = useStore((state) => state.deleteBranch);
@@ -536,53 +541,34 @@ const BranchEditorCanvas = ({
       const isMod = e.metaKey || e.ctrlKey;
       if (!isMod) return;
 
-      if (e.key === 'c' && selectedNodeIds.length > 0) {
+      if (!['c','x','v'].includes(e.key) || selectedNodes.length === 0) return;
+      const currentChats = useStore.getState().chats;
+      const selection = selectedNodes.flatMap(selected => {
+        const node = rfNodes.find(node => node.id === selected.id &&
+          (node.data.chatIndex >= 0 ? node.data.chatIndex : primaryChatIndex) === selected.chatIndex);
+        const chat = currentChats?.[selected.chatIndex];
+        return node && chat?.id === selected.chatId ? [{chatId:chat.id,nodeId:node.id}] : [];
+      });
+      if (selection.length !== selectedNodes.length) return;
+      const {range,pasteTarget} = resolveBranchSelection(selection);
+      if (e.key === 'c') {
         e.preventDefault();
-        // Copy: use first and last selected node IDs to define the range
-        const firstId = selectedNodeIds[0];
-        const lastId = selectedNodeIds[selectedNodeIds.length - 1];
-        // Determine which chat this node belongs to
-        const node = rfNodes.find((n) => n.id === firstId);
-        if (!node) return;
-        const ci = (node.data as MessageNodeData).chatIndex >= 0
-          ? (node.data as MessageNodeData).chatIndex
-          : primaryChatIndex;
-        useStore.getState().copyBranchSequence({ chatId: useStore.getState().chats?.[ci]?.id ?? '', fromNodeId: firstId, toNodeId: lastId });
+        if (range) useStore.getState().copyBranchSequence(range);
       }
-
-      if (e.key === 'x' && selectedNodeIds.length > 0) {
+      if (e.key === 'x') {
         e.preventDefault();
-        const firstId = selectedNodeIds[0];
-        const lastId = selectedNodeIds[selectedNodeIds.length - 1];
-        const node = rfNodes.find((n) => n.id === firstId);
-        if (!node) return;
-        const ci = (node.data as MessageNodeData).chatIndex >= 0
-          ? (node.data as MessageNodeData).chatIndex
-          : primaryChatIndex;
-        const result=useStore.getState().cutBranchSequence({ chatId: useStore.getState().chats?.[ci]?.id ?? '', fromNodeId: firstId, toNodeId: lastId });
+        if (!range) return;
+        const result = useStore.getState().cutBranchSequence(range);
         if(result.status==='protected')showToast(t('protectedCannotDelete',{ns:'main'}),'warning');
       }
-
-      if (e.key === 'v') {
-        const clipboard = useStore.getState().branchClipboard;
-        if (!clipboard) return;
+      if (e.key === 'v' && pasteTarget && useStore.getState().branchClipboard) {
         e.preventDefault();
-        // Paste after the last selected node, or the focused node
-        const targetId = selectedNodeIds.length > 0
-          ? selectedNodeIds[selectedNodeIds.length - 1]
-          : null;
-        if (!targetId) return;
-        const node = rfNodes.find((n) => n.id === targetId);
-        if (!node) return;
-        const ci = (node.data as MessageNodeData).chatIndex >= 0
-          ? (node.data as MessageNodeData).chatIndex
-          : primaryChatIndex;
-        useStore.getState().pasteBranchSequence({ chatId: useStore.getState().chats?.[ci]?.id ?? '', afterNodeId: targetId });
+        useStore.getState().pasteBranchSequence(pasteTarget);
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [selectedNodeIds, rfNodes, primaryChatIndex, deleteBranch, t]);
+  }, [selectedNodes, rfNodes, primaryChatIndex, deleteBranch, t]);
 
   // Cross-conversation drag state
   const copyBranchSequence = useStore((state) => state.copyBranchSequence);
@@ -898,7 +884,7 @@ const BranchEditorCanvas = ({
           onDiff={handleDiff}
           onNodeDiff={handleNodeDiff}
           onNavigateToChat={navigateToChat}
-          selectedNodeIds={selectedNodeIds}
+          selectedNodeIds={selectedNodes.every(node => node.chatIndex === contextMenu.chatIndex && node.chatId === chats?.[contextMenu.chatIndex]?.id) ? selectedNodes.map(node => node.id) : []}
         />
       )}
 

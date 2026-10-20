@@ -53,6 +53,12 @@ final class ParallelGenerationTests: XCTestCase {
         XCTAssertEqual(app.generation(for:decomposedID,nodeID:targetB)?.id,app.generation(for:decomposedID)?.id)
         XCTAssertNil(app.generation(for:composedID,nodeID:targetB))
         XCTAssertNil(app.generation(for:decomposedID,nodeID:targetA))
+        let otherChatClipboard = try app.branchClipboardDraft(selectedNodes:[(composedID,targetA)],operation:.copy)
+        let beforeClipboard = try app.publicationSnapshot().encoded()
+        XCTAssertTrue(app.branchClipboardIsBusy(otherChatClipboard))
+        XCTAssertThrowsError(try app.saveBranchClipboard(otherChatClipboard))
+        XCTAssertEqual(try app.publicationSnapshot().encoded(),beforeClipboard)
+        XCTAssertNotNil(app.generation(for:composedID))
         XCTAssertTrue(app.selectedConversationID.utf8.elementsEqual(decomposedID.utf8))
         try app.saveUsageCounting(true)
         XCTAssertNotNil(app.generation(for: composedID))
@@ -62,6 +68,10 @@ final class ParallelGenerationTests: XCTestCase {
         ParallelGenerationProtocol.release("B")
         try await wait { app.generation(for: decomposedID) == nil }
         XCTAssertNotNil(app.generation(for: composedID))
+        let availableClipboard = try app.branchClipboardDraft(selectedNodes:[(decomposedID,targetB)],operation:.copy)
+        XCTAssertFalse(app.branchClipboardIsBusy(availableClipboard))
+        XCTAssertEqual(try app.saveBranchClipboard(availableClipboard).status,"copied")
+        XCTAssertNotNil(app.generation(for:composedID))
         ParallelGenerationProtocol.release("A")
         try await wait { !app.hasGenerations }
         XCTAssertTrue(app.selectedConversationID.utf8.elementsEqual(decomposedID.utf8))

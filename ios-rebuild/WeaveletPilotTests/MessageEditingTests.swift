@@ -775,7 +775,12 @@ final class MessageEditingTests: XCTestCase {
         for key in ["collapsedNodes","omittedNodes","protectedNodes"] { chat = chat.replacing(key,with:.object([.init(key:"middle",value:.bool(true)),.init(key:"last",value:.bool(false))])) }
         chats[0] = chat; input = input.replacing("chats",with:.array(chats)).replacing("xHuge",with:.number("9007199254740993"))
         let local = try store(), state = ChatState(store:local); try state.importWebData(input.encoded())
-        var copy = try state.branchClipboardDraft(nodeID:"middle"); copy.toNodeID = "last"
+        let beforeSelection = try state.publicationSnapshot().encoded()
+        XCTAssertThrowsError(try state.branchClipboardDraft(selectedNodes:[("target","middle"),("other","message-0")],operation:.copy))
+        XCTAssertThrowsError(try state.branchClipboardDraft(selectedNodes:[("target","missing")],operation:.copy))
+        let copy = try state.branchClipboardDraft(selectedNodes:[("target","middle"),("target","last")],operation:.copy)
+        XCTAssertEqual(copy.sourceChatID,"target"); XCTAssertEqual(copy.fromNodeID,"middle"); XCTAssertEqual(copy.toNodeID,"last")
+        XCTAssertEqual(try state.publicationSnapshot().encoded(),beforeSelection)
         XCTAssertEqual(try state.saveBranchClipboard(copy,newIDs:[],now:1000).status,"copied")
         XCTAssertTrue(state.hasBranchClipboard); XCTAssertFalse(state.canUndoMessageEdit)
         let saved = try state.publicationSnapshot(), clipboard = try saved.required("state").required("branchClipboard")

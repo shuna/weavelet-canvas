@@ -1,3 +1,4 @@
+import {resolveBranchSelection} from '@utils/branchSelection';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
@@ -62,7 +63,8 @@ const NodeContextMenu = ({
     onClose();
   };
 
-  const hasSelection = selectedNodeIds.length > 1;
+  const selectedRange = resolveBranchSelection(selectedNodeIds.map(nodeId => ({chatId:chats?.[chatIndex]?.id ?? '',nodeId}))).range;
+  const hasSelection = selectedNodeIds.length > 1 && selectedRange !== null;
 
   const handleCopyFrom = () => {
     if (!tree) return;
@@ -82,18 +84,14 @@ const NodeContextMenu = ({
   };
 
   const handleCopySelected = () => {
-    if (!tree || selectedNodeIds.length < 2) return;
-    const firstId = selectedNodeIds[0];
-    const lastId = selectedNodeIds[selectedNodeIds.length - 1];
-    copyBranchSequence({ chatId: chats?.[chatIndex]?.id ?? '', fromNodeId: firstId, toNodeId: lastId });
+    if (!tree || !hasSelection || !selectedRange) return;
+    copyBranchSequence(selectedRange);
     onClose();
   };
 
   const handleCutSelected = () => {
-    if (!tree || selectedNodeIds.length < 2) return;
-    const firstId = selectedNodeIds[0];
-    const lastId = selectedNodeIds[selectedNodeIds.length - 1];
-    const result = cutBranchSequence({ chatId: chats?.[chatIndex]?.id ?? '', fromNodeId: firstId, toNodeId: lastId });
+    if (!tree || !hasSelection || !selectedRange) return;
+    const result = cutBranchSequence(selectedRange);
     if(result.status==='protected')showToast(t('protectedCannotDelete',{ns:'main'}),'warning');
     onClose();
   };
