@@ -1058,3 +1058,14 @@ Web関連30件成功と型検査成功を回収。その後bridgeのundefinedが
 Webの統計/同期58件、fileExport/importService契約75件が成功。Catalystの関連4件が成功し、監査で網羅性の限界として挙がった非空pendingのI/O確認を追加後、変更した1件だけ再実行して成功（合計uniqueは4件）。独立Astra Lowの未監査だったundefined正規化、proxy復旧からqueue、native認証/遅延応答失効、保存成功前の非公開と今回の期待値根拠の監査は新規なし。ログ `/private/tmp/weavelet-stats-io-{web-test,native-test}.log`、`/private/tmp/weavelet-stats-export-contract-web-test.log`、`/private/tmp/weavelet-stats-nonempty-io-native-test.log`。以前の本群の未受入理由はこの隔離確認範囲で解消した。
 
 実OpenRouter通信、実CloudKit/Google/iCloud Drive相互運用、実機UI/OS条件は未確認のまま。iPhone Airの接続照会・導入は再開していない。次はWebのChatFindBarの実処理を基準に本文内一致位置と移動の共有化・native表示接続へ進む。全体goalは未完了で、mainへの統合は行わない。
+
+
+## 本文内検索の共有処理とWK接続（2026-10-20）
+
+実Web ChatFindBarのliteral・大文字小文字無視・Textノード境界ごとの検索をchatFind/chatFindDomへ切り出し、Web実callerとnative Markdown hostから共用した。重なる一致は本文を複製せず共通segmentにmarkを付け、lowercaseで長さが変わる文字は元UTF-16位置へ対応させる。React所有のText nodeを置換せず、更新・削除・clear後の本文を保持する。検索状態はruntimeだけで、保存・書出し・同期形式は変更しない。
+
+native WK接続はrequest ID付きのquery/index入力と、件数・選択位置・本文内rectの返却を実装した。遅延した別requestの結果は受け取らない。独立Astraが検出したprops-only更新で強調が戻らない問題はcommit後のuseLayoutEffect再検索で修正した。WebのCopy code等のDOM変更で強調だけ消え件数とRangeが残る問題も、共有helperの無効化通知から再検索して修正した。Web表示中検索は件数と選択を更新し、全ノード検索はノード件数を維持する。DOM追随では履歴とスクロールを追加せず、条件変更・unmountで監視と遅延処理を解除する。最終差分の独立Astra限定再確認は新規なし。
+
+担当の実Chrome 6件・共有Vitest 2件・型検査成功を回収した。親は型検査・bundle鮮度、実WKの既存Catalyst接続test 1件を確認した。監査修正後の初回はtest側でlet inputを代入してコンパイル失敗し、Representable全体の更新へ訂正した。最終の再生成bundleでも同じ1件が成功。日本語/重なり一致、rect、props-only更新、React本文更新、clear後本文保持、stale拒否を既存の描画/HTML非実行/copy/fallback確認と同じ経路で検証した。ログ `/private/tmp/weavelet-chat-find-integrated-native-test.log`、`/private/tmp/weavelet-chat-find-final-types.log`、`/private/tmp/weavelet-chat-find-integrated-freshness.log`。変更のない全I/O/暗号化同期の成功結果は再利用した。
+
+これは検索機能全体の完成ではない。iOS検索バーの一致箇所ごとの件数・前後移動、外側scrollとの接続、原文表示と未mount行を含む集計は未完了。raw sourceの一致数を整形後の件数として代用しない。実クラウド/実機条件は引き続き未確認、iPhone Air照会・導入は未実施。main統合も行っていない。
