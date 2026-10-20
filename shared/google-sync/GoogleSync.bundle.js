@@ -8819,7 +8819,7 @@ var WeaveletGoogleSync = (() => {
   }
 
   // src/utils/branchUtils.ts
-  var import_lodash = __toESM(require_lodash(), 1);
+  var import_lodash = __toESM(require_lodash());
 
   // src/utils/contentValidation.ts
   var hasMeaningfulContent = (content) => content.some((part) => {
@@ -23561,6 +23561,12 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     };
   }
 
+  // src/utils/branchPruning.ts
+  function hasHiddenBranchNodes(tree) {
+    const active = new Set(tree.activePath);
+    return Object.keys(tree.nodes).some((id) => !active.has(id));
+  }
+
   // src/utils/diffUtils.ts
   var import_diff_match_patch3 = __toESM(require_diff_match_patch(), 1);
   function wordDiff(a, b) {
@@ -23605,6 +23611,9 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     }
     if ("operation" in input && input.operation === "selection") {
       return JSON.stringify(resolveBranchSelection(input.selectedNodes ?? []));
+    }
+    if ("operation" in input && input.operation === "pruneTargets") {
+      return JSON.stringify((input.entries ?? []).filter((entry) => hasHiddenBranchNodes(entry.tree)).map((entry) => entry.chatId));
     }
     const output2 = layoutBranchEntries(input);
     for (const node of output2.rfNodes)

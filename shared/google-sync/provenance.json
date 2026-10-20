@@ -153,6 +153,7 @@
     "src/utils/branchLayout.ts": "baafa6bbc9248df12c7729313ae92029481e84cbe0a104c504d66f60cc9baef7",
     "src/utils/contentPreview.ts": "a92975c4ffe5ace26a5c381d75f7c153396e5d804ea0b9dd1ddb9964126e3080",
     "src/utils/branchSelection.ts": "1adebd7821b8721fb3d73ceb3cdb7b7a3864150f9fe6e5056cea2e96b92c388f",
+    "src/utils/branchPruning.ts": "de3a8398f7a847fcaadd1d3a563610db978ba5b0df88dd9afde4439aeb483f13",
     "src/utils/diffUtils.ts": "94fa0a5a590d7bf21abfb95821d9014984c90e4210702cb709740c43c2404d91",
     "src/utils/branchDiff.ts": "0d7fd12643518dce808580e02c9684d99df23df0a2f980ccd5f6af7c59995615",
     "src/utils/date.ts": "36233be4e64f54ddd34210bb10618a017b76c2ee0bd40f81d049c33a0c966279",
@@ -305,9 +306,10 @@
     "src/utils/branchLayout.ts": "baafa6bbc9248df12c7729313ae92029481e84cbe0a104c504d66f60cc9baef7",
     "src/utils/contentPreview.ts": "a92975c4ffe5ace26a5c381d75f7c153396e5d804ea0b9dd1ddb9964126e3080",
     "src/utils/branchSelection.ts": "1adebd7821b8721fb3d73ceb3cdb7b7a3864150f9fe6e5056cea2e96b92c388f",
+    "src/utils/branchPruning.ts": "de3a8398f7a847fcaadd1d3a563610db978ba5b0df88dd9afde4439aeb483f13",
     "src/utils/diffUtils.ts": "94fa0a5a590d7bf21abfb95821d9014984c90e4210702cb709740c43c2404d91",
     "src/utils/branchDiff.ts": "0d7fd12643518dce808580e02c9684d99df23df0a2f980ccd5f6af7c59995615",
-    "shared/google-sync/branchLayout.ts": "fa2a1271b83896bf54274eb4089696a0026c5b5c94bf43322dc038b80242d7d0",
+    "shared/google-sync/branchLayout.ts": "0fbfaa71934f2e34c38557f9be40b342998cc5ea7d3ae4c20cae974b9b206ea3",
     "src/constants/prompt.ts": "291c8c6e5599483daecd8ecf38b3bb4498d42f65eb96665eb7a69c744d007492",
     "src/utils/date.ts": "36233be4e64f54ddd34210bb10618a017b76c2ee0bd40f81d049c33a0c966279",
     "src/utils/prompt.ts": "91810afceac8a5548505eda01ba145b60aba16d997f8c7a73ca3f704500b74ce",
@@ -422,5 +424,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "49e7b78b612f5847a11398e7a215f830cabeca30834dd9a983ee02d208ee8cf3"
+  "bundleSHA256": "def26073d19d55ead929cb740346ca478646b72e9ee6732b06ddd6fc1a3f0201"
 }

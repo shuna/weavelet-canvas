@@ -736,6 +736,51 @@ final class ChatState: ObservableObject {
         return NodeRemovalDraft(chatID: conversation.id, nodeID: nil, source: exchange.source, path: conversation.visibleMessages.map(\.id), operation: .pruneHidden)
     }
 
+    func pruneHiddenDrafts(chatIDs: [String]) throws -> [NodeRemovalDraft] {
+        guard let exchange else { throw ExchangeError.invalid("保存済み会話を選択してください") }
+        var seen = Set<Data>(), entries: [JSONField] = [], paths: [Data:[String]] = [:]
+        let chats = try exchange.source.required("chats").array("chats")
+        for chatID in chatIDs {
+            guard seen.insert(Data(chatID.utf8)).inserted,
+                  generation(for:chatID) == nil,
+                  let chat = try chats.first(where: { try $0.required("id").string("chat ID").utf8.elementsEqual(chatID.utf8) }),
+                  let tree = chat["branchTree"] else { throw ExchangeError.invalid("分岐図の対象会話が変更されました") }
+            paths[Data(chatID.utf8)] = try tree.required("activePath").array("active path").map { try $0.string("node ID") }
+            entries.append(.init(key:"entry",value:.object([.init(key:"chatId",value:.string(chatID)),.init(key:"tree",value:tree)])))
+        }
+        let selected = try SharedWebOperations.call("branchLayout",.object([
+            .init(key:"operation",value:.string("pruneTargets")),.init(key:"entries",value:.array(entries.map(\.value)))]
+        )).array("prune targets").map { try $0.string("chat ID") }
+        var targets = Set<Data>(), drafts: [NodeRemovalDraft] = []
+        for chatID in selected {
+            let key = Data(chatID.utf8)
+            guard seen.contains(key), targets.insert(key).inserted, let path = paths[key] else { throw ExchangeError.invalid("分岐図の対象会話が変更されました") }
+            drafts.append(NodeRemovalDraft(chatID:chatID,nodeID:nil,source:exchange.source,path:path,operation:.pruneHidden))
+        }
+        return drafts
+    }
+
+    func saveHiddenBranchPruning(_ drafts: [NodeRemovalDraft], now: Double = Date().timeIntervalSince1970 * 1000) throws {
+        guard !drafts.isEmpty else { return }
+        guard let exchange, drafts.allSatisfy({ $0.source == exchange.source && $0.operation == .pruneHidden && $0.nodeID == nil }) else {
+            throw ExchangeError.invalid("会話が変更されました。整理操作を開き直してください")
+        }
+        var seen = Set<Data>()
+        for draft in drafts {
+            guard seen.insert(Data(draft.chatID.utf8)).inserted, generation(for:draft.chatID) == nil else {
+                throw ExchangeError.invalid("生成結果を保存してから非表示の枝を整理してください")
+            }
+        }
+        var source = exchange.source, history = editingHistory
+        for draft in drafts {
+            var next: MessageEditing.HistoryState?
+            source = try MessageEditing.remove(in:source,chatID:draft.chatID,nodeID:nil,viewingPath:draft.path,operation:.pruneHidden,newIDs:[],now:now,history:history) { next = $0 }
+            if let next { history = next }
+        }
+        guard source != exchange.source else { return }
+        try applyLibrary(source,selectedID:selectedID,resetViewsFor:drafts.map(\.chatID),editing:history,now:now)
+    }
+
     func saveNodeRemoval(_ draft: NodeRemovalDraft, newIDs: [String]? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してからメッセージを削除してください") }
         guard let exchange, exchange.source == draft.source else { throw ExchangeError.invalid("会話が変更されました。削除操作を開き直してください") }

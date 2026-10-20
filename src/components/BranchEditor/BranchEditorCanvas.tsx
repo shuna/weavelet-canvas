@@ -30,6 +30,7 @@ import BranchStepEdge from './BranchStepEdge';
 import { buildPathToLeaf, buildNodeDiffPaths } from '@utils/branchUtils';
 import { perfStart, perfEnd } from '@utils/perfTrace';
 import { resolveBranchSelection } from '@utils/branchSelection';
+import { hasHiddenBranchNodes } from '@utils/branchPruning';
 import BranchSearchBar from './BranchSearchBar';
 import { useTranslation } from 'react-i18next';
 
@@ -135,17 +136,12 @@ const ConversationEditMenu = ({ entries }: { entries: MultiLayoutEntry[] }) => {
   const [menuPos, setMenuPos] = React.useState({ left: 0, top: 0 });
 
   const hasHiddenNodes = React.useMemo(() => {
-    return entries.some((entry) => {
-      const activeSet = new Set(entry.tree.activePath);
-      return Object.keys(entry.tree.nodes).some((id) => !activeSet.has(id));
-    });
+    return entries.some(entry => hasHiddenBranchNodes(entry.tree));
   }, [entries]);
 
   const handlePrune = React.useCallback(() => {
     entries.forEach((entry) => {
-      const activeSet = new Set(entry.tree.activePath);
-      const hasHidden = Object.keys(entry.tree.nodes).some((id) => !activeSet.has(id));
-      if (hasHidden) {
+      if (hasHiddenBranchNodes(entry.tree)) {
         pruneHiddenNodes(entry.chatIndex);
       }
     });

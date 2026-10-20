@@ -455,6 +455,7 @@ struct BranchEditorView: View {
     @State private var selectionDraft: BranchClipboardDraft?
     @State private var nodeDrag = BranchNodeDragSession()
     @State private var pendingDrop: BranchClipboardDraft?
+    @State private var pruningDrafts: [NodeRemovalDraft]?
 
     var body: some View {
         let key = BranchLayoutKey(state: state)
@@ -478,6 +479,7 @@ struct BranchEditorView: View {
                 .foregroundStyle(Color(uiColor:.label))
                 .frame(minHeight:44)
                 .disabled(state.generation != nil)
+                conversationEditMenu(key:key)
                 Spacer(minLength:4)
                 Button {
                     selecting.toggle()
@@ -551,6 +553,15 @@ struct BranchEditorView: View {
         }
         .sheet(item: $comparison) { request in BranchDiffView(state: state, request: request) }
         .sheet(item:$selectionDraft) { draft in BranchClipboardView(state:state,draft:draft) }
+        .confirmationDialog("表示中の会話の非表示の枝を整理",isPresented:Binding(get:{ pruningDrafts != nil },set:{ if !$0 { pruningDrafts = nil } }),titleVisibility:.visible,presenting:pruningDrafts) { drafts in
+            Button("非表示の枝を削除",role:.destructive) {
+                pruningDrafts = nil
+                do { try state.saveHiddenBranchPruning(drafts) } catch { self.error = error.localizedDescription }
+            }
+            Button("取消",role:.cancel) { pruningDrafts = nil }
+        } message: { _ in
+            Text("表示中の会話をまとめて整理します。ピン留めされた枝と、保護されたメッセージは残ります。")
+        }
         .confirmationDialog("別の会話へ範囲を追加",isPresented:Binding(get:{ pendingDrop != nil },set:{ if !$0 { pendingDrop = nil } }),titleVisibility:.visible,presenting:pendingDrop) { draft in
             Button("ここにコピー") { finishDrop(draft,operation:.copy) }
             Button("ここに移動",role:.destructive) { finishDrop(draft,operation:.move) }
@@ -558,9 +569,9 @@ struct BranchEditorView: View {
         } message: { _ in
             Text("ドラッグしたメッセージから枝の末尾までを、ドロップ先のメッセージの後へ追加します。")
         }
-        .onDisappear { nodeDrag.current = nil; pendingDrop = nil }
+        .onDisappear { nodeDrag.current = nil; pendingDrop = nil; pruningDrafts = nil }
         .onChange(of: key) { _, _ in
-            nodeDrag.current = nil; pendingDrop = nil
+            nodeDrag.current = nil; pendingDrop = nil; pruningDrafts = nil
             selectedNodes.removeAll()
             compareTarget = nil; comparison = nil; viewportRequest = nil
             if let request = state.branchEditorFocus,
@@ -597,6 +608,28 @@ struct BranchEditorView: View {
                 self.error = "分岐を表示できません: \(error.localizedDescription)"
             }
         }
+    }
+
+    private func conversationEditMenu(key: BranchLayoutKey) -> some View {
+        let hasHidden = rendered?.graph.nodes.contains(where:{ !$0.active }) == true
+        let isBusy = key.entries.contains(where:{ state.generation(for:$0.chatID) != nil })
+        return Menu {
+            Button("非表示の枝を整理",systemImage:"trash",role:.destructive) {
+                do {
+                    let drafts = try state.pruneHiddenDrafts(chatIDs:key.entries.map(\.chatID))
+                    if !drafts.isEmpty { pruningDrafts = drafts }
+                } catch { self.error = error.localizedDescription }
+            }.disabled(rendered?.key != key || !hasHidden || isBusy)
+            Divider()
+            Button("編集を元に戻す",systemImage:"arrow.uturn.backward") {
+                do { try state.undoMessageEdit() } catch { self.error = error.localizedDescription }
+            }.disabled(!state.canUndoMessageEdit)
+            Button("編集をやり直す",systemImage:"arrow.uturn.forward") {
+                do { try state.redoMessageEdit() } catch { self.error = error.localizedDescription }
+            }.disabled(!state.canRedoMessageEdit)
+        } label: {
+            Image(systemName:"ellipsis").frame(width:44,height:44)
+        }.accessibilityLabel("表示中の会話を編集")
     }
 
     private func focusRequestedNode(in graph: BranchGraph, key: BranchLayoutKey) {

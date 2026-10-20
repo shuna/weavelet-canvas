@@ -1330,3 +1330,14 @@ Catalyst固有24件（BranchEditor19、MessageEditing4、暗号化同期clipboar
 Catalyst追加1case testBranchClipboardDraftThroughLeafUsesSharedLatestForkPath成功。createdAt最新fork末端、始点祖先の除外、copy/cut/moveの範囲、通常入口とpasteの単一node維持を確認した。これはbridge接続の検証で、共有探索の全業務テストをnativeへ複製していない。test実行のCatalyst buildも成功。既存範囲保存・保全・全項目I/O・暗号化wireの成功は再利用した。ログ /private/tmp/weavelet-branch-menu-leaf-test.log。独立Astraの機能群監査は新規P1/P2なし。
 
 隔離FAKE Catalystでmenu-leftの範囲コピーからsheetを開き、始点menu-leftと別IDの末端が初期選択されることを確認。コピー実行後は隔離保存clipboardの5nodeとその順序、先頭menu-left、表示された末端ID、menu-rootの除外を確認した。終了後process不在とbuilt Info.plist byte一致復元を確認。前節のdrag開始/完了は未受入のまま。実API/cloud、全UI/OS受入は未完了。iPhone照会/導入・push・main統合は行っていない。
+
+
+## 分岐図の表示会話をまとめて非表示枝整理（2026-10-21）
+
+実Web ConversationEditMenuの非表示node判定をbranchPruning.hasHiddenBranchNodesへ切り出し、Webの表示/実行callerとnative branchLayoutのpruneTargetsで共用した。選択は表示entries順、削除本体とpin/protected/参照解放は既存pruneHiddenNodesStateのまま。nativeは同じ対象と保存済みactivePathをdraft化し、既存MessageEditing.removeと共有履歴を順にメモリ上で適用した後、一回だけnative atomic保存する。各会話のundo履歴はWebと同じ順に保持し、現在の選択会話を変えない。対象生成中、古いsource、対象重複を適用前に拒否する。新しい依存・保存/sync fieldは追加しない。
+
+分岐図の表示会話menu横へ44ptの編集menuを配置し、一括確認、既存undo/redoへ接続した。取消/画面離脱/layout変更では確認を破棄する。Web関連15件、型検査、Vite build、共有bundle鮮度は成功。Catalyst固有5件（新batch2件、既存生成保全1件、履歴/単体prune1件、暗号化同期clipboard1件）成功。二会話の保護/pinとactivePath、対象外会話と未知巨大数、保存失敗で全source/disk/history不変→retry/stale拒否、各会話順のundo、再起動/record往復と暗号化同期接続を確認した。全項目I/Oと実Web→native→Web暗号化wireの既存成功は、未変更のschema/record/暗号/sync基盤について再利用する。
+
+初期native testは新testのtry? Bool?の誤記でcompile失敗。その修正後も新UIのcatch errorと表示state errorの名前衝突でcompilerがtimeout/assertを起こした。self.error明示で修正し、切り分け用のview/task分割は撤去した。期待値やテスト条件を緩めた結果ではなく、成功件数は最終runの5件のみ。ログ /private/tmp/weavelet-graph-pruning-{generate,web-test,types,web-build,freshness,native-test,native-final-test,native-menu-test,native-separated-test,native-content-test,native-load-test,native-fixed-test}.log。Viteの既存chunk容量警告は継続。独立Astraの機能群監査と、catch修正後のエラー提示/確認dialogのみの限定再確認は新規P1/P2なし。
+
+隔離FAKE Catalystで同じ分岐を持つ合成二会話を表示し、一回の確認で両方が7→2nodeになること、activePath・対象外会話・clipboardの不変を保存ファイルでも確認した。取消時の永続state完全不変、整理後の再整理disabled、undo一回で後の会話のみ7nodeへ、二回で両会話の元node map復元も確認。終了後process不在とbuilt Info.plist byte一致復元を確認した。実touch/文字拡大/VoiceOver、前節のdrag開始/完了、実API/cloudと全機能/UI最終受入は未完了。iPhone照会/導入・push・main統合は行っていない。

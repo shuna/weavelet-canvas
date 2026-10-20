@@ -767,6 +767,69 @@ final class MessageEditingTests: XCTestCase {
         try state.undoMessageEdit(now: 3000); XCTAssertFalse(state.canUndoMessageEdit)
     }
 
+    func testVisibleHiddenPruningUsesWebTargetsAndRetainsEachUndoStep() throws {
+        var input = try cases()[0].required("input"), chats = try input.required("chats").array("chats"), target = chats[0]
+        var targetTree = try target.required("branchTree"), targetNodes = try targetTree.required("nodes")
+        let pinned = try targetNodes.required("hidden").replacing("id",with:.string("pinned-hidden")).replacing("pinned",with:.bool(true)).replacing("xHuge",with:.number("9007199254740993"))
+        let protected = try targetNodes.required("hidden").replacing("id",with:.string("protected-hidden"))
+        targetNodes = targetNodes.replacing("pinned-hidden",with:pinned).replacing("protected-hidden",with:protected)
+        targetTree = targetTree.replacing("nodes",with:targetNodes)
+        target = target.replacing("branchTree",with:targetTree).replacing("protectedNodes",with:.object([.init(key:"protected-hidden",value:.bool(true))]))
+        let other = target.replacing("id",with:.string("other")), outside = target.replacing("id",with:.string("outside"))
+        chats = [target,other,outside]
+        var contentStore = try input.required("contentStore")
+        for (hash,count) in [("h-system",3),("h-middle",3),("h-last",3),("h-hidden",9)] {
+            contentStore = contentStore.replacing(hash,with:try contentStore.required(hash).replacing("refCount",with:.number(String(count))))
+        }
+        input = input.replacing("chats",with:.array(chats)).replacing("contentStore",with:contentStore).replacing("xHuge",with:.number("9007199254740993"))
+        let local = try store(), state = ChatState(store:local); try state.importWebData(input.encoded())
+        let drafts = try state.pruneHiddenDrafts(chatIDs:["target","other"])
+        XCTAssertEqual(drafts.map(\.chatID),["target","other"]); XCTAssertTrue(drafts.allSatisfy { $0.operation == .pruneHidden && $0.nodeID == nil })
+        try state.saveHiddenBranchPruning(drafts,now:1000)
+        let saved = try state.publicationSnapshot(), source = try XCTUnwrap(state.exchange).source
+        let savedChats = try source.required("chats").array("chats")
+        for chatID in ["target","other"] {
+            let chat = try XCTUnwrap(savedChats.first { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) })
+            XCTAssertNil(chat["branchTree"]?["nodes"]?["hidden"])
+            XCTAssertNotNil(chat["branchTree"]?["nodes"]?["pinned-hidden"])
+            XCTAssertNotNil(chat["branchTree"]?["nodes"]?["protected-hidden"])
+            XCTAssertEqual(chat["branchTree"]?["activePath"],target["branchTree"]?["activePath"])
+        }
+        let retained = try XCTUnwrap(savedChats.first { try $0.required("id").string("id").utf8.elementsEqual("outside".utf8) })
+        XCTAssertEqual(retained["branchTree"]?["nodes"]?["pinned-hidden"]?["xHuge"],.number("9007199254740993")); XCTAssertEqual(retained["protectedNodes"]?["protected-hidden"],.bool(true)); XCTAssertEqual(source["xHuge"],.number("9007199254740993"))
+        XCTAssertEqual(try ChatState(store:local).publicationSnapshot().encoded(),try saved.encoded())
+        let records = try SyncRecords.toRecords(saved)
+        XCTAssertEqual(try SyncRecords.canonical(SyncRecords.toRecords(SyncRecords.fromRecords(records))),try SyncRecords.canonical(records))
+        try state.undoMessageEdit(now:2000)
+        XCTAssertNil(try XCTUnwrap(state.exchange).source.required("chats").array("chats")[0]["branchTree"]?["nodes"]?["hidden"])
+        XCTAssertNotNil(try XCTUnwrap(state.exchange).source.required("chats").array("chats")[1]["branchTree"]?["nodes"]?["hidden"])
+        try state.undoMessageEdit(now:3000)
+        XCTAssertNotNil(try XCTUnwrap(state.exchange).source.required("chats").array("chats")[0]["branchTree"]?["nodes"]?["hidden"])
+    }
+
+    func testVisibleHiddenPruningSaveFailureRetriesThenRejectsStaleDrafts() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("visible-prune-fault-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+        defer { try? FileManager.default.removeItem(at:directory) }
+        let fault = InsertionWriteFault(), local = LocalStateStore(fileURL:directory.appendingPathComponent("local.json")) { data,url in
+            if fault.reject { throw CocoaError(.fileWriteNoPermission) }; try data.write(to:url,options:.atomic)
+        }
+        var input = try cases()[0].required("input"), chats = try input.required("chats").array("chats")
+        chats[1] = chats[0].replacing("id",with:.string("other"))
+        let contentStore = try input.required("contentStore").replacing("h-hidden",with:try input.required("contentStore").required("h-hidden").replacing("refCount",with:.number("2")))
+        input = input.replacing("chats",with:.array(chats)).replacing("contentStore",with:contentStore)
+        let state = ChatState(store:local); try state.importWebData(input.encoded())
+        let drafts = try state.pruneHiddenDrafts(chatIDs:["target","other"]), before = try state.publicationSnapshot(), disk = try Data(contentsOf:local.fileURL)
+        XCTAssertEqual(drafts.map(\.chatID),["target","other"])
+        fault.reject = true
+        XCTAssertThrowsError(try state.saveHiddenBranchPruning(drafts,now:1000))
+        XCTAssertEqual(try state.publicationSnapshot(),before); XCTAssertEqual(try Data(contentsOf:local.fileURL),disk); XCTAssertFalse(state.canUndoMessageEdit)
+        fault.reject = false; try state.saveHiddenBranchPruning(drafts,now:1000)
+        let changed = try state.publicationSnapshot(), changedDisk = try Data(contentsOf:local.fileURL)
+        XCTAssertThrowsError(try state.saveHiddenBranchPruning(drafts,now:2000))
+        XCTAssertEqual(try state.publicationSnapshot(),changed); XCTAssertEqual(try Data(contentsOf:local.fileURL),changedDisk)
+    }
+
     func testBranchClipboardDraftThroughLeafUsesSharedLatestForkPath() throws {
         var input = try cases()[0].required("input"), chats = try input.required("chats").array("chats"), chat = chats[0]
         var tree = try chat.required("branchTree"), nodes = try tree.required("nodes")
@@ -999,6 +1062,7 @@ final class MessageEditingTests: XCTestCase {
         let move = try state.nodeMoveDraft(nodeID: "middle", direction: .down), deletion = try state.branchDeletionDraft(nodeID: "middle")
         var replacement = try state.messageReplacementDraft(nodeID: "middle"); replacement.text = "Blocked replacement"
         let clipboardDraft = try state.branchClipboardDraft(nodeID:"middle")
+        let hiddenPrunes = try state.pruneHiddenDrafts(chatIDs:["target"])
         let dropTarget = try XCTUnwrap(state.conversations.first { $0.id.utf8.elementsEqual("other".utf8) }?.visibleMessages.last?.id)
         let branchDrop = try state.branchDropDraft(sourceChatID:"target",nodeID:"middle",targetChatID:"other",afterNodeID:dropTarget)
         let config=URLSessionConfiguration.ephemeral; config.protocolClasses=[HeldInsertionProtocol.self]
@@ -1027,6 +1091,7 @@ final class MessageEditingTests: XCTestCase {
             XCTAssertThrowsError(try state.saveBranchClipboard(draft,newIDs:[],now:1000))
         }
         XCTAssertThrowsError(try state.saveBranchDrop(branchDrop,operation:.move,newIDs:["blocked-drop"],now:1000))
+        XCTAssertThrowsError(try state.saveHiddenBranchPruning(hiddenPrunes,now:1000))
         XCTAssertThrowsError(try state.saveMessageReplacingAndPruning(replacement, newIDs: [], now: 1000))
         for draft in [move, deletion] { XCTAssertThrowsError(try state.saveNodeTransform(draft, newIDs: [], now: 1000)) }
         XCTAssertFalse(state.canUndoMessageEdit); XCTAssertFalse(state.canRedoMessageEdit)
