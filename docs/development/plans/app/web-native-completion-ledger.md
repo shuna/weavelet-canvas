@@ -1269,3 +1269,16 @@ WebのstreamFollowAfterScroll/shouldFollowStreamをbubbleScrollへ抽出し、We
 Web関連16件・型検査・Vite build・共有bundle鮮度は成功。Catalyst controls6/history4の固有10件が成功し、共有判定の引数/結果とnative offset接続、手動離脱、編集時抑止、横位置保持、既存履歴/保存失敗保全を確認した。反復した同じ10件を加算しない。最終UI修正後はCatalyst buildと実画面の関連経路を確認し、未変更suiteは再利用した。保存/同期schemaと共有業務規則は未変更で、全項目I/O・実Web→native→Web暗号化同期の既存成功も再利用する。ログ /private/tmp/weavelet-stream-follow-{web-test,types,web-build,freshness,native-test,native-corrected-test,interaction-build}.log。
 
 隔離FAKE Catalystでは長文送信/再生成の末尾追従、生成中の操作ボタンdisabled、前バブルへの明示移動後の位置保持を確認した。最終では生成中にユーザー見出し約260pxの位置へ移動し、完了後も同位置だった。通常scrollも本文外側の座標で操作し、段落5が約292pxの位置から完了後も動かないことを確認した。本文内のAX scrollはnoValueとなり、外側で操作し直した。これは短い2イベントのFAKE出力であり、実ハードウェアのwheel/trackpad慣性、長時間の多段階出力で行高が増え続ける場合、狭幅/文字拡大/実keyboard/VoiceOverを証明するものではない。終了後のprocess不在とbuilt Info.plistのbyte一致復元を確認した。実API/cloud・iPhone・push・main統合は行っていない。全Web機能/UIと実オンライン相互運用の最終受入は未完了。
+
+
+## 表示経路外の生成先を分岐図へ表示（2026-10-21）
+
+Web CollapseAllButtonsの同chat・activePath外session選択とstartedAt降順をorphanGenerationSessionsへ抽出し、実Webと既存aiTaskTarget bridgeへ接続した。存在しないtargetを新たに除外せず、元の条件と同時刻の安定順序を維持する。nativeは表示中経路を渡し、1chat1生成の制約によりsessionは1件だけ。生成先の選択をSwiftで再実装しない。左下に44pt入口を追加し、会話/表示行/生成の変更で更新、押下時にも対象を再取得する。
+
+分岐図への移動は既存共有履歴とapplyLibraryのatomic保存を使い、広幅splitを維持、単一表示/compactではbranch-editorへ切り替える。生成対象・依存・通信は変更せず、保存成功後だけfocusを公開する。経路外やgraph表示中にも保持した生成結果を保存できるよう、既存の再試行Buttonを行内からactiveContentの直前へ移動し、重複元を削除した。新しい保存方式や同期fieldは追加していない。
+
+担当の共有元/ChatContent関連14件、親の型検査・Vite build・bundle鮮度は成功。Catalyst初回5件中4件成功、新caseは再生成前の応答が残るという不正な前提で失敗した。実Web prepareRegenerateStateは対象応答をremoveNodeStateで削除するため、実共有branch保存で別の兄弟を作り、その兄弟を再生成して元の応答へ移動する経路に修正した。assertを緩めず新caseだけ成功し、さらにgraph focus後の生成結果保存失敗/再試行まで延長して同caseを限定再確認した。固有5件の成功であり最終5件一括実行ではない。
+
+新caseはfocus保存失敗時のsnapshot/disk不変・未公開focusと生成要求ID保持、成功後の元source/表示経路保持・wide split維持、生成結果保存失敗時の出力保持とsnapshot/disk不変、既存handlerによる再試行、再起動後export一致・未知大数/孤立UTF16保持を確認する。未変更の全項目I/O・実Web→native→Web暗号化同期の成功は再利用する。独立Astraの機能群監査と保存再試行入口移動の限定確認は新規P1/P2なし。ログ /private/tmp/weavelet-orphan-generation-{generate,types,web-build,freshness,native-test,native-final-test,preservation-test}.log。
+
+隔離FAKE Catalystでは別分岐へ履歴移動中も生成を続け、左下の経路外1件入口からgraphへ移動、target cardが中央に表示され、その後FAKE partial completeへ更新されることを確認した。終了後のprocess不在とbuilt Info.plistのbyte一致復元を確認。保存失敗UIそのもの、狭幅/文字拡大/VoiceOver全経路、実API/cloudは未確認。origin/mainをfetchし追加commitなし。iPhone照会/導入・push・main統合は行っていない。全Web機能/全UIと実オンライン相互運用の最終受入は未完了。

@@ -7,6 +7,16 @@ export type AiTaskTarget = {
   dependencyIds: string[];
 };
 
+export function orphanGenerationSessions<T extends { chatId: string; targetNodeId: string; startedAt: number }>(
+  chatId: string | undefined,
+  activePath: readonly string[],
+  sessions: readonly T[],
+): T[] {
+  const active = new Set(activePath);
+  return sessions.filter(session => session.chatId === chatId && !active.has(session.targetNodeId))
+    .sort((left, right) => right.startedAt - left.startedAt);
+}
+
 // Actual Web task dependencies; host task ownership and cancellation stay outside this function.
 export function aiTaskFingerprint(ticket: AiTaskTarget, state: Pick<StoreState, 'chats'>): string | null {
   const chat = state.chats?.find(chat => chat.id === ticket.chatId);

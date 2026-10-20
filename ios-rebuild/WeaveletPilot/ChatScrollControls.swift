@@ -156,12 +156,14 @@ struct ChatScrollControls: ViewModifier {
     @Binding var minimumContentHeight: CGFloat?
     let reportError: (Error) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var frames: [ChatScrollMarker: CGRect] = [:]
     @State private var targets = ChatScrollTargets()
     @State private var bridge: SharedWebOperations.Session?
     @StateObject private var offset = ChatScrollOffset()
     @State private var stream = ChatStreamFollowing()
     @State private var streamChatID: Data?
+    @State private var offPathTarget: String?
 
     private var atTop: Bool { (frames[.content]?.minY ?? 0) >= -0.5 }
     private var atBottom: Bool { (frames[.content]?.maxY ?? 0) <= viewportHeight + 0.5 }
@@ -177,6 +179,10 @@ struct ChatScrollControls: ViewModifier {
             if bridge == nil { bridge = try SharedWebOperations.Session() }
             targets = try ChatScrollTargets.resolve(ids: ids, frames: frames, height: viewportHeight, bridge: bridge!)
         }
+    }
+    private func updateGenerationTarget() {
+        offPathTarget = nil
+        perform { offPathTarget = try state.offPathGenerationTarget() }
     }
     private func captureAnchor() throws -> OrderedJSON? {
         guard let chatID = state.conversation?.identity, frames[.context(chatID)] != nil,
@@ -279,10 +285,13 @@ struct ChatScrollControls: ViewModifier {
                 updateAnchor()
             }
             .onChange(of: viewportHeight) { _, _ in updateTargets(); restorePosition(); followStream() }
-            .onChange(of: ids) { _, _ in minimumContentHeight = nil; updateTargets(); restorePosition() }
-            .onChange(of: state.conversation?.identity) { _, _ in minimumContentHeight = nil }
+            .onChange(of: ids) { _, _ in minimumContentHeight = nil; updateTargets(); restorePosition(); updateGenerationTarget() }
+            .onChange(of: state.conversation?.identity) { _, _ in minimumContentHeight = nil; updateGenerationTarget() }
+            .onChange(of: state.generation?.id) { _, _ in updateGenerationTarget() }
+            .task { updateGenerationTarget() }
             .onChange(of: offset.attached) { _, _ in restorePosition(); followStream() }
             .onChange(of: state.generation?.running == true) { wasRunning, running in
+                updateGenerationTarget()
                 if running { minimumContentHeight = nil; followStream() }
                 else if wasRunning, streamChatID == state.conversation?.identity {
                     stream.following = false
@@ -309,9 +318,14 @@ struct ChatScrollControls: ViewModifier {
                 updateAnchor()
             }
             .overlay(alignment: .bottom) {
-                if state.exchange != nil, !ids.isEmpty, !isEditing, viewportHeight - bottomInset >= 188 {
+                if state.exchange != nil, !ids.isEmpty, !isEditing, viewportHeight - bottomInset >= (offPathTarget == nil ? 188 : 236) {
                     HStack(alignment: .bottom) {
                         VStack(spacing: 4) {
+                            if offPathTarget != nil {
+                                button("表示経路外の生成を分岐図で表示", "point.3.connected.trianglepath.dotted", disabled:false) {
+                                    perform { try state.showOffPathGeneration(compact:horizontalSizeClass == .compact) }
+                                }.accessibilityValue("1件")
+                            }
                             button("編集を元に戻す", "arrow.uturn.backward", disabled: !state.canUndoMessageEdit) { perform { try state.undoMessageEdit() } }
                             button("編集をやり直す", "arrow.uturn.forward", disabled: !state.canRedoMessageEdit) { perform { try state.redoMessageEdit() } }
                             button("すべての本文を折りたたむ", "rectangle.compress.vertical", disabled: state.generation != nil) { perform { try state.setAllMessagesCollapsed(true) } }

@@ -130,6 +130,11 @@ struct ChatView: View {
                         try state.navigate(chatID:result.chatID,nodeID:result.nodeID,source:.search)
                     }
                 }
+                if let generation = state.generation, !generation.running {
+                    Button("生成結果の保存を再試行") {
+                        do { try state.saveGenerationResult() } catch { state.generationError = error.localizedDescription }
+                    }.buttonStyle(.plain).font(.footnote).frame(minHeight:44)
+                }
                 activeContent
             }
             .environment(\.conversationFind,conversationFind)
@@ -755,11 +760,6 @@ struct ChatView: View {
                                     .id(node.identity)
                                     .chatScrollMarker(.message(node.identity))
                                     .disabled(state.generation != nil)
-                                if let generation, !generation.running {
-                                    Button("生成結果の保存を再試行") {
-                                        do { try state.saveGenerationResult() } catch { state.generationError = error.localizedDescription }
-                                    }.frame(minHeight: 44)
-                                }
                                 if state.isLocalConversation && node.role == "user" && !node.options.collapsed {
                                     prefillInput(key:state.assistantPrefillKey(nodeID:node.id))
                                 }

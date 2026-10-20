@@ -141,6 +141,69 @@ final class ParallelGenerationTests: XCTestCase {
         }
     }
 
+    func testOffPathGenerationFocusPreservesRunningRequestAndFailedSaveState() async throws {
+        var reject = false
+        var savedURL: URL?
+        let app = try makeState { data,url in
+            savedURL = url
+            if reject { throw CocoaError(.fileWriteNoPermission) }
+            try data.write(to:url,options:.atomic)
+        }
+        try app.setChatActiveView(.splitHorizontal)
+        let remote = client()
+        try app.startGeneration(input:"parallel-A",record:record(),client:remote)
+        try await wait { ParallelGenerationProtocol.labels.count == 1 }
+        ParallelGenerationProtocol.release("A")
+        try await wait { !app.hasGenerations }
+        let previous = try XCTUnwrap(app.conversation?.visibleMessages.last?.id)
+        var branch = try app.messageDraft(nodeID:previous)
+        branch.text = "alternative branch"
+        try app.saveMessage(branch,mode:.branch,newIDs:["other-assistant"])
+        let draft = try app.messageGenerationDraft(nodeID:"other-assistant",operation:.regenerate)
+        try app.startGeneration(draft,record:record(),client:remote)
+        try await wait { ParallelGenerationProtocol.labels.count == 2 }
+        XCTAssertNil(try app.offPathGenerationTarget())
+        let generationID = try XCTUnwrap(app.generation?.id)
+        let target = try XCTUnwrap(app.generation?.plan?["targetNodeId"]).string("target")
+        try app.navigate(chatID:composedID,nodeID:previous,source:.branchSwitch)
+        XCTAssertEqual(try app.offPathGenerationTarget(),target)
+        let before = try app.publicationSnapshot(), source = app.exchange?.source
+        let visible = app.conversation?.visibleMessages.map(\.identity)
+        let url = try XCTUnwrap(savedURL), bytes = try Data(contentsOf:url)
+        reject = true
+        XCTAssertThrowsError(try app.showOffPathGeneration(compact:true))
+        XCTAssertEqual(try app.publicationSnapshot(),before)
+        XCTAssertEqual(try Data(contentsOf:url),bytes)
+        XCTAssertNil(app.branchEditorFocus)
+        XCTAssertEqual(app.generation?.id,generationID)
+        reject = false
+        try app.showOffPathGeneration(compact:false)
+        XCTAssertEqual(app.chatActiveView,.splitHorizontal)
+        XCTAssertEqual(app.branchEditorFocus?.nodeID,target)
+        XCTAssertEqual(app.exchange?.source,source)
+        XCTAssertEqual(app.conversation?.visibleMessages.map(\.identity),visible)
+        XCTAssertEqual(app.generation?.id,generationID)
+        XCTAssertTrue(app.generation?.running == true)
+        let focusedSnapshot = try app.publicationSnapshot(), focusedBytes = try Data(contentsOf:url)
+        reject = true
+        ParallelGenerationProtocol.release("A")
+        try await wait { app.generation?.running == false }
+        XCTAssertEqual(app.generation?.output.text,"reply-A")
+        XCTAssertEqual(try app.publicationSnapshot(),focusedSnapshot)
+        XCTAssertEqual(try Data(contentsOf:url),focusedBytes)
+        reject = false
+        try app.saveGenerationResult()
+        XCTAssertFalse(app.hasGenerations)
+        XCTAssertNil(try app.offPathGenerationTarget())
+        XCTAssertEqual(app.conversation?.visibleMessages.map(\.identity),visible)
+        let generated = app.conversation?.nodes.first { $0.id.utf8.elementsEqual(target.utf8) }
+        XCTAssertEqual(generated?.parts.compactMap { if case .text(let text) = $0 { return text }; return nil }.joined(),"reply-A")
+        let restarted = ChatState(store:LocalStateStore(fileURL:url))
+        XCTAssertEqual(try restarted.exportWebData(),try app.exportWebData())
+        XCTAssertEqual(restarted.exchange?.source["xRoot"],.number("9007199254740993"))
+        XCTAssertEqual(restarted.exchange?.source["xString"],source?["xString"])
+    }
+
     private func makeState(writer: ((Data,URL) throws -> Void)? = nil) throws -> ChatState {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("parallel-generation-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

@@ -2,6 +2,7 @@ import React from 'react';
 import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import UndoRedoButtons from '../UndoRedoButtons';
 import { baseButtonClass } from './ScrollToBottomButton';
+import { orphanGenerationSessions } from '@utils/aiTaskTarget';
 
 const CollapseAllButtons = React.memo(() => {
   const useStore = useWorkspaceStore();
@@ -19,10 +20,7 @@ const CollapseAllButtons = React.memo(() => {
       state.currentChatIndex < state.chats.length
         ? state.chats[state.currentChatIndex]
         : undefined;
-    const activePath = new Set(chat?.branchTree?.activePath ?? []);
-    const orphanSessions = Object.values(state.generatingSessions)
-      .filter((session) => session.chatId === chat?.id && !activePath.has(session.targetNodeId))
-      .sort((left, right) => right.startedAt - left.startedAt);
+    const orphanSessions = orphanGenerationSessions(chat?.id, chat?.branchTree?.activePath ?? [], Object.values(state.generatingSessions));
 
     return {
       hasMessages: !!chat && chat.messages.length > 0,

@@ -22,7 +22,7 @@
     "src/constants/chatDefaults.ts": "343b32f06a7a409071d619102229692b47bcf29871dad0e1258fffe9e906de54",
     "src/utils/newChatDefaults.ts": "4d7875d8c3b84559bcd381186f338f32b51c38df8d630a38a300d0edc29a7068",
     "src/utils/chatLibrary.ts": "530bd76d5d4ddc1ef268d511dfb747b13f751a86777a92a9449689c0f0d0a39f",
-    "src/utils/aiTaskTarget.ts": "0b399dccbe03f77f16c5ef42d0da72d599e910c690c513e3d4c64599627994d4",
+    "src/utils/aiTaskTarget.ts": "f488a1395da67bb853e66f34007817db8967cfc7ac287f534c21a109a92f9a9e",
     "src/hooks/aiTaskLifetime.ts": "998524e16d7c28f4d98459dca036c2dbb8cd5cef8653b16ff25aafda30e2f698",
     "src/i18n.ts": "6f19e7512c956b6023142a116a68748f7aad88d1ca4a2291d88daf8c447e066e",
     "src/store/toast-slice.ts": "3c69aaa4d8c9fe6df20711b15d03cfee86f334d9d79999f7058ab188595f4e48",
@@ -185,8 +185,8 @@
     "src/utils/localModelImport.ts": "f15c25b57b27279b501c26632fbf8c0481b2b23263b22de8e63651dfd5ff7f1b"
   },
   "bundleInputs": {
-    "src/utils/aiTaskTarget.ts": "0b399dccbe03f77f16c5ef42d0da72d599e910c690c513e3d4c64599627994d4",
-    "shared/google-sync/aiTask.ts": "e09d84ef692f8af9f3d5e55b0131f5d860902e80f3b6a25ba66172bffd211834",
+    "src/utils/aiTaskTarget.ts": "f488a1395da67bb853e66f34007817db8967cfc7ac287f534c21a109a92f9a9e",
+    "shared/google-sync/aiTask.ts": "b58460aa1de4041e03722495a010430b372d37eff697b4845719f43c6b42065a",
     "src/utils/bubbleScroll.ts": "bf3fbbf327cc87c92d57cafda88b8888c155f001a7e04a66978360fb6688c380",
     "shared/google-sync/bubbleScroll.ts": "e649c2180b1b247ea72b3bff9b7852c26adbc323c1916c2cf579ecafa07ef04e",
     "shared/google-sync/adapters/host.ts": "886caab3057bf1b56f5de56164001feaa2a80247f1a4760b18893f29598b1cea",
@@ -418,5 +418,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "c1e6bbd0f156ac32e174b52cf7012a5f14ff99dc16577e9ccdd8275786d3086a"
+  "bundleSHA256": "dd5b4cf18f1ad8d5b14fcce0c61c5e9b41858ac2431086782c2eb5b74b5e6436"
 }

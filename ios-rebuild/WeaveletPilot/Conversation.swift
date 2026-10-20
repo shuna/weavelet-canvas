@@ -502,6 +502,41 @@ final class ChatState: ObservableObject {
         if branchEditorFocus?.token == token { branchEditorFocus = nil }
     }
 
+    func offPathGenerationTarget() throws -> String? {
+        guard let current = generation, current.running, let conversation,
+              let target = current.plan?["targetNodeId"] else { return nil }
+        // Native permits one generation per chat, so this list has no timestamp ties.
+        let result = try SharedWebOperations.call("aiTaskTarget",.object([
+            .init(key:"operation",value:.string("orphans")),
+            .init(key:"chatId",value:.string(conversation.id)),
+            .init(key:"activePath",value:.array(conversation.visibleMessages.map { .string($0.id) })),
+            .init(key:"sessions",value:.array([.object([
+                .init(key:"chatId",value:.string(current.chatID)),
+                .init(key:"targetNodeId",value:target),
+                .init(key:"startedAt",value:.number("0"))])]))]))
+        return result["targetNodeId"] == .null ? nil : try result.required("targetNodeId").string("generation target")
+    }
+
+    func showOffPathGeneration(compact: Bool) throws {
+        guard let target = try offPathGenerationTarget(), let exchange, let conversation,
+              conversation.nodes.contains(where: { $0.id.utf8.elementsEqual(target.utf8) }) else {
+            throw ExchangeError.invalid("表示経路外の生成先がありません")
+        }
+        let split = chatActiveView == .splitHorizontal || chatActiveView == .splitVertical
+        let view: ChatActiveView = !compact && split ? chatActiveView : .branchEditor
+        let current = try captureNavigationScroll(try currentNavigationHistory(in:exchange.source),in:exchange.source)
+        let entry = OrderedJSON.object([
+            .init(key:"chatId",value:.string(conversation.id)),
+            .init(key:"activePath",value:.array(conversation.visibleMessages.map { .string($0.id) })),
+            .init(key:"focusedNodeId",value:.string(target)),
+            .init(key:"viewContext",value:.string(view.rawValue)),
+            .init(key:"source",value:.string("branch-editor"))])
+        let next = try BranchNavigation.history(current.history,action:.push,in:exchange.source,entry:entry)
+        try applyLibrary(exchange.source,selectedID:selectedID,navigation:next,activeView:view)
+        chatScrollRestoration = nil
+        branchEditorFocus = BranchEditorFocus(chatID:conversation.id,nodeID:target)
+    }
+
     func navigate(chatID: String, nodeID: String? = nil, source: BranchNavigation.Source) throws {
         guard let exchange else { throw ExchangeError.invalid("保存済み会話がありません") }
         let history = try captureNavigationScroll(try currentNavigationHistory(in: exchange.source), in: exchange.source)

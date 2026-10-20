@@ -8529,6 +8529,10 @@ var WeaveletGoogleSync = (() => {
   });
 
   // src/utils/aiTaskTarget.ts
+  function orphanGenerationSessions(chatId, activePath, sessions) {
+    const active = new Set(activePath);
+    return sessions.filter((session2) => session2.chatId === chatId && !active.has(session2.targetNodeId)).sort((left, right) => right.startedAt - left.startedAt);
+  }
   function aiTaskFingerprint(ticket, state) {
     const chat = state.chats?.find((chat2) => chat2.id === ticket.chatId);
     if (!chat || ticket.nodeId && !chat.branchTree?.nodes[ticket.nodeId])
@@ -8547,6 +8551,10 @@ var WeaveletGoogleSync = (() => {
   // shared/google-sync/aiTask.ts
   function aiTaskTarget(json) {
     const input = JSON.parse(json);
+    if (input.operation === "orphans") {
+      const sessions = orphanGenerationSessions(input.chatId, input.activePath ?? [], input.sessions ?? []);
+      return JSON.stringify({ count: sessions.length, targetNodeId: sessions[0]?.targetNodeId ?? null });
+    }
     const before = aiTaskFingerprint(input.ticket, input.before);
     return JSON.stringify(before !== null && aiTaskFingerprint(input.ticket, input.current) === before);
   }
@@ -8811,7 +8819,7 @@ var WeaveletGoogleSync = (() => {
   }
 
   // src/utils/branchUtils.ts
-  var import_lodash = __toESM(require_lodash(), 1);
+  var import_lodash = __toESM(require_lodash());
 
   // src/utils/contentValidation.ts
   var hasMeaningfulContent = (content) => content.some((part) => {
