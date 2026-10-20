@@ -526,6 +526,34 @@ import XCTest
         XCTAssertEqual(try state.publicationSnapshot()["state"]?["defaultSystemMessage"],.string("EDIT AFTER INTERRUPTED DOWNLOAD"))
     }
 
+    func testManualDriveCompactionRefreshesDiagnosticsWithoutChangingLocalSnapshot() async throws {
+        let dir = try directory(), local = LocalStateStore(fileURL:dir.appendingPathComponent("local.json")), cache = SyncStateStore(fileURL:dir.appendingPathComponent("sync.json"))
+        let wire = try OrderedJSON.decode(Data(contentsOf:root.appendingPathComponent("tests/fixtures/web-native/google-wire-delta.json")))
+        let drive = try FakeSyncDrive(capture:wire.required("multipart")), keys = TestSyncKeys()
+        let state = try state(local), controller = GoogleSyncController(chatState:state,drive:drive,store:cache,keyStore:keys)
+        let dataset = try wire.required("dataset").string("dataset")
+        try await controller.open(dataset:dataset); try await controller.unlock(password:try wire.required("password").string("password"))
+        try await controller.download()
+        let snapshot = try state.publicationSnapshot(), disk = try Data(contentsOf:local.fileURL)
+        try await controller.compactHistory()
+        let diagnostics = try XCTUnwrap(controller.syncDiagnostics)
+        XCTAssertEqual(controller.status,.ready)
+        XCTAssertEqual(diagnostics["diagnostics"]?["observed"],.bool(true))
+        XCTAssertEqual(diagnostics["diagnostics"]?["result"],.string("completed"))
+        XCTAssertEqual(try state.publicationSnapshot(),snapshot)
+        XCTAssertEqual(try Data(contentsOf:local.fileURL),disk)
+        XCTAssertNil(try cache.publication(dataset:dataset))
+        let pending = SyncStateStore.Publication(input:snapshot,received:nil,target:nil,mode:"sync",replace:false)
+        try cache.savePublication(dataset:dataset,pending)
+        do { try await controller.compactHistory(); XCTFail("pending publication must block compaction") } catch {}
+        let retained = try XCTUnwrap(cache.publication(dataset:dataset))
+        XCTAssertEqual(retained.input,pending.input)
+        XCTAssertNil(retained.received); XCTAssertNil(retained.target)
+        XCTAssertEqual(retained.mode,pending.mode); XCTAssertEqual(retained.replace,pending.replace)
+        XCTAssertEqual(try state.publicationSnapshot(),snapshot)
+        XCTAssertEqual(try Data(contentsOf:local.fileURL),disk)
+    }
+
     func testActiveGenerationIsNeverStoppedByPendingSyncPublication() async throws {
         let dir = try directory(), fault = ControllerWriteFault()
         let local = LocalStateStore(fileURL:dir.appendingPathComponent("local.json")) { bytes,url in
@@ -533,9 +561,10 @@ import XCTest
         }
         let state = try state(local), drive = try FakeSyncDrive(capture:fixture("google-session-wire","small")), keys = TestSyncKeys(), cache = SyncStateStore(fileURL:dir.appendingPathComponent("sync.json"))
         let controller = GoogleSyncController(chatState:state,drive:drive,store:cache,keyStore:keys)
-        // This test isolates pending sync versus a legacy, provider-unspecified remote transport.
+        // The I/O corpus intentionally retains incompatible OpenRouter routing options.
+        // This test instead starts a valid legacy, provider-unspecified transport.
         var transportDraft = try state.chatConfigDraft()
-        transportDraft.config = .object(try transportDraft.config.object("config").filter { $0.key != "providerId" })
+        transportDraft.config = .object(try transportDraft.config.object("config").filter { $0.key != "providerId" && $0.key != "openRouter" })
         try state.saveChatConfig(transportDraft)
         try await controller.open(dataset:"fake1"); try await controller.unlock(password:password)
         fault.reject = true; do { try await controller.download() } catch {}; fault.reject = false
@@ -545,11 +574,15 @@ import XCTest
         try state.startGeneration(input:"still generating",record:record,client:client,nodeIDs:["generation-user"])
         let generation = try XCTUnwrap(state.generation)
         let snapshot = try state.publicationSnapshot()
-        XCTAssertThrowsError(try state.navigate(chatID: state.selectedConversationID, source: .search))
-        XCTAssertThrowsError(try state.moveNavigation(.back))
+        // Web navigation and native layout-only updates may run while generation continues.
+        try state.navigate(chatID: state.selectedConversationID, source: .search)
+        try state.moveNavigation(.back)
+        XCTAssertEqual(state.generation?.id,generation.id)
+        XCTAssertEqual(try state.publicationSnapshot(),snapshot)
         let options = try state.nodeOptionsDraft(nodeID: XCTUnwrap(state.conversation?.visibleMessages.first?.id))
         XCTAssertThrowsError(try state.saveNodeOptions(options))
         do { try await controller.recover(); XCTFail("active generation must be preserved") } catch {}
+        do { try await controller.compactHistory(); XCTFail("active generation must block compaction") } catch {}
         XCTAssertEqual(state.generation?.id,generation.id)
         XCTAssertEqual(try state.publicationSnapshot(),snapshot)
         XCTAssertNotNil(try cache.publication(dataset:"fake1"))

@@ -1,3 +1,13 @@
-export const syncPhase = () => {};
-export const completedFile = () => {};
-export const syncStage = async (_start: number, _count: number, work: () => unknown) => work();
+import { initialSyncProgress, createSyncProgress, type HistoryProgress, type SyncPhase } from '../../../src/store/storage/google/progressCore';
+import { startSyncDiagnostics, finishSyncDiagnostics, recordSyncTransfer } from './diagnostics';
+import { getSyncMetrics, resetSyncMetrics } from './metrics';
+let state = initialSyncProgress();
+const progress = createSyncProgress({get:()=>state,set:value=>{state=value;}},{startDiagnostics:startSyncDiagnostics,finishDiagnostics:finishSyncDiagnostics,resetMetrics:resetSyncMetrics,getMetrics:getSyncMetrics,recordTransfer:recordSyncTransfer});
+export const useGoogleSyncProgress = { getState: () => state };
+export const withSyncProgress = progress.withSyncProgress;
+export const syncStage = progress.syncStage;
+export const phaseProgress = progress.phaseProgress;
+export const syncPhase = (phase:SyncPhase,totalFiles?:number,totalBytes?:number,completedFiles=0) => progress.syncPhase(phase,totalFiles,totalBytes,completedFiles);
+export const syncHistoryProgress = (value:HistoryProgress) => progress.syncHistoryProgress(value);
+export const completedFile = progress.completedFile;
+export const beginTransfer = progress.beginTransfer;

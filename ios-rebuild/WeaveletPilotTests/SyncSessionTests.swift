@@ -29,6 +29,56 @@ final class SyncSessionTests: XCTestCase {
         return snapshot.replacing("state", with: state.replacing("contentStore", with: try content.replacing(hash, with: content.required(hash).replacing("xFuture", with: .object([JSONField(key: "origin", value: .string(origin))])))))
     }
 
+    func testSharedCompactionDiagnosticsPreserveWebRecordsAndResumeAfterLostResponse() async throws {
+        let fixture = try OrderedJSON.decode(Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/google-wire-delta.json")))
+        let dataset = try fixture.required("dataset").string("dataset")
+        for interrupted in [false, true] {
+            let drive = try FakeSyncDrive(capture: fixture.required("multipart")), store = store(), keys = TestSyncKeys()
+            let probe = SyncDiagnosticsProbe()
+            let session = try SyncSession(drive: drive, store: store, keyStore: keys, diagnosticsChanged: { value in await probe.append(value) })
+            try await session.open(dataset: dataset)
+            try await session.unlock(password: fixture.required("password").string("password"))
+            let before = try await session.receiveAndSave()
+            let accepted = try store.acceptedSnapshot(dataset: dataset)
+            if interrupted {
+                await drive.loseResponse(kind: "pack")
+                do { try await session.compactHistory(); XCTFail("Expected lost response") }
+                catch { XCTAssertNotNil(error as? SyncSessionError) }
+                let failed = try await session.diagnosticsSnapshot()
+                XCTAssertEqual(failed["diagnostics"]?["result"], .string("failed"))
+                XCTAssertEqual(failed["diagnostics"]?["compaction"]?["status"], .string("interrupted"))
+                XCTAssertEqual(try store.acceptedSnapshot(dataset: dataset), accepted)
+            }
+            try await session.compactHistory()
+            let observed = try await session.diagnosticsSnapshot()
+            XCTAssertEqual(observed["diagnostics"]?["active"], .bool(false))
+            // A resumed group completes first; the final forced pass then finds no remaining raw commits.
+            XCTAssertEqual(observed["diagnostics"]?["compaction"]?["status"], .string(interrupted ? "skipped" : "completed"))
+            XCTAssertEqual(observed["diagnostics"]?["lastCompaction"]?["status"], .string("completed"))
+            XCTAssertGreaterThan(try observed.required("diagnostics").required("compactionsCompleted").number("groups"), 0)
+            XCTAssertGreaterThan(try observed.required("progress").required("downloadedBytes").number("download bytes"), 0)
+            XCTAssertNotNil(observed["metrics"]?["decrypt"])
+            XCTAssertEqual(try store.acceptedSnapshot(dataset: dataset), accepted)
+            let received = try await session.pull()
+            try sameRecords(SyncRecords.toRecords(received), SyncRecords.toRecords(before))
+            let restarted = try SyncSession(drive: drive, store: SyncStateStore(fileURL: store.fileURL), keyStore: keys)
+            try await restarted.open(dataset: dataset)
+            let restored = try await restarted.restoreKey(); XCTAssertTrue(restored)
+            let restoredSnapshot = try await restarted.pull()
+            try sameRecords(SyncRecords.toRecords(restoredSnapshot), SyncRecords.toRecords(before))
+            XCTAssertFalse(String(decoding: try observed.encoded(), as: UTF8.self).contains(try fixture.required("password").string("password")))
+            XCTAssertNil(try store.dataset(dataset)["diagnostics"])
+            let live = await probe.snapshots
+            XCTAssertTrue(live.contains { $0["progress"]?["active"] == .bool(true) })
+            XCTAssertTrue(live.contains { $0["diagnostics"]?["compaction"]?["status"] == .string("running") })
+            let output = OrderedJSON.object([
+                .init(key:"dataset",value:.string(dataset)), .init(key:"password",value:try fixture.required("password")),
+                .init(key:"capture",value:await drive.capture()), .init(key:"expectedRecords",value:try SyncRecords.toRecords(before)),
+            ])
+            try output.encoded().write(to:URL(fileURLWithPath:"/private/tmp/weavelet-native-compaction-" + (interrupted ? "resume" : "complete") + "-output.json"),options:.atomic)
+        }
+    }
+
     func testAtomicStateStoreCoordinatesSeparateInstancesAndRejectsStaleBaseline() async throws {
         let fileURL = store().fileURL
         try await withThrowingTaskGroup(of: Void.self) { group in
@@ -399,4 +449,9 @@ actor FakeSyncDrive: SyncDrive {
         default: throw DriveTransportError.invalidResponse
         }
     }
+}
+
+private actor SyncDiagnosticsProbe {
+    var snapshots: [OrderedJSON] = []
+    func append(_ value: OrderedJSON) { snapshots.append(value) }
 }

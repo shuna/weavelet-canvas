@@ -18,11 +18,12 @@ actor SyncSession {
     private let host: SyncNativeHost
     private let context: JSContext
     private let bridge: JSValue
+    private let diagnosticsChanged: (@Sendable (OrderedJSON) async -> Void)?
     private var busy = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
-    init(drive: any SyncDrive, store: SyncStateStore = .applicationStore, keyStore: any SyncKeyStore = KeychainSyncKeyStore(), transportMode: TransportMode = .drive) throws {
-        self.drive = drive; self.store = store; self.transportMode = transportMode
+    init(drive: any SyncDrive, store: SyncStateStore = .applicationStore, keyStore: any SyncKeyStore = KeychainSyncKeyStore(), transportMode: TransportMode = .drive, diagnosticsChanged: (@Sendable (OrderedJSON) async -> Void)? = nil) throws {
+        self.drive = drive; self.store = store; self.transportMode = transportMode; self.diagnosticsChanged = diagnosticsChanged
         let host = SyncNativeHost(store: store, keys: keyStore)
         self.host = host
         guard let context = JSContext() else { throw SyncSessionError.invalid("JavaScriptCore unavailable") }
@@ -61,6 +62,7 @@ actor SyncSession {
         _ = try invoke("start", [operation, String(decoding: try args.replacing("transportMode",with:.string(transportMode.rawValue)).encoded(), as: UTF8.self)])
         var cancellation: Error?
         while true {
+            if let diagnosticsChanged, let snapshot = try? invokeJSON("syncDiagnostics") { await diagnosticsChanged(snapshot) }
             let result = try invokeJSON("result")
             switch try result.required("status").string("status") {
             case "done":
@@ -141,6 +143,11 @@ actor SyncSession {
         guard ["merge", "local", "cloud"].contains(mode) else { throw SyncSessionError.invalid("Invalid resolution") }
         return try await run("resolve", args: .object([JSONField(key: "snapshot", value: snapshot), JSONField(key: "mode", value: .string(mode))]))
     }
+    func compactHistory() async throws {
+        guard transportMode == .drive else { throw SyncSessionError.invalid("History compaction is not supported by this transport") }
+        _ = try await run("compactHistory")
+    }
+    func diagnosticsSnapshot() throws -> OrderedJSON { try invokeJSON("syncDiagnostics") }
     func close() async throws { _ = try await run("close"); host.key = nil }
 }
 
@@ -173,6 +180,7 @@ private final class SyncNativeHost {
     private func perform(_ operation: String, _ args: [OrderedJSON]) throws -> OrderedJSON {
         switch operation {
         case "uuid": return .string(UUID().uuidString.lowercased())
+        case "monotonic": return .number(String(ProcessInfo.processInfo.systemUptime * 1000))
         case "utf8": return .syncBytes(Data(try args[0].string("text").utf8))
         case "text":
             guard let text = String(data: try args[0].syncData(), encoding: .utf8) else { throw SyncSessionError.invalid("Invalid UTF8") }; return .string(text)

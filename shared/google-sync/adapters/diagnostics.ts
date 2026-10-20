@@ -1,4 +1,12 @@
-export const reportSyncHistory = () => {};
-export const reportCompaction = () => {};
-export const recordPackAccess = () => {};
-export const useGoogleSyncDiagnostics = { getState: () => ({ compaction: { status: 'running' } }) };
+import { createSyncDiagnostics, initialSyncDiagnostics, type Compaction, type HistoryObservation, type TransferPurpose } from '../../../src/store/storage/google/diagnosticsCore';
+import type { SyncMetrics } from '../../../src/store/storage/google/metricsCore';
+let state = initialSyncDiagnostics();
+const diagnostics = createSyncDiagnostics({get:()=>state,set:value=>{state=value;}});
+export const useGoogleSyncDiagnostics = { getState: () => state };
+export const startSyncDiagnostics = diagnostics.start;
+export const finishSyncDiagnostics = (result:'completed'|'failed',elapsedMs:number,metrics:SyncMetrics) => diagnostics.finish(result,elapsedMs,metrics);
+export const recordSyncTransfer = diagnostics.transfer;
+export const recordPackAccess = diagnostics.packAccess;
+export const reportSyncHistory = (value:HistoryObservation) => diagnostics.history(value);
+export const reportCompaction = (value:Compaction) => diagnostics.compaction(value);
+export type { TransferPurpose };

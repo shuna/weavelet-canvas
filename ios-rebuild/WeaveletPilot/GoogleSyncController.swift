@@ -10,6 +10,7 @@ import Combine
     @Published private(set) var dataset: String?
     @Published private(set) var conflictKeys: [String] = []
     @Published private(set) var errorMessage: String?
+    @Published private(set) var syncDiagnostics: OrderedJSON?
     @Published private(set) var isUnlocked = false
     var isBusy: Bool { task != nil }
     private let transportMode: SyncSession.TransportMode
@@ -18,6 +19,7 @@ import Combine
     private let store: SyncStateStore
     private let keyStore: any SyncKeyStore
     private var session: SyncSession?
+    private var sessionIdentity: UUID?
     private var task: Task<Void, Error>?
     private var idleWaiters: [CheckedContinuation<Void,Never>] = []
 
@@ -43,16 +45,35 @@ import Combine
     }
     private func getSession() throws -> SyncSession {
         if let session { return session }
-        let created = try SyncSession(drive: drive, store: store, keyStore: keyStore, transportMode: transportMode)
-        session = created; return created
+        let identity = UUID()
+        let observer: (@Sendable (OrderedJSON) async -> Void)?
+        if transportMode == .drive {
+            observer = { [weak self] snapshot in
+                await self?.receiveSyncDiagnostics(snapshot, sessionIdentity: identity)
+            }
+        } else { observer = nil }
+        let created = try SyncSession(drive: drive, store: store, keyStore: keyStore, transportMode: transportMode, diagnosticsChanged: observer)
+        sessionIdentity = identity; session = created; return created
     }
+    private func receiveSyncDiagnostics(_ snapshot: OrderedJSON, sessionIdentity: UUID) {
+        guard transportMode == .drive, self.sessionIdentity == sessionIdentity, dataset != nil else { return }
+        syncDiagnostics = snapshot
+    }
+    private func refreshSyncDiagnostics() async {
+        guard transportMode == .drive, let session else { return }
+        syncDiagnostics = try? await session.diagnosticsSnapshot()
+    }
+
     private func perform(_ operation: @escaping @MainActor () async throws -> Void) async throws {
         guard task == nil else { throw SyncSessionError.invalid("Sync operation is already running") }
         errorMessage = nil; conflictKeys = []; status = .syncing
         let task = Task { try await operation() }; self.task = task
         defer { self.task = nil; let waiters = idleWaiters; idleWaiters.removeAll(); waiters.forEach { $0.resume() } }
-        do { try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() } }
-        catch {
+        do {
+            try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+            await refreshSyncDiagnostics()
+        } catch {
+            await refreshSyncDiagnostics()
             errorMessage = error.localizedDescription
             if let error = error as? SyncSessionError, !error.conflictKeys.isEmpty {
                 conflictKeys = error.conflictKeys; status = .conflict
@@ -108,6 +129,16 @@ import Combine
         try await perform { try await self.publish(initializeIfEmpty:true) }
     }
     func synchronize() async throws { try await perform { try await self.publish() } }
+    func compactHistory() async throws {
+        guard transportMode == .drive else { throw SyncSessionError.invalid("Google同期でのみ履歴を整理できます") }
+        guard !chatState.hasGenerations else { throw SyncSessionError.invalid("生成結果を保存してから同期履歴を整理してください") }
+        try await perform {
+            guard self.isUnlocked, let dataset = self.dataset, let session = self.session else { throw SyncSessionError.invalid("Unlock sync first") }
+            guard try self.store.publication(dataset: dataset) == nil else { throw SyncSessionError.invalid("保存処理の復旧を完了してから同期履歴を整理してください") }
+            try await session.compactHistory()
+            self.status = .ready
+        }
+    }
     func download() async throws { try await perform { try await self.publish(download: true) } }
     func resolve(_ mode: Resolution) async throws { try await perform { try await self.publish(resolution: mode) } }
     private func publish(replace: Bool = false, initializeIfEmpty: Bool = false, download: Bool = false, resolution: Resolution? = nil) async throws {
@@ -172,7 +203,7 @@ import Combine
         try await perform {
             if let session = self.session { try await session.close(); self.isUnlocked = false }
             try self.store.selectDataset(nil)
-            self.session = nil; self.dataset = nil; self.status = .disconnected
+            self.session = nil; self.sessionIdentity = nil; self.syncDiagnostics = nil; self.dataset = nil; self.status = .disconnected
         }
     }
 }

@@ -207,7 +207,8 @@ final class DriveTransportTests: XCTestCase {
             XCTAssertEqual(request.url?.path, "/drive/v3/files/FAKE-id")
             return (200, bytes)
         }
-        _ = try await drive.call("put", args: [.string("FAKE-id"), .string("FAKE dataset"), .string("commit"), .syncBytes(bytes)])
+        let uploaded = try await drive.call("put", args: [.string("FAKE-id"), .string("FAKE dataset"), .string("commit"), .syncBytes(bytes)])
+        XCTAssertEqual(uploaded, .bool(false))
         _ = try await drive.call("remove", args: [.string("FAKE-id")])
         let collision = transport { request in request.httpMethod == "POST" ? (409, Data()) : (200, Data([9])) }
         do { _ = try await collision.call("put", args: [.string("FAKE-id"), .string("FAKE dataset"), .string("part"), .syncBytes(bytes)]); XCTFail("Expected ciphertext collision") }

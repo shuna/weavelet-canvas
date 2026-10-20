@@ -97,6 +97,117 @@ struct GoogleSyncSettingsView: View {
     init(connection: GoogleSyncConnection) {
         self.connection = connection; controller = connection.controller
     }
+    private func value(_ json: OrderedJSON?) -> String {
+        guard let json, json != .null else { return "—" }
+        return (try? json.displayString("diagnostic value")) ?? "—"
+    }
+    private func metric(_ metrics: OrderedJSON, _ key: String) -> String {
+        value(metrics[key]?["ms"])
+    }
+    private func transfer(_ diagnostics: OrderedJSON, _ key: String) -> String {
+        value(diagnostics["transfers"]?[key]?["uploaded"]) + " / " + value(diagnostics["transfers"]?[key]?["downloaded"])
+    }
+    private func resultText(_ value: OrderedJSON?) -> String {
+        switch try? value?.string("result") {
+        case "running": return "処理中"
+        case "completed": return "完了"
+        case "failed": return "失敗"
+        default: return "—"
+        }
+    }
+    private func phaseText(_ value: OrderedJSON?) -> String {
+        switch try? value?.string("phase") {
+        case "preparing": return "ローカルデータを準備しています"
+        case "key": return "暗号鍵を準備しています"
+        case "folder": return "暗号化フォルダーを作成しています"
+        case "checking": return "クラウドの変更を確認しています"
+        case "downloading": return "暗号化ファイルを受信・復号しています"
+        case "encrypting": return "差分を圧縮・暗号化しています"
+        case "uploading": return "暗号化ファイルを送信しています"
+        case "saving": return "ローカルデータを保存しています"
+        case "verifying": return "同期結果を検証しています"
+        case "history": return "同期履歴を処理しています"
+        default: return "—"
+        }
+    }
+    private func compactionText(_ value: OrderedJSON?) -> String {
+        switch try? value?.string("compaction status") {
+        case "notChecked": return "未判定"
+        case "skipped": return "見送り"
+        case "running": return "実施中"
+        case "completed": return "実施済み"
+        case "interrupted": return "中断・再開待ち"
+        default: return "—"
+        }
+    }
+    private func compactionReason(_ value: OrderedJSON?) -> String {
+        switch try? value?.string("compaction reason") {
+        case "belowThreshold": return "整理する履歴が閾値未満です"
+        case "liveBelowThreshold": return "現在の整理対象が不足しています"
+        case "new": return "新しい履歴を整理しています"
+        case "resume": return "中断した整理を再開しています"
+        default: return "—"
+        }
+    }
+    private func observationTime(_ value: OrderedJSON?) -> String {
+        guard let milliseconds = try? value?.number("observation time") else { return "—" }
+        return Date(timeIntervalSince1970: milliseconds / 1000).formatted(date: .omitted, time: .standard)
+    }
+    @ViewBuilder private func diagnostics(_ snapshot: OrderedJSON) -> some View {
+        let diagnostics = snapshot["diagnostics"] ?? .object([])
+        let progress = snapshot["progress"] ?? .object([])
+        let metrics = snapshot["metrics"] ?? .object([])
+        Section("同期の診断") {
+            if diagnostics["observed"] == .bool(true) {
+                Text("結果: " + resultText(diagnostics["result"]) + " · " + value(diagnostics["elapsedMs"]) + " ms")
+                if progress["active"] == .bool(true) {
+                    Text("進行中: " + phaseText(progress["phase"]))
+                    if let overall = try? progress.required("overallProgress").number("overall progress") {
+                        ProgressView(value: overall) { Text("全体: " + String(format: "%.0f%%", overall * 100)) }
+                    }
+                }
+                Text("送信 / 受信: " + value(progress["uploadedBytes"]) + " / " + value(progress["downloadedBytes"]) + " bytes")
+                Text("送信 / 受信時間: " + value(progress["uploadMs"]) + " / " + value(progress["downloadMs"]) + " ms")
+                DisclosureGroup("内訳") {
+                    Text("通常: " + transfer(diagnostics, "normal"))
+                    Text("整理: " + transfer(diagnostics, "compaction"))
+                    Text("検証: " + transfer(diagnostics, "verification"))
+                    Text("索引: " + transfer(diagnostics, "pack-index"))
+                    Text("パック: " + transfer(diagnostics, "pack"))
+                    Text("パック読込 / 省略: " + value(diagnostics["packRead"]) + " / " + value(diagnostics["packSkipped"]))
+                    Text("圧縮: " + metric(metrics, "compress") + " ms")
+                    Text("暗号化: " + metric(metrics, "encrypt") + " ms")
+                    Text("復号: " + metric(metrics, "decrypt") + " ms")
+                    Text("キャッシュ: " + metric(metrics, "cache") + " ms")
+                }
+                let compaction = diagnostics["compaction"] ?? .object([])
+                Text("履歴整理: " + compactionText(compaction["status"]) + " · 完了 " + value(diagnostics["compactionsCompleted"]) + " 件")
+                if compaction["reason"] != nil {
+                    Text(compactionReason(compaction["reason"])).foregroundStyle(.secondary)
+                }
+                if let last = diagnostics["lastCompaction"] {
+                    Text("直近の整理: " + observationTime(last["at"]) + " · 元ファイル " + value(last["sourceFiles"]) + " → " + value(last["newFiles"]))
+                }
+                if let history = diagnostics["history"], history != .null {
+                    DisclosureGroup("同期履歴") {
+                        Text("観測時刻: " + observationTime(history["observedAt"]))
+                        Text("未整理: " + value(history["unaggregated"]) + " / 閾値 " + value(history["threshold"]))
+                        Text("閾値超過: " + value(history["overThreshold"]))
+                        Text("索引: " + value(history["packCount"]) + " · データ本体: " + value(history["payloadFiles"]))
+                        Text("小さいパック: " + value(history["smallPacks"]))
+                        Text("参考ファイル数: " + value(history["referenceFiles"]))
+                        Text("余剰ファイル数: " + value(history["excessPayloadFiles"]))
+                        Text("削除予定: " + value(history["cleanupTargets"]))
+                    }
+                }
+                Text("転送量は成功したデータ本体のみで、メタデータや内部の競合照合は含みません。")
+                    .font(.footnote).foregroundStyle(.secondary)
+            } else {
+                Text("計測なし").foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private var status: String {
         switch controller.status {
         case .disconnected: return "同期先未選択"
@@ -158,6 +269,8 @@ struct GoogleSyncSettingsView: View {
                             .disabled(connection.working)
                         Button("今すぐ同期") { connection.run { try await controller.synchronize() } }
                             .disabled(connection.working || !controller.isUnlocked)
+                        Button("同期履歴を整理") { connection.run { try await controller.compactHistory() } }
+                            .disabled(connection.working || !controller.isUnlocked || controller.status == .recoveryRequired || controller.status == .conflict || connection.state.hasGenerations)
                         Button("クラウドから受信") { receiveOnly = true; confirmation = .cloud }
                             .disabled(connection.working || !controller.isUnlocked)
                         if controller.status == .recoveryRequired {
@@ -173,6 +286,7 @@ struct GoogleSyncSettingsView: View {
                             .disabled(connection.working)
                     }
                 }
+                if let snapshot = controller.syncDiagnostics { diagnostics(snapshot) }
                 Section("旧iOSデータの取込み") {
                     Button("旧Google保存を確認") {
                         guard let anchor else { return }

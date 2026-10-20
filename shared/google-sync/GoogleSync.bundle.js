@@ -8522,6 +8522,7 @@ var WeaveletGoogleSync = (() => {
     start: () => start,
     streamStatus: () => streamStatus,
     summaryOperation: () => summaryOperation,
+    syncDiagnostics: () => syncDiagnostics,
     titleOperation: () => titleOperation,
     tokenBudgetOperation: () => tokenBudgetOperation,
     tokenizerOperation: () => tokenizerOperation,
@@ -8534,8 +8535,8 @@ var WeaveletGoogleSync = (() => {
     const active = new Set(activePath);
     return sessions.filter((session2) => session2.chatId === chatId && !active.has(session2.targetNodeId)).sort((left, right) => right.startedAt - left.startedAt);
   }
-  function aiTaskFingerprint(ticket, state) {
-    const chat = state.chats?.find((chat2) => chat2.id === ticket.chatId);
+  function aiTaskFingerprint(ticket, state3) {
+    const chat = state3.chats?.find((chat2) => chat2.id === ticket.chatId);
     if (!chat || ticket.nodeId && !chat.branchTree?.nodes[ticket.nodeId])
       return null;
     if (ticket.kind === "title")
@@ -8627,14 +8628,292 @@ var WeaveletGoogleSync = (() => {
   }
   var bytes = (value) => Array.from(value);
 
+  // src/store/storage/google/metricsCore.ts
+  function createSyncMetrics() {
+    let metrics2 = {};
+    const recordMetric2 = (name, started, inputBytes = 0, outputBytes = 0, now = performance.now()) => {
+      const entry = metrics2[name] ??= { calls: 0, ms: 0, inputBytes: 0, outputBytes: 0 };
+      entry.calls++;
+      entry.ms += now - started;
+      entry.inputBytes += inputBytes;
+      entry.outputBytes += outputBytes;
+    };
+    return {
+      reset: () => {
+        metrics2 = {};
+      },
+      get: () => structuredClone(metrics2),
+      recordMetric: recordMetric2,
+      measure: async (name, work, inputBytes = 0) => {
+        const started = performance.now();
+        try {
+          return await work();
+        } finally {
+          recordMetric2(name, started, inputBytes);
+        }
+      },
+      merge: (values) => {
+        for (const name of Object.keys(values)) {
+          const value = values[name];
+          const entry = metrics2[name] ??= { calls: 0, ms: 0, inputBytes: 0, outputBytes: 0 };
+          for (const field of ["calls", "ms", "inputBytes", "outputBytes"]) {
+            entry[field] += value[field];
+          }
+        }
+      }
+    };
+  }
+
+  // shared/google-sync/adapters/metrics.ts
+  var metrics = createSyncMetrics();
+  var resetSyncMetrics = metrics.reset;
+  var getSyncMetrics = metrics.get;
+  var recordMetric = (name, started, inputBytes = 0, outputBytes = 0) => metrics.recordMetric(name, started, inputBytes, outputBytes);
+  var measure = metrics.measure;
+  var mergeSyncMetrics = metrics.merge;
+
   // shared/google-sync/adapters/crypto.ts
   var digest = async (value) => host("digest", typeof value === "string" ? value : bytes(value));
   var encode = (value) => new Uint8Array(host("encode", value));
   var decode = (value) => host("decode", bytes(value));
-  var encrypt = async (key, value, context) => new Uint8Array(host("encrypt", key, bytes(value), context));
-  var decrypt = async (key, value, context) => new Uint8Array(host("decrypt", key, bytes(value), context));
+  var encrypt = async (key, value, context) => {
+    const started = performance.now();
+    const result3 = new Uint8Array(host("encrypt", key, bytes(value), context));
+    recordMetric("encrypt", started, value.length, result3.length);
+    return result3;
+  };
+  var decrypt = async (key, value, context) => {
+    const started = performance.now();
+    try {
+      return new Uint8Array(host("decrypt", key, bytes(value), context));
+    } finally {
+      recordMetric("decrypt", started, value.length);
+    }
+  };
   var createKeyEnvelope = async (password, dataset) => host("createKeyEnvelope", password, dataset);
   var unlockKey = async (envelope, password, dataset) => host("unlockKey", envelope, password, dataset);
+
+  // src/store/storage/google/progressCore.ts
+  var initialSyncProgress = () => ({
+    overallProgress: 0,
+    active: false,
+    phase: "preparing",
+    historyProgress: void 0,
+    completedFiles: 0,
+    totalFiles: void 0,
+    completedBytes: 0,
+    totalBytes: void 0,
+    uploadedBytes: 0,
+    downloadedBytes: 0,
+    downloadedFiles: 0,
+    uploadMs: 0,
+    downloadMs: 0
+  });
+  function createSyncProgress(store, dependencies) {
+    let operation = 0;
+    let stageRange = [0, 1];
+    let intervals = { upload: [], download: [] };
+    const now = dependencies.now ?? (() => performance.now());
+    const phaseProgress2 = (progress2) => progress2.phase === "history" ? progress2.historyProgress?.total ? Math.min(1, progress2.historyProgress.completed / progress2.historyProgress.total) : void 0 : progress2.totalFiles !== void 0 && progress2.totalFiles > 0 ? Math.min(1, progress2.completedFiles / progress2.totalFiles) : void 0;
+    const advanceOverall = (value) => {
+      const state3 = store.get();
+      store.set({ ...state3, overallProgress: Math.max(state3.overallProgress, Math.min(0.99, value)) });
+    };
+    const advanceFiles = () => {
+      const fraction = phaseProgress2(store.get());
+      if (fraction !== void 0)
+        advanceOverall(stageRange[0] + (stageRange[1] - stageRange[0]) * fraction);
+    };
+    return {
+      phaseProgress: phaseProgress2,
+      withSyncProgress: async (work) => {
+        if (store.get().active)
+          return work();
+        const current = ++operation, started = now();
+        let result3 = "failed";
+        dependencies.startDiagnostics();
+        dependencies.resetMetrics();
+        intervals = { upload: [], download: [] };
+        stageRange = [0, 1];
+        store.set({ ...initialSyncProgress(), active: true });
+        try {
+          const value = await work();
+          result3 = "completed";
+          if (current === operation)
+            store.set({ ...store.get(), overallProgress: 1 });
+          return value;
+        } finally {
+          if (current === operation) {
+            store.set({ ...store.get(), active: false });
+            dependencies.finishDiagnostics(result3, now() - started, dependencies.getMetrics());
+          }
+        }
+      },
+      syncStage: async (index, total, work) => {
+        if (!store.get().active)
+          return work();
+        const current = operation, parent = stageRange, span = (parent[1] - parent[0]) / total;
+        stageRange = [parent[0] + index * span, parent[0] + (index + 1) * span];
+        const end = stageRange[1];
+        store.set({ ...store.get(), totalFiles: void 0, totalBytes: void 0, completedFiles: 0, completedBytes: 0, historyProgress: void 0 });
+        advanceOverall(stageRange[0]);
+        try {
+          const result3 = await work();
+          if (current === operation)
+            advanceOverall(end);
+          return result3;
+        } finally {
+          if (current === operation)
+            stageRange = parent;
+        }
+      },
+      syncPhase: (phase, totalFiles, totalBytes, completedFiles = 0) => {
+        if (!store.get().active)
+          return;
+        store.set({ ...store.get(), phase, totalFiles, totalBytes, completedFiles, completedBytes: 0, historyProgress: void 0 });
+        advanceFiles();
+      },
+      syncHistoryProgress: (historyProgress) => {
+        if (!store.get().active)
+          return;
+        store.set({ ...store.get(), phase: "history", historyProgress, totalFiles: void 0, totalBytes: void 0, completedFiles: 0, completedBytes: 0 });
+      },
+      completedFile: (bytes4) => {
+        if (!store.get().active)
+          return;
+        const state3 = store.get();
+        store.set({ ...state3, completedFiles: state3.completedFiles + 1, completedBytes: state3.completedBytes + bytes4 });
+        advanceFiles();
+      },
+      beginTransfer: (direction, purpose = "normal") => {
+        const current = operation, started = now();
+        return (bytes4) => {
+          if (current !== operation || !store.get().active)
+            return;
+          dependencies.recordTransfer(direction, bytes4, purpose);
+          const ranges = intervals[direction];
+          ranges.push([started, now()]);
+          ranges.sort((a, b) => a[0] - b[0]);
+          let elapsed = 0, end = -Infinity;
+          for (const [from, to] of ranges) {
+            elapsed += Math.max(0, to - Math.max(from, end));
+            end = Math.max(end, to);
+          }
+          elapsed = Math.max(1, elapsed);
+          const state3 = store.get();
+          store.set(direction === "upload" ? { ...state3, uploadedBytes: state3.uploadedBytes + bytes4, uploadMs: elapsed } : { ...state3, downloadedBytes: state3.downloadedBytes + bytes4, downloadMs: elapsed, downloadedFiles: state3.downloadedFiles + 1 });
+        };
+      }
+    };
+  }
+
+  // src/store/storage/google/diagnosticsCore.ts
+  var emptyTransfers = () => Object.fromEntries(
+    ["normal", "pack-index", "pack", "compaction", "verification"].map((name) => [name, { uploaded: 0, downloaded: 0, files: 0 }])
+  );
+  var initialSyncDiagnostics = () => ({
+    observed: false,
+    active: false,
+    result: "completed",
+    elapsedMs: 0,
+    transfers: emptyTransfers(),
+    packSkipped: 0,
+    packRead: 0,
+    metrics: {},
+    compaction: { status: "notChecked" },
+    compactionsCompleted: 0
+  });
+  function summarizeHistory(value, observedAt = Date.now()) {
+    const bytes4 = value.packs.reduce((sum, pack) => sum + pack.bytes, 0);
+    const payloadFiles = value.packs.reduce((sum, pack) => sum + pack.parts, 0);
+    const referenceFiles = bytes4 ? Math.ceil(bytes4 / value.partBytes) : 0;
+    return {
+      unaggregated: value.unaggregated,
+      threshold: value.threshold,
+      overThreshold: Math.max(0, value.unaggregated - (value.threshold - 1)),
+      packCount: value.packs.length,
+      smallPacks: value.packs.filter((pack) => pack.bytes < 1024 * 1024).length,
+      payloadFiles,
+      referenceFiles,
+      excessPayloadFiles: Math.max(0, payloadFiles - referenceFiles),
+      cleanupTargets: value.cleanupTargets,
+      observedAt
+    };
+  }
+  function createSyncDiagnostics(store, now = Date.now) {
+    return {
+      start: () => {
+        const state3 = store.get();
+        store.set({
+          ...state3,
+          observed: true,
+          active: true,
+          result: "running",
+          elapsedMs: 0,
+          transfers: emptyTransfers(),
+          packSkipped: 0,
+          packRead: 0,
+          metrics: {},
+          compaction: { status: "notChecked" },
+          compactionsCompleted: 0
+        });
+      },
+      finish: (result3, elapsedMs, metrics2) => {
+        const state3 = store.get();
+        store.set({
+          ...state3,
+          active: false,
+          result: result3,
+          elapsedMs,
+          metrics: metrics2,
+          compaction: result3 === "failed" && state3.compaction.status === "running" ? { ...state3.compaction, status: "interrupted" } : state3.compaction
+        });
+      },
+      transfer: (direction, bytes4, purpose) => {
+        const state3 = store.get(), value = state3.transfers[purpose], field = direction === "upload" ? "uploaded" : "downloaded";
+        store.set({ ...state3, transfers: { ...state3.transfers, [purpose]: { ...value, files: value.files + 1, [field]: value[field] + bytes4 } } });
+      },
+      packAccess: (skipped) => {
+        const state3 = store.get();
+        store.set({ ...state3, [skipped ? "packSkipped" : "packRead"]: state3[skipped ? "packSkipped" : "packRead"] + 1 });
+      },
+      history: (value) => {
+        const state3 = store.get();
+        store.set({ ...state3, history: summarizeHistory(value, now()) });
+      },
+      compaction: (value) => {
+        const state3 = store.get(), completed = value.status === "completed";
+        store.set({ ...state3, compaction: value, compactionsCompleted: state3.compactionsCompleted + (completed ? 1 : 0), ...completed ? { lastCompaction: { ...value, at: now() } } : {} });
+      }
+    };
+  }
+
+  // shared/google-sync/adapters/diagnostics.ts
+  var state = initialSyncDiagnostics();
+  var diagnostics = createSyncDiagnostics({ get: () => state, set: (value) => {
+    state = value;
+  } });
+  var useGoogleSyncDiagnostics = { getState: () => state };
+  var startSyncDiagnostics = diagnostics.start;
+  var finishSyncDiagnostics = (result3, elapsedMs, metrics2) => diagnostics.finish(result3, elapsedMs, metrics2);
+  var recordSyncTransfer = diagnostics.transfer;
+  var recordPackAccess = diagnostics.packAccess;
+  var reportSyncHistory = (value) => diagnostics.history(value);
+  var reportCompaction = (value) => diagnostics.compaction(value);
+
+  // shared/google-sync/adapters/progress.ts
+  var state2 = initialSyncProgress();
+  var progress = createSyncProgress({ get: () => state2, set: (value) => {
+    state2 = value;
+  } }, { startDiagnostics: startSyncDiagnostics, finishDiagnostics: finishSyncDiagnostics, resetMetrics: resetSyncMetrics, getMetrics: getSyncMetrics, recordTransfer: recordSyncTransfer });
+  var useGoogleSyncProgress = { getState: () => state2 };
+  var withSyncProgress = progress.withSyncProgress;
+  var syncStage = progress.syncStage;
+  var phaseProgress = progress.phaseProgress;
+  var syncPhase = (phase, totalFiles, totalBytes, completedFiles = 0) => progress.syncPhase(phase, totalFiles, totalBytes, completedFiles);
+  var syncHistoryProgress = (value) => progress.syncHistoryProgress(value);
+  var completedFile = progress.completedFile;
+  var beginTransfer = progress.beginTransfer;
 
   // src/utils/folderHierarchy.ts
   function validateFolderHierarchy(folders) {
@@ -8707,10 +8986,6 @@ var WeaveletGoogleSync = (() => {
     return result3;
   }
 
-  // shared/google-sync/adapters/metrics.ts
-  var recordMetric = () => {
-  };
-
   // src/store/storage/google/settings.ts
   var BROWSER_LOCAL_SETTINGS = [
     "hideMenuOptions",
@@ -8738,8 +9013,8 @@ var WeaveletGoogleSync = (() => {
     "animateBubbleNavigation",
     "branchSwipeDirection"
   ];
-  function withoutBrowserLocalSettings(state) {
-    const shared2 = { ...state };
+  function withoutBrowserLocalSettings(state3) {
+    const shared2 = { ...state3 };
     for (const key of SYNC_LOCAL_SETTINGS)
       delete shared2[key];
     return shared2;
@@ -9313,8 +9588,8 @@ var WeaveletGoogleSync = (() => {
     chat.messages = materializeActivePath(tree, contentStore);
     return { chats, contentStore };
   };
-  var removeMessageAtIndexFromPreparedState = (state, messageIndex, options) => {
-    const { tree, contentStore } = state;
+  var removeMessageAtIndexFromPreparedState = (state3, messageIndex, options) => {
+    const { tree, contentStore } = state3;
     const nodeId = tree.activePath[messageIndex];
     if (!nodeId)
       return;
@@ -9564,9 +9839,9 @@ var WeaveletGoogleSync = (() => {
     return { ...finalized, newId };
   };
   var removeMessageAtIndexState = (chats, chatIndex, messageIndex, currentContentStore, options) => {
-    const state = prepareBranchMutationState(chats, chatIndex, currentContentStore);
-    removeMessageAtIndexFromPreparedState(state, messageIndex, options);
-    return finalizePreparedBranchMutationState(state);
+    const state3 = prepareBranchMutationState(chats, chatIndex, currentContentStore);
+    removeMessageAtIndexFromPreparedState(state3, messageIndex, options);
+    return finalizePreparedBranchMutationState(state3);
   };
   var moveMessageState = (chats, chatIndex, messageIndex, direction, currentContentStore) => {
     const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
@@ -9611,10 +9886,10 @@ var WeaveletGoogleSync = (() => {
     });
   };
   var replaceMessageAndPruneFollowingState = (chats, chatIndex, messageIndex, message, currentContentStore, removeCount = 0) => {
-    const state = prepareBranchMutationState(chats, chatIndex, currentContentStore);
-    const { tree, contentStore } = state;
+    const state3 = prepareBranchMutationState(chats, chatIndex, currentContentStore);
+    const { tree, contentStore } = state3;
     const existingId = tree.activePath[messageIndex];
-    state.chat.messages[messageIndex] = message;
+    state3.chat.messages[messageIndex] = message;
     if (existingId)
       setMessageAttributes(tree, existingId, message);
     if (existingId) {
@@ -9640,9 +9915,9 @@ var WeaveletGoogleSync = (() => {
       tree.activePath.push(newId);
     }
     for (let removed = 0; removed < removeCount; removed += 1) {
-      removeMessageAtIndexFromPreparedState(state, messageIndex + 1);
+      removeMessageAtIndexFromPreparedState(state3, messageIndex + 1);
     }
-    return finalizePreparedBranchMutationState(state);
+    return finalizePreparedBranchMutationState(state3);
   };
   var copyBranchSequenceState = (chats, chatIndex, fromNodeId, toNodeId) => {
     const tree = chats[chatIndex]?.branchTree;
@@ -10347,8 +10622,8 @@ ${value}`;
   async function toRecords(snapshot) {
     const started = performance.now();
     const { chats: sourceChats, contentStore: source = {}, ...shared2 } = withoutBrowserLocalSettings(snapshot.state);
-    const state = JSON.parse(JSON.stringify(shared2));
-    if (state.folders !== void 0 && !validateFolderHierarchy(state.folders))
+    const state3 = JSON.parse(JSON.stringify(shared2));
+    if (state3.folders !== void 0 && !validateFolderHierarchy(state3.folders))
       throw new Error("Invalid folder hierarchy; sync stopped.");
     const records = /* @__PURE__ */ Object.create(null);
     const contentIds = /* @__PURE__ */ new Map();
@@ -10431,17 +10706,17 @@ ${value}`;
       }
       chats[chat.id] = chat;
     }
-    if (state.branchClipboard) {
-      readMessageAttributes(state.branchClipboard);
+    if (state3.branchClipboard) {
+      readMessageAttributes(state3.branchClipboard);
       const refs = /* @__PURE__ */ Object.create(null);
       entryRefs.clipboard = refs;
-      for (const node of Object.values(state.branchClipboard.nodes))
+      for (const node of Object.values(state3.branchClipboard.nodes))
         translate(node, refs);
     }
-    if (state.branchClipboard)
-      nodeOrder.clipboard = Object.keys(state.branchClipboard.nodes);
-    delete state.contentStore;
-    delete state.chats;
+    if (state3.branchClipboard)
+      nodeOrder.clipboard = Object.keys(state3.branchClipboard.nodes);
+    delete state3.contentStore;
+    delete state3.chats;
     const flatten = (value, path) => {
       const messageAttributes = path[0] === "chats" && path[2] === "branchTree" && path[3] === "messageAttributesV1" && path[4] === "byNode" && path.length === 6 || path[0] === "state" && path[1] === "branchClipboard" && path[2] === "messageAttributesV1" && path[3] === "byNode" && path.length === 5;
       if (messageAttributes) {
@@ -10456,7 +10731,7 @@ ${value}`;
       } else
         records[JSON.stringify(path)] = canonical(value);
     };
-    flatten({ version: snapshot.version ?? 0, state, chats, order, nodeOrder, contentEntryFormat: 1, contentEntryRefs: entryRefs, retainedContentEntries: retained }, []);
+    flatten({ version: snapshot.version ?? 0, state: state3, chats, order, nodeOrder, contentEntryFormat: 1, contentEntryRefs: entryRefs, retainedContentEntries: retained }, []);
     for (const [id, entry] of Object.entries(entries))
       records[JSON.stringify(["contentEntries", id])] = canonical(entry);
     for (const [id, value] of Object.entries(content))
@@ -10877,10 +11152,10 @@ ${value}`;
   var yieldTimerTask = () => new Promise((resolve) => setTimeout(resolve, 0));
   function historyReporter(onProgress, yieldTask = yieldTimerTask) {
     let last = performance.now();
-    return async (progress, force = false) => {
+    return async (progress2, force = false) => {
       if (!force && performance.now() - last < 50)
         return;
-      onProgress?.(progress);
+      onProgress?.(progress2);
       await yieldTask();
       last = performance.now();
     };
@@ -10952,7 +11227,7 @@ ${value}`;
       return selectActivePath(key, values, records2);
     };
     while (remaining.size) {
-      let progress = false;
+      let progress2 = false;
       for (const id of remaining) {
         const commit = commits[id];
         await report({ step: "replaying", completed: processed.size, total: reachable.size });
@@ -11003,9 +11278,9 @@ ${value}`;
         }
         processed.add(id);
         remaining.delete(id);
-        progress = true;
+        progress2 = true;
       }
-      if (!progress)
+      if (!progress2)
         throw new Error("Missing or cyclic sync history.");
     }
     const records = {};
@@ -11227,8 +11502,8 @@ ${value}`;
   var setHistoryYield = (yieldTask) => {
     yieldHistory = yieldTask;
   };
-  var replayHistoryAsync = (value) => replayHistory(value, void 0, yieldHistory);
-  var collectHistoryAsync = (value) => collectHistory(value, void 0, yieldHistory);
+  var replayHistoryAsync = (value) => replayHistory(value, syncHistoryProgress, yieldHistory);
+  var collectHistoryAsync = (value) => collectHistory(value, syncHistoryProgress, yieldHistory);
   var decodePartsAsync = async (value) => decodeParts(value);
   var hashCommitsAsync = hashCommits;
 
@@ -14575,10 +14850,10 @@ ${value}`;
 
   // src/utils/localModelLimits.ts
   var DEFAULT_LOCAL_MODEL_CONTEXT_LENGTH = 2048;
-  function localModelContextLength(state, modelId, capabilities) {
+  function localModelContextLength(state3, modelId, capabilities) {
     if (capabilities?.contextLength)
       return capabilities.contextLength;
-    const stored = state.localModels?.find((model) => model.id === modelId);
+    const stored = state3.localModels?.find((model) => model.id === modelId);
     if (stored?.displayMeta?.contextLength)
       return stored.displayMeta.contextLength;
     const catalog = getCatalogModel(modelId);
@@ -14586,7 +14861,7 @@ ${value}`;
       return catalog.displayMeta.contextLength;
     return DEFAULT_LOCAL_MODEL_CONTEXT_LENGTH;
   }
-  var localModelDefaultMaxTokens = (state, modelId, capabilities) => getMaxCompletionTokensForContext(localModelContextLength(state, modelId, capabilities));
+  var localModelDefaultMaxTokens = (state3, modelId, capabilities) => getMaxCompletionTokensForContext(localModelContextLength(state3, modelId, capabilities));
 
   // src/utils/reasoning.ts
   var getEffectiveVerbosity = (verbosity, allowMax) => verbosity === "max" && !allowMax ? "medium" : verbosity;
@@ -14798,34 +15073,34 @@ ${value}`;
     }
     return void 0;
   }
-  function modelSupportsReasoning(state, modelId, providerId, modelSource) {
+  function modelSupportsReasoning(state3, modelId, providerId, modelSource) {
     if (modelSource === "local")
       return false;
     const inferred = isReasoningModel(modelId);
-    const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+    const custom = findProviderCustomModel(state3.providerCustomModels, modelId, providerId);
     if (custom?.supportsReasoning != null)
       return custom.supportsReasoning;
-    const fav = findFavorite(state.favoriteModels ?? [], modelId, providerId);
+    const fav = findFavorite(state3.favoriteModels ?? [], modelId, providerId);
     if (fav?.supportsReasoning != null)
       return fav.supportsReasoning || inferred;
-    const cached = findCachedModel(state.providerModelCache ?? {}, modelId, providerId);
+    const cached = findCachedModel(state3.providerModelCache ?? {}, modelId, providerId);
     if (cached?.supportsReasoning != null)
       return cached.supportsReasoning || inferred;
     return inferred;
   }
-  function modelRequiresReasoning(state, modelId, providerId) {
-    const favorite = findFavorite(state.favoriteModels ?? [], modelId, providerId);
-    const cached = findCachedModel(state.providerModelCache ?? {}, modelId, providerId);
+  function modelRequiresReasoning(state3, modelId, providerId) {
+    const favorite = findFavorite(state3.favoriteModels ?? [], modelId, providerId);
+    const cached = findCachedModel(state3.providerModelCache ?? {}, modelId, providerId);
     return favorite?.reasoningMandatory ?? cached?.reasoningMandatory ?? inferMandatoryReasoning(modelId, providerId);
   }
   function buildReasoningCapabilities(config, supportsReasoning, requiresReasoning) {
     return { supportsReasoning, requiresReasoning: !!(supportsReasoning || config.force_reasoning) && config.providerId === "openrouter" && config.reasoning_effort === "none" && requiresReasoning() };
   }
-  function getRequestReasoningCapabilities(config, state) {
+  function getRequestReasoningCapabilities(config, state3) {
     return buildReasoningCapabilities(
       config,
-      modelSupportsReasoning(state, config.model, config.providerId),
-      () => modelRequiresReasoning(state, config.model, config.providerId)
+      modelSupportsReasoning(state3, config.model, config.providerId),
+      () => modelRequiresReasoning(state3, config.model, config.providerId)
     );
   }
 
@@ -14847,36 +15122,36 @@ ${value}`;
   var _defaultImageDetail = "auto";
 
   // src/utils/remoteModelLimits.ts
-  function remoteModelContextInfo(state, modelId, providerId) {
-    const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+  function remoteModelContextInfo(state3, modelId, providerId) {
+    const custom = findProviderCustomModel(state3.providerCustomModels, modelId, providerId);
     if (custom?.contextLength)
       return { contextLength: custom.contextLength, isFallback: false };
-    const fav = findFavorite(state.favoriteModels ?? [], modelId, providerId);
+    const fav = findFavorite(state3.favoriteModels ?? [], modelId, providerId);
     if (fav?.contextLength)
       return { contextLength: fav.contextLength, isFallback: false };
-    const cached = findCachedModel(state.providerModelCache ?? {}, modelId, providerId);
+    const cached = findCachedModel(state3.providerModelCache ?? {}, modelId, providerId);
     if (cached?.contextLength)
       return { contextLength: cached.contextLength, isFallback: false };
     return { contextLength: UNKNOWN_MODEL_CONTEXT_LENGTH, isFallback: true };
   }
-  function remoteModelStreamSupported(state, modelId, providerId) {
-    const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+  function remoteModelStreamSupported(state3, modelId, providerId) {
+    const custom = findProviderCustomModel(state3.providerCustomModels, modelId, providerId);
     if (custom?.streamSupport != null)
       return custom.streamSupport;
-    const fav = findFavorite(state.favoriteModels ?? [], modelId, providerId);
+    const fav = findFavorite(state3.favoriteModels ?? [], modelId, providerId);
     if (fav?.streamSupport != null)
       return fav.streamSupport;
-    const cached = findCachedModel(state.providerModelCache ?? {}, modelId, providerId);
+    const cached = findCachedModel(state3.providerModelCache ?? {}, modelId, providerId);
     if (cached?.streamSupport != null)
       return cached.streamSupport;
     return true;
   }
-  function remoteModelDefaultMaxTokens(state, modelId, providerId) {
-    const context = remoteModelContextInfo(state, modelId, providerId);
+  function remoteModelDefaultMaxTokens(state3, modelId, providerId) {
+    const context = remoteModelContextInfo(state3, modelId, providerId);
     const outputLimit = [
-      findProviderCustomModel(state.providerCustomModels, modelId, providerId),
-      findFavorite(state.favoriteModels ?? [], modelId, providerId),
-      findCachedModel(state.providerModelCache ?? {}, modelId, providerId)
+      findProviderCustomModel(state3.providerCustomModels, modelId, providerId),
+      findFavorite(state3.favoriteModels ?? [], modelId, providerId),
+      findCachedModel(state3.providerModelCache ?? {}, modelId, providerId)
     ].map((model) => model?.maxCompletionTokens).find((limit) => limit != null && Number.isFinite(limit) && limit > 0);
     const contextLimit = getMaxCompletionTokensForContext(context.contextLength);
     if (outputLimit != null)
@@ -14961,18 +15236,18 @@ ${value}`;
   function chatConfig(json) {
     const input = JSON.parse(json);
     let config = input.config;
-    const state = input.modelState ?? {};
+    const state3 = input.modelState ?? {};
     if (input.operation === "switch") {
       if (!input.target)
         throw new Error("Missing model target.");
       config = switchConfigModel(
         config,
         { model: input.target.model, providerId: input.target.providerId, modelSource: input.target.modelSource },
-        (model, providerId, source) => source === "local" ? localModelDefaultMaxTokens(state, model, input.localCapabilities?.[model]) : remoteModelDefaultMaxTokens(state, model, providerId)
+        (model, providerId, source) => source === "local" ? localModelDefaultMaxTokens(state3, model, input.localCapabilities?.[model]) : remoteModelDefaultMaxTokens(state3, model, providerId)
       );
     } else if (input.operation !== "normalize" && input.operation !== "saveDefaults")
       throw new Error("Unknown chat config operation.");
-    const next = input.operation === "saveDefaults" ? saveDefaultChatConfig(config, state, input.localCapabilities) : normalizeChatConfig(config, state, input.localCapabilities);
+    const next = input.operation === "saveDefaults" ? saveDefaultChatConfig(config, state3, input.localCapabilities) : normalizeChatConfig(config, state3, input.localCapabilities);
     return JSON.stringify({ changes: diffJSONChanges(input.config, JSON.parse(JSON.stringify(next))) });
   }
 
@@ -15791,23 +16066,23 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   function titleOperation(json) {
     const input = JSON.parse(json);
     if (input.operation === "settings") {
-      const state = input.state ?? {};
+      const state3 = input.state ?? {};
       return JSON.stringify({
-        autoTitle: typeof state.autoTitle === "boolean" ? state.autoTitle : TITLE_DEFAULTS.autoTitle,
-        titleModel: typeof state.titleModel === "string" ? state.titleModel : TITLE_DEFAULTS.titleModel,
-        titleProviderId: typeof state.titleProviderId === "string" ? state.titleProviderId : TITLE_DEFAULTS.titleProviderId
+        autoTitle: typeof state3.autoTitle === "boolean" ? state3.autoTitle : TITLE_DEFAULTS.autoTitle,
+        titleModel: typeof state3.titleModel === "string" ? state3.titleModel : TITLE_DEFAULTS.titleModel,
+        titleProviderId: typeof state3.titleProviderId === "string" ? state3.titleProviderId : TITLE_DEFAULTS.titleProviderId
       });
     }
     if (input.operation === "saveSettings") {
       const value = input.value;
       if (!value || typeof value.autoTitle !== "boolean" || typeof value.titleModel !== "string" || value.titleProviderId !== void 0 && !Object.hasOwn(DEFAULT_PROVIDERS, value.titleProviderId))
         throw new Error("Invalid title settings.");
-      const state = input.state ?? {};
+      const state3 = input.state ?? {};
       const changes2 = ["autoTitle", "titleModel", "titleProviderId"].flatMap((key) => {
         const next = value[key];
         if (next === void 0)
-          return Object.hasOwn(state, key) ? [{ op: "remove", path: [key] }] : [];
-        return state[key] === next ? [] : [{ op: "set", path: [key], value: next }];
+          return Object.hasOwn(state3, key) ? [{ op: "remove", path: [key] }] : [];
+        return state3[key] === next ? [] : [{ op: "set", path: [key], value: next }];
       });
       return JSON.stringify({ changes: changes2 });
     }
@@ -17296,10 +17571,10 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     if (!isRecord3(raw.state) || !Array.isArray(raw.state.chats)) {
       throw new Error("Invalid legacy remote snapshot");
     }
-    const state = deepClone(raw.state);
-    const chats = state.chats;
+    const state3 = deepClone(raw.state);
+    const chats = state3.chats;
     const hasInlineNodes = chats.some((chat) => chat.branchTree && Object.values(chat.branchTree.nodes).some((node) => "content" in node && !node.contentHash));
-    const version2 = hasInlineNodes ? 2 : isRecord3(state.contentStore) ? 3 : 1;
+    const version2 = hasInlineNodes ? 2 : isRecord3(state3.contentStore) ? 3 : 1;
     if (version2 === 3 || hasInlineNodes) {
       const hashedChats = hasInlineNodes ? chats.map((chat) => chat.branchTree ? {
         ...chat,
@@ -17307,7 +17582,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
           Object.entries(chat.branchTree.nodes).filter(([, node]) => node.contentHash !== void 0)
         ) }
       } : chat) : chats;
-      const errors = findPersistedDataIntegrityErrors(hashedChats, state.contentStore ?? {}, null);
+      const errors = findPersistedDataIntegrityErrors(hashedChats, state3.contentStore ?? {}, null);
       if (errors.length)
         throw new Error(`Invalid legacy remote snapshot: ${errors.join("; ")}`);
     }
@@ -17315,7 +17590,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       if (hasInlineNodes && chat.branchTree) {
         for (const node of Object.values(chat.branchTree.nodes)) {
           if (node.contentHash) {
-            node.content = resolveContent(state.contentStore, node.contentHash);
+            node.content = resolveContent(state3.contentStore, node.contentHash);
             delete node.contentHash;
           }
         }
@@ -17323,10 +17598,10 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       if (chat.messages === void 0) {
         if (!chat.branchTree)
           throw new Error("Invalid legacy remote snapshot: missing chat messages");
-        chat.messages = version2 === 3 ? materializeActivePath(chat.branchTree, state.contentStore) : [];
+        chat.messages = version2 === 3 ? materializeActivePath(chat.branchTree, state3.contentStore) : [];
       }
     }
-    return { ...state, version: version2, chats, folders: state.folders ?? {} };
+    return { ...state3, version: version2, chats, folders: state3.folders ?? {} };
   };
   var detectImportType = (parsedData) => {
     if (isRecord3(parsedData) && parsedData.version === 3)
@@ -18290,13 +18565,13 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     if (!Array.isArray(isolated.chat.messages) && isolated.chat.branchTree)
       isolated.chat.messages = materializeActivePath(isolated.chat.branchTree, isolated.contentStore, true);
     const run = () => {
-      let state = { chats: [isolated.chat], contentStore: isolated.contentStore };
+      let state3 = { chats: [isolated.chat], contentStore: isolated.contentStore };
       const wasFlat = !isolated.chat.branchTree;
       if (input.operation === "prepare" && !wasFlat) {
-        state = ensureBranchTreeState(state.chats, 0, state.contentStore);
-        if (input.viewingPath.some((id) => !Object.hasOwn(state.chats[0].branchTree.nodes, id)))
+        state3 = ensureBranchTreeState(state3.chats, 0, state3.contentStore);
+        if (input.viewingPath.some((id) => !Object.hasOwn(state3.chats[0].branchTree.nodes, id)))
           throw Error("Invalid viewing path.");
-        state.chats = switchActivePathState(state.chats, 0, input.viewingPath, state.contentStore);
+        state3.chats = switchActivePathState(state3.chats, 0, input.viewingPath, state3.contentStore);
       }
       let plan = input.plan;
       if (input.operation === "prepare") {
@@ -18305,7 +18580,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
           if (!plan || plan.submitMode !== "append" && plan.submitMode !== "midchat")
             throw Error("Missing retry plan.");
           const target = retryTarget(
-            state.chats[0],
+            state3.chats[0],
             plan.submitMode,
             plan.insertIndex,
             { targetNodeId: plan.targetNodeId, requestPath: plan.requestPath }
@@ -18315,31 +18590,31 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
           mode = plan.submitMode;
           index = plan.insertIndex;
           if (target.removeIndex !== null) {
-            const removed = removeNodeState(state.chats, { chatId: isolated.chat.id, nodeId: plan.targetNodeId }, state.contentStore);
+            const removed = removeNodeState(state3.chats, { chatId: isolated.chat.id, nodeId: plan.targetNodeId }, state3.contentStore);
             if (removed.status !== "updated")
               return JSON.stringify({ status: removed.status, changes: [], ..."blockedNodeIds" in removed ? { blockedNodeIds: removed.blockedNodeIds } : {} });
             capture?.(removed.historyBase, removed);
-            state = { chats: removed.chats, contentStore: removed.contentStore };
+            state3 = { chats: removed.chats, contentStore: removed.contentStore };
           }
         } else if (input.action === "regenerate" || input.action === "continue") {
           if (input.nodeID === void 0)
             throw Error("Missing generation target.");
           const nodeId = wasFlat && input.nodeID.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
           const target = { chatId: isolated.chat.id, nodeId };
-          const result3 = input.action === "regenerate" ? prepareRegenerateState(state.chats, target, state.contentStore) : prepareContinueState(state.chats, { ...target, content: input.parts }, state.contentStore);
+          const result3 = input.action === "regenerate" ? prepareRegenerateState(state3.chats, target, state3.contentStore) : prepareContinueState(state3.chats, { ...target, content: input.parts }, state3.contentStore);
           if (result3.status !== "updated")
             return JSON.stringify({ status: result3.status, changes: [], ..."blockedNodeIds" in result3 ? { blockedNodeIds: result3.blockedNodeIds } : {} });
           if ("historyBase" in result3)
             capture?.(result3.historyBase, result3);
-          state = { chats: result3.chats, contentStore: result3.contentStore };
+          state3 = { chats: result3.chats, contentStore: result3.contentStore };
           mode = result3.submitMode;
           index = result3.insertIndex;
         } else if (input.action !== "append")
           throw Error("Invalid generation action.");
-        const prefillKey = resolveAssistantPrefillKey(state.chats[0], mode, index);
-        const prepared = insertAssistantPlaceholder(state.chats, 0, mode, state.contentStore, index);
-        state = { chats: prepared.updatedChats, contentStore: prepared.contentStore };
-        const activePath = state.chats[0].branchTree.activePath;
+        const prefillKey = resolveAssistantPrefillKey(state3.chats[0], mode, index);
+        const prepared = insertAssistantPlaceholder(state3.chats, 0, mode, state3.contentStore, index);
+        state3 = { chats: prepared.updatedChats, contentStore: prepared.contentStore };
+        const activePath = state3.chats[0].branchTree.activePath;
         plan = {
           targetNodeId: prepared.targetNodeId,
           messageIndex: prepared.messageIndex,
@@ -18353,31 +18628,31 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         if (!plan || !Array.isArray(input.parts))
           throw Error("Missing generation result.");
         if (input.parts.length) {
-          const result3 = finalizeGenerationState(state.chats, 0, plan.targetNodeId, input.parts, state.contentStore);
+          const result3 = finalizeGenerationState(state3.chats, 0, plan.targetNodeId, input.parts, state3.contentStore);
           if (result3.status !== "updated")
             return JSON.stringify({ status: result3.status, changes: [] });
-          state = { chats: result3.chats, contentStore: result3.contentStore };
+          state3 = { chats: result3.chats, contentStore: result3.contentStore };
         }
       } else if (input.operation !== "streamState")
         throw Error("Invalid generation operation.");
       if (input.stream) {
-        const node = plan && state.chats[0].branchTree?.nodes[plan.targetNodeId];
+        const node = plan && state3.chats[0].branchTree?.nodes[plan.targetNodeId];
         if (!node)
           return JSON.stringify({ status: "missing", changes: [] });
         const previous = input.operation === "streamState" && input.stream.reason === "streaming" ? updateStreamState(node.streamState, "streaming", void 0, input.now) : node.streamState;
         node.streamState = updateStreamState(previous, input.stream.reason, input.stream.request, input.now);
       } else if (input.operation === "streamState")
         throw Error("Missing stream state.");
-      for (const [hash, entry] of Object.entries(state.contentStore))
+      for (const [hash, entry] of Object.entries(state3.contentStore))
         if (entry.delta && JSON.stringify(entry.delta) !== JSON.stringify(before.contentStore[hash]?.delta)) {
-          const content = resolveContent(state.contentStore, hash);
+          const content = resolveContent(state3.contentStore, hash);
           const { delta: _delta, ...full } = entry;
-          state.contentStore[hash] = { ...full, content };
+          state3.contentStore[hash] = { ...full, content };
         }
-      const chat = state.chats[0];
+      const chat = state3.chats[0];
       if (chat.branchTree)
-        chat.messages = materializeActivePath(chat.branchTree, state.contentStore, true);
-      return JSON.stringify({ status: "updated", plan, changes: diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: state.contentStore }))) });
+        chat.messages = materializeActivePath(chat.branchTree, state3.contentStore, true);
+      return JSON.stringify({ status: "updated", plan, changes: diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: state3.contentStore }))) });
     };
     if (input.newIDs !== void 0)
       return withEditingRuntime(input.newIDs, Object.keys(isolated.chat.branchTree?.nodes ?? {}), input.now, run);
@@ -18474,21 +18749,21 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     const snapshot = (direction === "undo" ? history.past : history.future).at(-1);
     return !!snapshot && !snapshot.chats.some((chat) => busyChatIds.includes(chat.id));
   };
-  var stepBranchHistory = (history, state, direction, busyChatIds) => {
+  var stepBranchHistory = (history, state3, direction, busyChatIds) => {
     const snapshot = (direction === "undo" ? history.past : history.future).at(-1);
     const affectedChatIds = snapshot?.chats.map((chat) => chat.id) ?? [];
     if (!snapshot)
-      return { status: "empty", history, state, affectedChatIds };
-    if (affectedChatIds.some((id) => !state.chats.some((chat) => chat.id === id)))
-      return { status: "chat-missing", history, state, affectedChatIds };
+      return { status: "empty", history, state: state3, affectedChatIds };
+    if (affectedChatIds.some((id) => !state3.chats.some((chat) => chat.id === id)))
+      return { status: "chat-missing", history, state: state3, affectedChatIds };
     if (!canStepBranchHistory(history, direction, busyChatIds))
-      return { status: "busy", history, state, affectedChatIds };
-    const current = createBranchSnapshot(state.chats, state.contentStore, affectedChatIds, restoreBranchSnapshot(state.chats, state.contentStore, snapshot));
-    const contentStore = { ...snapshot.contentStore, ...state.contentStore };
+      return { status: "busy", history, state: state3, affectedChatIds };
+    const current = createBranchSnapshot(state3.chats, state3.contentStore, affectedChatIds, restoreBranchSnapshot(state3.chats, state3.contentStore, snapshot));
+    const contentStore = { ...snapshot.contentStore, ...state3.contentStore };
     return {
       status: "updated",
       affectedChatIds,
-      state: { chats: restoreBranchSnapshot(state.chats, contentStore, snapshot), contentStore },
+      state: { chats: restoreBranchSnapshot(state3.chats, contentStore, snapshot), contentStore },
       history: direction === "undo" ? { past: history.past.slice(0, -1), future: [...history.future, current] } : { past: [...history.past, current], future: history.future.slice(0, -1) }
     };
   };
@@ -19314,20 +19589,20 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   // shared/google-sync/proxy.ts
   function proxyStream(json) {
     const input = JSON.parse(json);
-    const state = {
+    const state3 = {
       proxyPartial: input.state?.proxyPartial ?? "",
       llmPartial: input.state?.llmPartial ?? "",
       lastEventId: input.state?.lastEventId ?? 0,
       llmDone: input.state?.llmDone ?? false
     };
-    const parsed = parseProxySse(state.proxyPartial + input.text, input.flush ?? false);
-    state.proxyPartial = parsed.partial;
-    const output2 = { state, events: [] };
+    const parsed = parseProxySse(state3.proxyPartial + input.text, input.flush ?? false);
+    state3.proxyPartial = parsed.partial;
+    const output2 = { state: state3, events: [] };
     for (const event of parsed.events) {
-      if (event.id > 0 && event.id <= state.lastEventId)
+      if (event.id > 0 && event.id <= state3.lastEventId)
         continue;
-      if (event.id > state.lastEventId)
-        state.lastEventId = event.id;
+      if (event.id > state3.lastEventId)
+        state3.lastEventId = event.id;
       if (event.eventType === "waiting")
         continue;
       if (event.eventType === "done" || event.eventType === "error") {
@@ -19339,7 +19614,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
           if (event.meta?.error)
             output2.error = event.meta.error;
         } else {
-          output2.terminal = event.meta?.complete === true && event.meta.cacheCapability !== "overflow" && state.llmDone ? "complete" : "partial";
+          output2.terminal = event.meta?.complete === true && event.meta.cacheCapability !== "overflow" && state3.llmDone ? "complete" : "partial";
           output2.retry = false;
         }
         break;
@@ -19352,15 +19627,15 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       if ("rawText" in event) {
         if (typeof event.rawText !== "string")
           throw new Error("Invalid proxy rawText.");
-        const inner = parseEventSource(state.llmPartial + event.rawText);
-        state.llmPartial = inner.partial;
-        state.llmDone ||= inner.done;
+        const inner = parseEventSource(state3.llmPartial + event.rawText);
+        state3.llmPartial = inner.partial;
+        state3.llmDone ||= inner.done;
         output2.events.push(...inner.events);
       }
     }
-    if (output2.terminal === "complete" && state.llmPartial) {
-      const inner = parseEventSource(state.llmPartial, true);
-      state.llmPartial = inner.partial;
+    if (output2.terminal === "complete" && state3.llmPartial) {
+      const inner = parseEventSource(state3.llmPartial, true);
+      state3.llmPartial = inner.partial;
       output2.events.push(...inner.events);
     }
     return JSON.stringify(output2);
@@ -19405,12 +19680,12 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       throw new Error("\u3053\u306E\u30D7\u30ED\u30AD\u30B7\u306F\u5168\u5B9F\u884C\u74B0\u5883\u306E\u4E00\u89A7\u306B\u5BFE\u5FDC\u3057\u3066\u3044\u307E\u305B\u3093\u3002Worker\u3092\u66F4\u65B0\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
     return status;
   }
-  function proxyDeleteRequest(sessionId, state) {
+  function proxyDeleteRequest(sessionId, state3) {
     const query = [];
-    if (state?.before !== void 0)
-      query.push(["before", String(state.before)]);
-    if (state?.cursor)
-      query.push(["cursor", state.cursor]);
+    if (state3?.before !== void 0)
+      query.push(["before", String(state3.before)]);
+    if (state3?.cursor)
+      query.push(["cursor", state3.cursor]);
     return {
       path: `/api/storage${sessionId === void 0 ? "" : `/${encodeURIComponent(sessionId)}`}`,
       query: sessionId === void 0 ? query : [],
@@ -19418,7 +19693,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       timeout: 30
     };
   }
-  function readProxyDeletion(httpStatus, body, sessionId, state) {
+  function readProxyDeletion(httpStatus, body, sessionId, state3) {
     if (httpStatus < 200 || httpStatus >= 300)
       throw new Error(httpStatus === 401 || httpStatus === 403 ? "\u524A\u9664\u3059\u308B\u6A29\u9650\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u30D7\u30ED\u30AD\u30B7\u306E\u8A8D\u8A3C\u30C8\u30FC\u30AF\u30F3\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002" : httpStatus === 404 || httpStatus === 501 ? "\u3053\u306E\u30D7\u30ED\u30AD\u30B7\u306F\u4FDD\u5B58\u30C7\u30FC\u30BF\u306E\u524A\u9664\u306B\u5BFE\u5FDC\u3057\u3066\u3044\u307E\u305B\u3093\u3002" : `\u4FDD\u5B58\u30C7\u30FC\u30BF\u306E\u524A\u9664\u306B\u5931\u6557\u3057\u307E\u3057\u305F\uFF08HTTP ${httpStatus}\uFF09\u3002\u518D\u5EA6\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002`);
     const result3 = body;
@@ -19427,11 +19702,11 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         throw new Error("\u524A\u9664\u7D50\u679C\u3092\u78BA\u8A8D\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F");
       return { deleted: 1, failed: 0, cursor: null };
     }
-    if (!result3 || !Number.isSafeInteger(result3.deleted) || result3.deleted < 0 || !Number.isSafeInteger(result3.failed) || result3.failed < 0 || !Number.isSafeInteger(result3.before) || state?.before !== void 0 && state.before !== result3.before || result3.cursor !== null && (!validCursor(result3.cursor) || state?.cursor != null && result3.cursor <= state.cursor))
+    if (!result3 || !Number.isSafeInteger(result3.deleted) || result3.deleted < 0 || !Number.isSafeInteger(result3.failed) || result3.failed < 0 || !Number.isSafeInteger(result3.before) || state3?.before !== void 0 && state3.before !== result3.before || result3.cursor !== null && (!validCursor(result3.cursor) || state3?.cursor != null && result3.cursor <= state3.cursor))
       throw new Error("\u30D7\u30ED\u30AD\u30B7\u304B\u3089\u306E\u524A\u9664\u5FDC\u7B54\u304C\u4E0D\u6B63\u3067\u3059");
     const next = {
-      deleted: (state?.deleted ?? 0) + result3.deleted,
-      failed: (state?.failed ?? 0) + result3.failed,
+      deleted: (state3?.deleted ?? 0) + result3.deleted,
+      failed: (state3?.failed ?? 0) + result3.failed,
       before: result3.before,
       cursor: result3.cursor
     };
@@ -19522,15 +19797,6 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   async function summarizeSyncSnapshot(snapshot) {
     return summarizeSyncRecords(snapshot, await toRecordsAsync(snapshot));
   }
-
-  // shared/google-sync/adapters/diagnostics.ts
-  var reportSyncHistory = () => {
-  };
-  var reportCompaction = () => {
-  };
-  var recordPackAccess = () => {
-  };
-  var useGoogleSyncDiagnostics = { getState: () => ({ compaction: { status: "running" } }) };
 
   // shared/google-sync/source/mergeBranches.ts
   async function mergeBranches(chatId, base, local, cloud) {
@@ -19913,13 +20179,6 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     }
   }
 
-  // shared/google-sync/adapters/progress.ts
-  var syncPhase = () => {
-  };
-  var completedFile = () => {
-  };
-  var syncStage = async (_start, _count, work) => work();
-
   // shared/google-sync/adapters/transport.ts
   var SyncFileNotFoundError = class extends Error {
     name = "NotFoundError";
@@ -19928,12 +20187,12 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   };
 
   // shared/google-sync/adapters/cache.ts
-  var syncCache = async (dataset) => {
+  var syncCache = (dataset) => measure("cache", async () => {
     const value = host("syncCache", dataset);
     return value == null ? void 0 : new Uint8Array(value);
-  };
-  var readSyncEntries = async (dataset, keys) => host("readSyncEntries", dataset, keys).map((value) => value == null ? void 0 : new Uint8Array(value));
-  var writeSyncCache = async (dataset, value, entries = [], remove = []) => host("writeSyncCache", dataset, value ? bytes(value) : null, entries.map(([key, value2]) => [key, bytes(value2)]), remove);
+  });
+  var readSyncEntries = (dataset, keys) => measure("cache", async () => host("readSyncEntries", dataset, keys).map((value) => value == null ? void 0 : new Uint8Array(value)));
+  var writeSyncCache = (dataset, value, entries = [], remove = []) => measure("cache", async () => host("writeSyncCache", dataset, value ? bytes(value) : null, entries.map(([key, value2]) => [key, bytes(value2)]), remove));
   var rememberedSyncKey = async (dataset, key) => host("rememberedSyncKey", dataset, key ?? null) ?? void 0;
 
   // src/store/storage/sync/EncryptedSync.ts
@@ -21274,10 +21533,10 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   };
 
   // src/utils/newChatDefaults.ts
-  var newChatDefaults = (state = {}) => ({
-    defaultChatConfig: state.defaultChatConfig ?? _defaultChatConfig,
-    defaultSystemMessage: state.defaultSystemMessage ?? defaultSystemMessage,
-    defaultImageDetail: state.defaultImageDetail ?? _defaultImageDetail
+  var newChatDefaults = (state3 = {}) => ({
+    defaultChatConfig: state3.defaultChatConfig ?? _defaultChatConfig,
+    defaultSystemMessage: state3.defaultSystemMessage ?? defaultSystemMessage,
+    defaultImageDetail: state3.defaultImageDetail ?? _defaultImageDetail
   });
   var newChatConfig = (config, systemPrompt) => ({
     ...structuredClone(config),
@@ -25781,13 +26040,13 @@ Do not attempt to edit, create, or delete files in these directories. If Claude 
   }
   function projectSyncDocument(document2) {
     validate(document2);
-    const state = document2.snapshot.state;
-    const store = object2(state.contentStore ?? {}, "content store");
+    const state3 = document2.snapshot.state;
+    const store = object2(state3.contentStore ?? {}, "content store");
     const expanded = Object.fromEntries(Object.entries(store).map(([hash, entry]) => {
       const { delta: _delta, ...metadata } = entry;
       return [hash, { ...structuredClone(metadata), content: structuredClone(resolveContent(store, hash)) }];
     }));
-    const chats = structuredClone(state.chats ?? []);
+    const chats = structuredClone(state3.chats ?? []);
     if (!Array.isArray(chats))
       throw new Error("Invalid chats.");
     for (const chat of chats)
@@ -25797,8 +26056,8 @@ Do not attempt to edit, create, or delete files in these directories. If Claude 
       }
     const projection = { ...structuredClone(document2.v3Sidecar), version: 3 };
     for (const root of DOCUMENT_SHARED_ROOTS)
-      if (has(state, root))
-        projection[root] = structuredClone(state[root]);
+      if (has(state3, root))
+        projection[root] = structuredClone(state3[root]);
     return { ...projection, chats, contentStore: expanded, folders: projection.folders ?? {} };
   }
   function result(before, document2) {
@@ -25811,16 +26070,16 @@ Do not attempt to edit, create, or delete files in these directories. If Claude 
     v3Object(edited);
     if (!(0, import_lodash2.isEqual)(before, projectSyncDocument(document2)))
       throw new Error("Stale document projection.");
-    const next = structuredClone(document2), state = next.snapshot.state;
+    const next = structuredClone(document2), state3 = next.snapshot.state;
     for (const root of DOCUMENT_SHARED_ROOTS) {
       if (has(before, root) === has(edited, root) && orderedJSONEqual(before[root], edited[root]))
         continue;
       if (!has(edited, root)) {
-        delete state[root];
+        delete state3[root];
         continue;
       }
       if (root === "contentStore" && edited[root] !== null) {
-        state[root] = Object.fromEntries(Object.entries(object2(edited[root], root)).map(([hash, entry]) => {
+        state3[root] = Object.fromEntries(Object.entries(object2(edited[root], root)).map(([hash, entry]) => {
           const original = document2.snapshot.state[root]?.[hash];
           if (original && orderedJSONEqual(before[root]?.[hash], entry))
             return [hash, structuredClone(original)];
@@ -25832,7 +26091,7 @@ Do not attempt to edit, create, or delete files in these directories. If Claude 
           return [hash, updated];
         }));
       } else if (root === "chats" && Array.isArray(edited[root])) {
-        state[root] = edited[root].map((chat) => {
+        state3[root] = edited[root].map((chat) => {
           const original = document2.snapshot.state.chats?.find((item) => item.id === chat.id), previous = before.chats?.find((item) => item.id === chat.id);
           const updated = structuredClone(chat);
           if (!original || original.id !== chat.id)
@@ -25847,14 +26106,14 @@ Do not attempt to edit, create, or delete files in these directories. If Claude 
           return updated;
         });
       } else
-        state[root] = structuredClone(edited[root]);
+        state3[root] = structuredClone(edited[root]);
     }
-    const edits = Array.isArray(state.chats) && !orderedJSONEqual(before.chats, edited.chats) ? recordChatEdits(before.chats, state.chats, now) : void 0;
+    const edits = Array.isArray(state3.chats) && !orderedJSONEqual(before.chats, edited.chats) ? recordChatEdits(before.chats, state3.chats, now) : void 0;
     const foldersEdited = has(edited, "folders") && !orderedJSONEqual(before.folders, edited.folders) && hasFolderContentEdits(before.folders ?? {}, edited.folders ?? {});
     if (edits)
-      state.chats = edits.chats;
+      state3.chats = edits.chats;
     if (edits?.changed || foldersEdited)
-      state.lastContentEditedAt = now;
+      state3.lastContentEditedAt = now;
     next.v3Sidecar = { ...next.v3Sidecar, ...structuredClone(sidecarOf(edited)) };
     return result(document2, next);
   }
@@ -26163,13 +26422,13 @@ ${messageContent}---
     if (input.operation === "cache") {
       if (!input.state || !input.models)
         throw new Error("Missing model cache input.");
-      const state = input.state;
+      const state3 = input.state;
       const next = {
-        ...state,
-        providerModelCache: { ...state.providerModelCache, [input.providerId]: input.models },
-        favoriteModels: backfillFavoritesFromProviderModels(state.favoriteModels ?? [], input.providerId, input.models)
+        ...state3,
+        providerModelCache: { ...state3.providerModelCache, [input.providerId]: input.models },
+        favoriteModels: backfillFavoritesFromProviderModels(state3.favoriteModels ?? [], input.providerId, input.models)
       };
-      return JSON.stringify({ changes: diffJSONChanges(state, JSON.parse(JSON.stringify(next))) });
+      return JSON.stringify({ changes: diffJSONChanges(state3, JSON.parse(JSON.stringify(next))) });
     }
     if (input.operation !== void 0 && input.operation !== "normalize")
       throw new Error("Unknown provider model operation.");
@@ -26364,9 +26623,9 @@ ${messageContent}---
   var openRouterCancelTarget = (input) => isOpenRouterCancelEligible(input) && typeof input.generationID === "string" && input.generationID.startsWith("gen-") ? { endpoint: `https://openrouter.ai/api/v1/generation/${encodeURIComponent(input.generationID)}/cancel` } : null;
 
   // shared/google-sync/remoteOutput.ts
-  var captureGenerationId = (state, id) => {
-    if (!state.generationId && typeof id === "string" && id.startsWith("gen-"))
-      state.generationId = id;
+  var captureGenerationId = (state3, id) => {
+    if (!state3.generationId && typeof id === "string" && id.startsWith("gen-"))
+      state3.generationId = id;
   };
   function openRouterCancel(json) {
     const target = openRouterCancelTarget(JSON.parse(json));
@@ -26375,62 +26634,62 @@ ${messageContent}---
   function remoteOutput(json) {
     const input = JSON.parse(json);
     const parser = new ThinkTagParser();
-    const state = input.state ?? { text: "", reasoning: "", think: parser.checkpoint() };
-    parser.restore(state.think);
+    const state3 = input.state ?? { text: "", reasoning: "", think: parser.checkpoint() };
+    parser.restore(state3.think);
     let finished = false;
     if (input.operation === "restore") {
     } else if (input.operation === "headers") {
-      captureGenerationId(state, input.headers?.["x-generation-id"]);
-      state.observeUsage = !!input.endpointURL && isOpenRouterURL(input.endpointURL);
-      if (state.observeUsage)
-        state.observation = { ...state.observation, ...observeOpenRouterHeaders({ get: (name) => input.headers?.[name.toLowerCase()] ?? null }) };
+      captureGenerationId(state3, input.headers?.["x-generation-id"]);
+      state3.observeUsage = !!input.endpointURL && isOpenRouterURL(input.endpointURL);
+      if (state3.observeUsage)
+        state3.observation = { ...state3.observation, ...observeOpenRouterHeaders({ get: (name) => input.headers?.[name.toLowerCase()] ?? null }) };
     } else if (input.operation === "observation") {
-      if (state.observeUsage)
-        state.observation = { ...state.observation, ...input.observation };
+      if (state3.observeUsage)
+        state3.observation = { ...state3.observation, ...input.observation };
     } else if (input.operation === "flush") {
       const tail = parser.flush();
-      state.text += tail.content;
-      state.reasoning += tail.reasoning;
+      state3.text += tail.content;
+      state3.reasoning += tail.reasoning;
       finished = true;
     } else if (input.operation === "consume") {
       const value = input.value;
       if (!value || value.error != null)
         throw new Error("Remote API error.");
-      captureGenerationId(state, value.id);
-      if (state.observeUsage)
-        state.observation = { ...state.observation, ...observeOpenRouterUsage(value.usage) };
+      captureGenerationId(state3, value.id);
+      if (state3.observeUsage)
+        state3.observation = { ...state3.observation, ...observeOpenRouterUsage(value.usage) };
       const choice = value.choices?.[0];
       const payload = input.streaming ? choice?.delta : choice?.message;
       if (payload) {
         if (Object.hasOwn(payload, "tool_calls") || Object.hasOwn(payload, "function_call"))
           throw new Error("Generated tool calls are not supported by this remote path.");
         if (input.streaming) {
-          state.reasoning += extractReasoningFromEvent(value);
+          state3.reasoning += extractReasoningFromEvent(value);
           const parsed = parser.process(extractTextFromApiContent(payload.content));
-          state.text += parsed.content;
-          state.reasoning += parsed.reasoning;
+          state3.text += parsed.content;
+          state3.reasoning += parsed.reasoning;
         } else {
           if (!payload.content)
             throw new Error("Failed to retrieve completion content.");
           const parsed = extractNonStreamingOutput(payload, parser);
-          state.text += parsed.content;
-          state.reasoning += parsed.reasoning;
+          state3.text += parsed.content;
+          state3.reasoning += parsed.reasoning;
           finished = true;
         }
         if (choice.finish_reason) {
-          state.finishReason = choice.finish_reason;
+          state3.finishReason = choice.finish_reason;
           finished = true;
         }
       } else if (!input.streaming)
         throw new Error("Failed to retrieve completion content.");
     } else
       throw new Error("Unknown remote output operation.");
-    state.think = parser.checkpoint();
+    state3.think = parser.checkpoint();
     const parts = [
-      ...state.reasoning ? [{ type: "reasoning", text: state.reasoning }] : [],
-      ...state.text ? [{ type: "text", text: state.text }] : []
+      ...state3.reasoning ? [{ type: "reasoning", text: state3.reasoning }] : [],
+      ...state3.text ? [{ type: "text", text: state3.text }] : []
     ];
-    return JSON.stringify({ state, parts, finished, isEmpty: parts.length === 0 });
+    return JSON.stringify({ state: state3, parts, finished, isEmpty: parts.length === 0 });
   }
 
   // src/utils/openrouterCredits.ts
@@ -26501,15 +26760,15 @@ ${messageContent}---
       return null;
     return toVerifiedStats(raw, now);
   };
-  var transitionOpenRouterStats = (state, action, now) => {
+  var transitionOpenRouterStats = (state3, action, now) => {
     const key = action.key ?? "";
-    const existing = state.pendingVerifications[key];
+    const existing = state3.pendingVerifications[key];
     switch (action.type) {
       case "queue": {
         if (!action.verification)
-          return state;
+          return state3;
         const verification = action.verification;
-        return { ...state, pendingVerifications: { ...state.pendingVerifications, [key]: {
+        return { ...state3, pendingVerifications: { ...state3.pendingVerifications, [key]: {
           ...existing,
           generationId: verification.generationId,
           chatId: verification.chatId,
@@ -26523,8 +26782,8 @@ ${messageContent}---
         } } };
       }
       case "fetching":
-        return existing ? { ...state, pendingVerifications: {
-          ...state.pendingVerifications,
+        return existing ? { ...state3, pendingVerifications: {
+          ...state3.pendingVerifications,
           [key]: {
             ...existing,
             status: "fetching",
@@ -26532,27 +26791,27 @@ ${messageContent}---
             lastAttemptAt: now,
             lastError: void 0
           }
-        } } : state;
+        } } : state3;
       case "failed":
-        return existing ? { ...state, pendingVerifications: {
-          ...state.pendingVerifications,
+        return existing ? { ...state3, pendingVerifications: {
+          ...state3.pendingVerifications,
           [key]: {
             ...existing,
             status: "failed",
             nextAttemptAt: action.nextAttemptAt ?? Number.MAX_SAFE_INTEGER,
             lastError: action.error ?? ""
           }
-        } } : state;
+        } } : state3;
       case "retry":
-        return existing ? { ...state, pendingVerifications: {
-          ...state.pendingVerifications,
+        return existing ? { ...state3, pendingVerifications: {
+          ...state3.pendingVerifications,
           [key]: { ...existing, status: "pending", nextAttemptAt: now, lastError: void 0 }
-        } } : state;
+        } } : state3;
       case "verified": {
         if (!action.stats)
-          return state;
-        const verifiedStats = { ...state.verifiedStats, [key]: action.stats };
-        const pendingVerifications = { ...state.pendingVerifications };
+          return state3;
+        const verifiedStats = { ...state3.verifiedStats, [key]: action.stats };
+        const pendingVerifications = { ...state3.pendingVerifications };
         delete pendingVerifications[key];
         const keys = Object.keys(verifiedStats);
         if (keys.length > 50) {
@@ -26560,29 +26819,29 @@ ${messageContent}---
           for (let i = 0; i < keys.length - 50; i++)
             delete verifiedStats[keys[i]];
         }
-        return { ...state, verifiedStats, pendingVerifications };
+        return { ...state3, verifiedStats, pendingVerifications };
       }
       case "remove": {
         if (!existing)
-          return state;
-        const pendingVerifications = { ...state.pendingVerifications };
+          return state3;
+        const pendingVerifications = { ...state3.pendingVerifications };
         delete pendingVerifications[key];
-        return { ...state, pendingVerifications };
+        return { ...state3, pendingVerifications };
       }
       case "clear":
-        return { ...state, verifiedStats: {}, pendingVerifications: {} };
+        return { ...state3, verifiedStats: {}, pendingVerifications: {} };
     }
   };
-  var scheduleOpenRouterStats = (state, now) => {
-    const entries = Object.entries(state.pendingVerifications);
+  var scheduleOpenRouterStats = (state3, now) => {
+    const entries = Object.entries(state3.pendingVerifications);
     const dueKeys = entries.filter(([, item]) => item.status !== "fetching" && item.nextAttemptAt <= now).map(([key]) => key);
     const future = entries.filter(([, item]) => item.status !== "fetching" && Number.isFinite(item.nextAttemptAt) && item.nextAttemptAt > now && item.nextAttemptAt < Number.MAX_SAFE_INTEGER).map(([, item]) => item.nextAttemptAt);
     return { dueKeys, nextAt: future.length ? Math.min(...future) : null };
   };
-  var recoverOpenRouterStats = (state, now) => ({
-    ...state,
-    verifiedStats: state.verifiedStats && typeof state.verifiedStats === "object" ? state.verifiedStats : {},
-    pendingVerifications: state.pendingVerifications && typeof state.pendingVerifications === "object" ? Object.fromEntries(Object.entries(state.pendingVerifications).flatMap(([key, verification]) => {
+  var recoverOpenRouterStats = (state3, now) => ({
+    ...state3,
+    verifiedStats: state3.verifiedStats && typeof state3.verifiedStats === "object" ? state3.verifiedStats : {},
+    pendingVerifications: state3.pendingVerifications && typeof state3.pendingVerifications === "object" ? Object.fromEntries(Object.entries(state3.pendingVerifications).flatMap(([key, verification]) => {
       if (!verification || typeof verification !== "object")
         return [];
       const normalized = {
@@ -26722,9 +26981,9 @@ ${messageContent}---
   var computeCloudSyncMetrics = (value) => {
     const json = JSON.stringify(value) ?? "";
     const compressed = (0, import_lz_string2.compress)(json) ?? "";
-    const state = getSnapshotState(value);
-    const chats = state?.chats;
-    const contentStore = state?.contentStore;
+    const state3 = getSnapshotState(value);
+    const chats = state3?.chats;
+    const contentStore = state3?.contentStore;
     return {
       jsonBytes: new Blob([json]).size,
       compressedBytes: new Blob([compressed]).size,
@@ -26732,32 +26991,32 @@ ${messageContent}---
       contentEntryCount: contentStore && typeof contentStore === "object" ? Object.keys(contentStore).length : null
     };
   };
-  var getCloudSyncGuardMessage = (value, metrics, lastSuccessfulUploadMetrics, maxCompressedBytes = MAX_CLOUD_SYNC_COMPRESSED_BYTES) => {
+  var getCloudSyncGuardMessage = (value, metrics2, lastSuccessfulUploadMetrics, maxCompressedBytes = MAX_CLOUD_SYNC_COMPRESSED_BYTES) => {
     const snapshotState = getSnapshotState(value);
     if (snapshotState && Object.hasOwn(snapshotState, "folders") && !validateFolderHierarchy(snapshotState.folders)) {
       return "Cloud sync skipped because the folder hierarchy is invalid.";
     }
-    if (metrics.jsonBytes > MAX_CLOUD_SYNC_JSON_BYTES) {
+    if (metrics2.jsonBytes > MAX_CLOUD_SYNC_JSON_BYTES) {
       return "Cloud sync skipped because the snapshot is too large to upload safely.";
     }
-    if (metrics.compressedBytes > maxCompressedBytes) {
+    if (metrics2.compressedBytes > maxCompressedBytes) {
       return "Cloud sync skipped because the compressed snapshot is too large to upload safely.";
     }
-    if (metrics.chatCount === 0) {
+    if (metrics2.chatCount === 0) {
       return "Cloud sync skipped because the snapshot would erase all chats.";
     }
-    const state = getSnapshotState(value);
-    const stateChats = state?.["chats"];
+    const state3 = getSnapshotState(value);
+    const stateChats = state3?.["chats"];
     const chats = Array.isArray(stateChats) ? stateChats : null;
-    if (metrics.contentEntryCount === 0 && chats && chats.some(
+    if (metrics2.contentEntryCount === 0 && chats && chats.some(
       (chat) => chat && typeof chat === "object" && "branchTree" in chat && chat.branchTree && typeof chat.branchTree === "object"
     )) {
       return "Cloud sync skipped because branch data is missing from the snapshot.";
     }
-    if (lastSuccessfulUploadMetrics && metrics.chatCount !== null && lastSuccessfulUploadMetrics.chatCount !== null && lastSuccessfulUploadMetrics.chatCount > 0 && metrics.chatCount < lastSuccessfulUploadMetrics.chatCount && metrics.chatCount === 0) {
+    if (lastSuccessfulUploadMetrics && metrics2.chatCount !== null && lastSuccessfulUploadMetrics.chatCount !== null && lastSuccessfulUploadMetrics.chatCount > 0 && metrics2.chatCount < lastSuccessfulUploadMetrics.chatCount && metrics2.chatCount === 0) {
       return "Cloud sync skipped because the snapshot removes every synced chat.";
     }
-    if (lastSuccessfulUploadMetrics && lastSuccessfulUploadMetrics.compressedBytes > 0 && metrics.compressedBytes < lastSuccessfulUploadMetrics.compressedBytes * MIN_DESTRUCTIVE_SIZE_RATIO) {
+    if (lastSuccessfulUploadMetrics && lastSuccessfulUploadMetrics.compressedBytes > 0 && metrics2.compressedBytes < lastSuccessfulUploadMetrics.compressedBytes * MIN_DESTRUCTIVE_SIZE_RATIO) {
       return "Cloud sync skipped because the snapshot shrank too much compared with the last successful sync.";
     }
     return null;
@@ -26988,36 +27247,36 @@ ${messageContent}---
   }
 
   // src/utils/modelCostCore.ts
-  function getModelCostCore(state, modelId, providerId, modelSource) {
+  function getModelCostCore(state3, modelId, providerId, modelSource) {
     if (modelSource === "local")
       return void 0;
-    const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+    const custom = findProviderCustomModel(state3.providerCustomModels, modelId, providerId);
     if (custom)
       return {
         prompt: { price: custom.promptPrice ?? null, unit: 1e6 },
         completion: { price: custom.completionPrice ?? null, unit: 1e6 },
         image: { price: custom.imagePrice ?? null, unit: 1 }
       };
-    const favorite = findFavorite(state.favoriteModels ?? [], modelId, providerId);
+    const favorite = findFavorite(state3.favoriteModels ?? [], modelId, providerId);
     if (favorite)
       return {
         prompt: { price: favorite.promptPrice ?? null, unit: 1e6 },
         completion: { price: favorite.completionPrice ?? null, unit: 1e6 },
         image: { price: favorite.imagePrice ?? null, unit: 1 }
       };
-    const cached = findCachedModel(state.providerModelCache ?? {}, modelId, providerId);
+    const cached = findCachedModel(state3.providerModelCache ?? {}, modelId, providerId);
     if (cached)
       return {
         prompt: { price: cached.promptPrice ?? null, unit: 1e6 },
         completion: { price: cached.completionPrice ?? null, unit: 1e6 }
       };
   }
-  function isKnownModelCore(state, modelId) {
-    if (Object.values(state.providerCustomModels ?? {}).some((models) => models?.some((model) => model.modelId === modelId)))
+  function isKnownModelCore(state3, modelId) {
+    if (Object.values(state3.providerCustomModels ?? {}).some((models) => models?.some((model) => model.modelId === modelId)))
       return true;
-    if (state.favoriteModels?.some((model) => model.modelId === modelId))
+    if (state3.favoriteModels?.some((model) => model.modelId === modelId))
       return true;
-    return Object.values(state.providerModelCache ?? {}).some((models) => models?.some((model) => model.id === modelId));
+    return Object.values(state3.providerModelCache ?? {}).some((models) => models?.some((model) => model.id === modelId));
   }
 
   // shared/google-sync/usageCost.ts
@@ -27752,37 +28011,37 @@ ${text}`;
       entry.localSafety = incoming.localSafety;
     return entry;
   }
-  function mutateEvaluationState(state, action) {
+  function mutateEvaluationState(state3, action) {
     switch (action.type) {
       case "set-result": {
-        const existing = state.evaluationResults[action.key] ?? { phase: action.phase };
+        const existing = state3.evaluationResults[action.key] ?? { phase: action.phase };
         const entry = action.dimension === "safety" ? { ...existing, phase: action.phase, safety: action.result, safetyContext: action.context } : { ...existing, phase: action.phase, quality: action.result, qualityContext: action.context };
-        return { ...state, evaluationResults: { ...state.evaluationResults, [action.key]: entry } };
+        return { ...state3, evaluationResults: { ...state3.evaluationResults, [action.key]: entry } };
       }
       case "setResult":
-        return { ...state, evaluationResults: { ...state.evaluationResults, [action.key]: action.result } };
+        return { ...state3, evaluationResults: { ...state3.evaluationResults, [action.key]: action.result } };
       case "setAutoResult":
-        return { ...state, evaluationResults: {
-          ...state.evaluationResults,
-          [action.key]: applyAutoEvaluationResult(state.evaluationResults[action.key], action.result)
+        return { ...state3, evaluationResults: {
+          ...state3.evaluationResults,
+          [action.key]: applyAutoEvaluationResult(state3.evaluationResults[action.key], action.result)
         } };
       case "removeResult": {
-        if (!(action.key in state.evaluationResults))
-          return state;
-        const evaluationResults = { ...state.evaluationResults };
+        if (!(action.key in state3.evaluationResults))
+          return state3;
+        const evaluationResults = { ...state3.evaluationResults };
         delete evaluationResults[action.key];
-        return { ...state, evaluationResults };
+        return { ...state3, evaluationResults };
       }
       case "setSetting":
-        return state.evaluationSettings[action.key] === action.value ? state : { ...state, evaluationSettings: { ...state.evaluationSettings, [action.key]: action.value } };
+        return state3.evaluationSettings[action.key] === action.value ? state3 : { ...state3, evaluationSettings: { ...state3.evaluationSettings, [action.key]: action.value } };
       case "setSafetyEngine":
-        return { ...state, evaluationSettings: { ...state.evaluationSettings, safetyEngine: action.value } };
+        return { ...state3, evaluationSettings: { ...state3.evaluationSettings, safetyEngine: action.value } };
       case "setHybridRemoteOnSafe":
-        return { ...state, evaluationSettings: { ...state.evaluationSettings, hybridRemoteOnSafe: action.value } };
+        return { ...state3, evaluationSettings: { ...state3.evaluationSettings, hybridRemoteOnSafe: action.value } };
       case "setSafetyThreshold":
-        return { ...state, safetyThresholds: { ...state.safetyThresholds, [action.key]: action.value } };
+        return { ...state3, safetyThresholds: { ...state3.safetyThresholds, [action.key]: action.value } };
       case "setQualityThreshold":
-        return { ...state, qualityThresholds: { ...state.qualityThresholds, [action.key]: action.value } };
+        return { ...state3, qualityThresholds: { ...state3.qualityThresholds, [action.key]: action.value } };
     }
   }
 
@@ -27919,15 +28178,15 @@ ${text}`;
   }
 
   // src/utils/localModelRole.ts
-  function mutateLocalModelRole(state, action) {
+  function mutateLocalModelRole(state3, action) {
     if (action.operation === "enable")
-      return { ...state, localModelEnabled: action.enabled };
-    const activeLocalModels = { ...state.activeLocalModels };
+      return { ...state3, localModelEnabled: action.enabled };
+    const activeLocalModels = { ...state3.activeLocalModels };
     if (action.modelId === null)
       delete activeLocalModels[action.task];
     else
       activeLocalModels[action.task] = action.modelId;
-    return { ...state, activeLocalModels };
+    return { ...state3, activeLocalModels };
   }
 
   // shared/google-sync/localModelRole.ts
@@ -27969,34 +28228,34 @@ ${text}`;
       throw new Error("A different model already uses this ID.");
     return { model: duplicate ?? proposed, existing: !!duplicate };
   }
-  function commitSingleGGUFImport(state, model, existingIDs) {
-    const next = commitLocalModel(state, model, existingIDs);
+  function commitSingleGGUFImport(state3, model, existingIDs) {
+    const next = commitLocalModel(state3, model, existingIDs);
     return {
       ...next,
       activeLocalModels: autoAssignImportedModel(next.activeLocalModels, model)
     };
   }
-  function commitLocalModel(state, model, existingIDs) {
-    const current = existingIDs ? existingIDs.includes(model.id) : state.localModels.some((entry) => entry.id === model.id);
+  function commitLocalModel(state3, model, existingIDs) {
+    const current = existingIDs ? existingIDs.includes(model.id) : state3.localModels.some((entry) => entry.id === model.id);
     return {
-      ...state,
-      localModels: current ? state.localModels : [...state.localModels, model]
+      ...state3,
+      localModels: current ? state3.localModels : [...state3.localModels, model]
     };
   }
-  function commitCatalogDuplicate(state, downloadedID, duplicate, localModelIDs) {
-    const activeLocalModels = { ...state.activeLocalModels };
+  function commitCatalogDuplicate(state3, downloadedID, duplicate, localModelIDs) {
+    const activeLocalModels = { ...state3.activeLocalModels };
     for (const task of Object.keys(activeLocalModels)) {
       if (activeLocalModels[task] === downloadedID)
         delete activeLocalModels[task];
     }
-    const savedModelMeta = { ...state.savedModelMeta };
+    const savedModelMeta = { ...state3.savedModelMeta };
     delete savedModelMeta[downloadedID];
-    const favoriteLocalModelIds = state.favoriteLocalModelIds.filter((id) => id !== downloadedID);
+    const favoriteLocalModelIds = state3.favoriteLocalModelIds.filter((id) => id !== downloadedID);
     if (!favoriteLocalModelIds.includes(duplicate.id))
       favoriteLocalModelIds.push(duplicate.id);
     return {
-      ...state,
-      localModels: state.localModels.filter((model, index) => {
+      ...state3,
+      localModels: state3.localModels.filter((model, index) => {
         const id = localModelIDs?.[index] ?? (typeof model === "object" && model !== null && "id" in model && typeof model.id === "string" ? model.id : void 0);
         return id !== downloadedID;
       }),
@@ -28102,10 +28361,10 @@ ${text}`;
   // src/utils/debugState.ts
   var MAX_LOG_LINES = 500;
   var DEBUG_DONE_TTL_MS = 3e4;
-  function reduceDebugState(state, action) {
+  function reduceDebugState(state3, action) {
     switch (action.type) {
       case "update": {
-        const previous = state.entries[action.id];
+        const previous = state3.entries[action.id];
         const entry = {
           id: action.id,
           label: action.patch.label ?? previous?.label ?? action.id,
@@ -28113,18 +28372,18 @@ ${text}`;
           detail: action.patch.detail ?? previous?.detail,
           updatedAt: action.updatedAt
         };
-        return { ...state, entries: { ...state.entries, [action.id]: entry } };
+        return { ...state3, entries: { ...state3.entries, [action.id]: entry } };
       }
       case "appendLog":
-        return { ...state, logs: [...state.logs, action.line].slice(-MAX_LOG_LINES) };
+        return { ...state3, logs: [...state3.logs, action.line].slice(-MAX_LOG_LINES) };
       case "clear":
         return {
-          entries: Object.fromEntries(Object.entries(state.entries).filter(([, entry]) => entry.status !== "done")),
+          entries: Object.fromEntries(Object.entries(state3.entries).filter(([, entry]) => entry.status !== "done")),
           logs: []
         };
       case "remove": {
-        const { [action.id]: _23, ...entries } = state.entries;
-        return { ...state, entries };
+        const { [action.id]: _23, ...entries } = state3.entries;
+        return { ...state3, entries };
       }
     }
   }
@@ -28172,8 +28431,9 @@ ${text}`;
   global2.console = { error: () => {
   }, warn: () => {
   }, log: () => {
+  }, info: () => {
   } };
-  global2.performance = { now: () => Date.now() };
+  global2.performance = { now: () => host("monotonic") };
   global2.structuredClone = (value) => JSON.parse(JSON.stringify(value));
   global2.TextEncoder = class {
     encode(value) {
@@ -28213,18 +28473,27 @@ ${text}`;
         commits: await request2("commits", [dataset]),
         packs: await request2("packs", [dataset])
       });
-    return (...args) => request2(method, args.map((arg) => arg instanceof Uint8Array ? Array.from(arg) : arg)).then((value) => {
-      if (method === "read")
-        return new Uint8Array(value);
-      if (method === "changes")
-        return { ...value, changes: value.changes.map((change) => ({
-          id: change.fileId,
-          removed: change.removed || change.file?.trashed,
-          dataset: change.file?.appProperties?.dataset,
-          kind: change.file?.appProperties?.kind
-        })) };
-      return value;
-    });
+    return (...args) => {
+      const started = performance.now();
+      const finish = method === "read" ? beginTransfer("download", args[1]) : method === "put" ? beginTransfer("upload", args[2] === "pack" || args[2] === "pack-part" ? "compaction" : "normal") : void 0;
+      return request2(method, args.map((arg) => arg instanceof Uint8Array ? Array.from(arg) : arg)).then((value) => {
+        if (method === "read") {
+          finish?.(value.length);
+          recordMetric("drive", started, 0, value.length);
+          return new Uint8Array(value);
+        }
+        if (method === "put" && value !== false)
+          finish?.(args[3].length);
+        if (method === "changes")
+          return { ...value, changes: value.changes.map((change) => ({
+            id: change.fileId,
+            removed: change.removed || change.file?.trashed,
+            dataset: change.file?.appProperties?.dataset,
+            kind: change.file?.appProperties?.kind
+          })) };
+        return value;
+      });
+    };
   } });
   var session;
   var transportMode = "drive";
@@ -28241,7 +28510,7 @@ ${text}`;
     const args = JSON.parse(json);
     transportMode = args.transportMode === "filesystem" ? "filesystem" : "drive";
     const transport = transportMode === "filesystem" ? new FileSystemTransport(nativeFileSystemDirectory()) : drive;
-    Promise.resolve().then(async () => {
+    const work = async () => {
       switch (operation) {
         case "create": {
           const created = await EncryptedSync.create(transport, args.password, args.options);
@@ -28294,13 +28563,18 @@ ${text}`;
           await markFilesystemAccepted();
           return snapshot;
         }
+        case "compactHistory":
+          await session.compactHistory();
+          return null;
         case "close":
           session.close();
           return null;
         default:
           throw new Error("Unknown sync operation");
       }
-    }).then((value) => {
+    };
+    const measured = ["create", "unlock", "push", "synchronize", "resolveForPublication", "pull", "receive", "resolve", "compactHistory"].includes(operation);
+    Promise.resolve().then(() => measured ? withSyncProgress(work) : work()).then((value) => {
       outcome = { status: "done", value: value ?? null };
     }, (error2) => {
       outcome = { status: "error", error: String(error2.message ?? error2), conflictKeys: error2.keys };
@@ -28359,24 +28633,25 @@ ${text}`;
       case "receiveGuard": {
         const value = JSON.parse(input.snapshotJSON);
         const layout = cloudKitSnapshotLayout(value, STORE_VERSION);
-        const state = layout.wrapped ? value.state : value;
+        const state3 = layout.wrapped ? value.state : value;
         return JSON.stringify({
           compatibleVersion: layout.version === STORE_VERSION,
-          validFolders: !Object.hasOwn(state, "folders") || validateFolderHierarchy(state.folders)
+          validFolders: !Object.hasOwn(state3, "folders") || validateFolderHierarchy(state3.folders)
         });
       }
       case "uploadGuard": {
         const value = JSON.parse(input.snapshotJSON);
-        const metrics = computeCloudSyncMetrics(value);
+        const metrics2 = computeCloudSyncMetrics(value);
         return JSON.stringify({
-          message: getCloudSyncGuardMessage(value, metrics, input.previousMetrics ?? null, 7e5),
-          metrics
+          message: getCloudSyncGuardMessage(value, metrics2, input.previousMetrics ?? null, 7e5),
+          metrics: metrics2
         });
       }
       default:
         throw new Error("Unknown CloudKit operation");
     }
   };
+  var syncDiagnostics = () => JSON.stringify({ diagnostics: useGoogleSyncDiagnostics.getState(), progress: useGoogleSyncProgress.getState(), metrics: getSyncMetrics() });
   return __toCommonJS(entry_exports);
 })();
 

@@ -75,7 +75,7 @@ actor DriveTransport: SyncDrive {
         guard (200...299).contains(response.statusCode) else { throw try failure(response.statusCode, body: bytes) }
         return bytes
     }
-    private func put(_ id: String, dataset: String, kind: String, bytes: Data) async throws {
+    private func put(_ id: String, dataset: String, kind: String, bytes: Data) async throws -> Bool {
         let boundary = "weavelet-\(UUID().uuidString)"
         let metadata = OrderedJSON.object([
             JSONField(key: "id", value: .string(id)), JSONField(key: "name", value: .string("\(id).bin")),
@@ -92,9 +92,10 @@ actor DriveTransport: SyncDrive {
         let (responseData, response) = try await send(request)
         if response.statusCode == 409 {
             guard SHA256.hash(data: try await read(id)) == SHA256.hash(data: bytes) else { throw DriveTransportError.collision }
-            return
+            return false
         }
         guard (200...299).contains(response.statusCode) else { throw try failure(response.statusCode, body: responseData) }
+        return true
     }
     private func list(_ dataset: String, kind: String) async throws -> OrderedJSON {
         var ids: [OrderedJSON] = []; var page: String?; var seen = Set<String>()
@@ -182,7 +183,7 @@ actor DriveTransport: SyncDrive {
                 JSONField(key: "appProperties", value: .object([JSONField(key: "weaveletSync", value: .string("1")), JSONField(key: "headerId", value: .string(header))]))
             ]))
         case "read": return .syncBytes(try await read(args[0].string("id")))
-        case "put": try await put(args[0].string("id"), dataset: args[1].string("dataset"), kind: args[2].string("kind"), bytes: args[3].syncData()); return .null
+        case "put": return .bool(try await put(args[0].string("id"), dataset: args[1].string("dataset"), kind: args[2].string("kind"), bytes: args[3].syncData()))
         case "startToken": return try await json("/changes/startPageToken").required("startPageToken")
         case "commits", "packs": return try await list(args[0].string("dataset"), kind: method == "commits" ? "commit" : "pack")
         case "changes":

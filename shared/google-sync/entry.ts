@@ -25,6 +25,9 @@ import { DriveNotFoundError, InvalidSyncFileIdError } from './adapters/transport
 import { isInvalidSyncFileId } from '../../src/store/storage/google/driveErrors';
 export const driveErrorKind = (json: string) => { const input = JSON.parse(json); return JSON.stringify(isInvalidSyncFileId(input.status, input.body)); };
 import { host } from './adapters/host';
+import { withSyncProgress, beginTransfer, useGoogleSyncProgress } from './adapters/progress';
+import { useGoogleSyncDiagnostics } from './adapters/diagnostics';
+import { getSyncMetrics, recordMetric } from './adapters/metrics';
 import { toRecords, fromRecords, canonical, resolveStrict } from './source/records';
 import { resolveContent } from '@utils/contentStore';
 export { folderOperation, folderRows } from './folders';
@@ -39,8 +42,8 @@ export { documentOperation, messageAttributesOperation } from './document';
 
 const global = globalThis as any;
 global.crypto = { randomUUID: () => host("uuid") };
-global.console = { error: () => {}, warn: () => {}, log: () => {} };
-global.performance = { now: () => Date.now() };
+global.console = { error: () => {}, warn: () => {}, log: () => {}, info: () => {} };
+global.performance = { now: () => host('monotonic') };
 global.structuredClone = (value: unknown) => JSON.parse(JSON.stringify(value));
 global.TextEncoder = class { encode(value: string) { return new Uint8Array(host('utf8', (value as string & { toWellFormed(): string }).toWellFormed())); } };
 global.TextDecoder = class { decode(value: Uint8Array) { return host('text', Array.from(value)); } };
@@ -60,14 +63,24 @@ const drive = new Proxy({}, { get: (_target, method: string) => {
   if (method === 'history') return async (dataset: string) => ({
     commits: await request('commits', [dataset]), packs: await request('packs', [dataset]),
   });
-  return (...args: unknown[]) => request(method, args.map(arg => arg instanceof Uint8Array ? Array.from(arg) : arg)).then((value: any) => {
-    if (method === 'read') return new Uint8Array(value);
-    if (method === 'changes') return { ...value, changes: value.changes.map((change: any) => ({
-      id: change.fileId, removed: change.removed || change.file?.trashed,
-      dataset: change.file?.appProperties?.dataset, kind: change.file?.appProperties?.kind,
-    })) };
-    return value;
-  });
+  return (...args: unknown[]) => {
+    const started = performance.now();
+    const finish = method === 'read' ? beginTransfer('download', args[1] as any)
+      : method === 'put' ? beginTransfer('upload', args[2] === 'pack' || args[2] === 'pack-part' ? 'compaction' : 'normal') : undefined;
+    return request(method, args.map(arg => arg instanceof Uint8Array ? Array.from(arg) : arg)).then((value: any) => {
+      if (method === 'read') {
+        finish?.(value.length);
+        recordMetric('drive', started, 0, value.length);
+        return new Uint8Array(value);
+      }
+      if (method === 'put' && value !== false) finish?.((args[3] as Uint8Array).length);
+      if (method === 'changes') return { ...value, changes: value.changes.map((change: any) => ({
+        id: change.fileId, removed: change.removed || change.file?.trashed,
+        dataset: change.file?.appProperties?.dataset, kind: change.file?.appProperties?.kind,
+      })) };
+      return value;
+    });
+  };
 } });
 let session: EncryptedDriveSync;
 let transportMode: 'drive' | 'filesystem' = 'drive';
@@ -83,7 +96,7 @@ export const start = (operation: string, json: string) => {
   transportMode = args.transportMode === 'filesystem' ? 'filesystem' : 'drive';
   const transport = transportMode === 'filesystem'
     ? new FileSystemTransport(nativeFileSystemDirectory()) : drive;
-  Promise.resolve().then(async () => {
+  const work = async () => {
     switch (operation) {
       case 'create': {
         const created = await EncryptedDriveSync.create(transport as any, args.password, args.options);
@@ -123,10 +136,13 @@ export const start = (operation: string, json: string) => {
         await markFilesystemAccepted();
         return snapshot;
       }
+      case 'compactHistory': await session.compactHistory(); return null;
       case 'close': session.close(); return null;
       default: throw new Error('Unknown sync operation');
     }
-  }).then(value => { outcome = { status: 'done', value: value ?? null }; }, error => {
+  };
+  const measured = ['create','unlock','push','synchronize','resolveForPublication','pull','receive','resolve','compactHistory'].includes(operation);
+  Promise.resolve().then(() => measured ? withSyncProgress(work) : work()).then(value => { outcome = { status: 'done', value: value ?? null }; }, error => {
     outcome = { status: 'error', error: String(error.message ?? error), conflictKeys: error.keys };
   });
 };
@@ -227,3 +243,5 @@ export { localModelImport } from './localModelImport';
 export { localModelFiles } from './localModelFiles';
 
 export { debugState } from './debugState';
+
+export const syncDiagnostics = () => JSON.stringify({diagnostics: useGoogleSyncDiagnostics.getState(), progress: useGoogleSyncProgress.getState(), metrics: getSyncMetrics()});
