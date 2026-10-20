@@ -192,7 +192,7 @@
     "src/utils/evaluationAutoCore.ts": "509166a974da3caf0a47d9fd1788c4abdf3a0d27ce8f8bf1177748255cfca533",
     "src/local-llm/catalogPlan.ts": "b667fb74381650ec9df8ed01739ed547ab78dc49f91312e562fa6a68ef880cf8",
     "src/local-llm/device.ts": "101d2cab33624f53fc116a942592c6a7c78bc510542a760d0f9b4faa29f7b87f",
-    "src/local-llm/hfSearch.ts": "174c40c11cbabead57b49c319011b99ec9a494afcaa250e6dd5b8e8e33710b14"
+    "src/local-llm/hfSearch.ts": "ad4fdcc56f84ebab9dc702977027d222d9ea6752c935a98263c878408b12139c"
   },
   "bundleInputs": {
     "src/utils/aiTaskTarget.ts": "f488a1395da67bb853e66f34007817db8967cfc7ac287f534c21a109a92f9a9e",
@@ -382,11 +382,11 @@
     "shared/google-sync/localModelImport.ts": "cd0e9481a917aa64edc5fd955cb9625f327a8b9351bc6e36e2331310609a1da2",
     "src/local-llm/ggufShardUtils.ts": "33845697477f6a02eab2bcc6ce94412ce34cea521400fe7dcac1ffb9823e6ef7",
     "src/local-llm/fileProvider.ts": "4046bf8b8036f227ee000132a829adfd95100e83826319dce5fadb840427d121",
-    "shared/google-sync/localModelFiles.ts": "b677bf5a478483ecb3cc42e8d252de9e4456e12eb98fe64ffd528b9135b1edbe",
+    "shared/google-sync/localModelFiles.ts": "1dd753d43e248ef74320cebac1f305bb2dcaf8465a129bba990d0e02560a82d0",
     "src/utils/debugState.ts": "fc315634962591e9e64ccd42e92b08e37bc4b6c597d887c5760ac30b06adc535",
     "shared/google-sync/debugState.ts": "2d01d3a7e47caced539d38a3a3bbf15fb52ece380a89121ea06901863e7872bf",
     "src/local-llm/device.ts": "101d2cab33624f53fc116a942592c6a7c78bc510542a760d0f9b4faa29f7b87f",
-    "src/local-llm/hfSearch.ts": "174c40c11cbabead57b49c319011b99ec9a494afcaa250e6dd5b8e8e33710b14",
+    "src/local-llm/hfSearch.ts": "ad4fdcc56f84ebab9dc702977027d222d9ea6752c935a98263c878408b12139c",
     "shared/google-sync/hfSearch.ts": "591cc3cd56fe8b5156b964f74f90c83c995b09e55e90a2898a48cf713f366e1b",
     "shared/google-sync/entry.ts": "7b057d879ebc75ad52575442d67f0b29ba1fbe048bff4fa651dcef4e700bd0aa",
     "shared/google-sync/generate.mjs": "3b6c9ade9f1651fad5f4dfc1cce2b7e492d9be197fc8854ded1fbc553a058982",
@@ -440,5 +440,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "33574077cdc78df363768ff7e8a28daa8ebbeaab5c9f38352c25f81919405671"
+  "bundleSHA256": "8090ce5765832eb4cdb83feb9618a76b4935bb5f81300972faf14034a364b4b4"
 }

@@ -1,5 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {localModelImport} from '../../shared/google-sync/localModelImport';
+import {localModelFiles} from '../../shared/google-sync/localModelFiles';
 const run = (input: object) => JSON.parse(localModelImport(JSON.stringify(input)));
 
 const prepared = run({operation:'prepare', name:'日本語 My Model.GGUF', hash:'0123456789abcdef'.repeat(4), size:1024});
@@ -71,5 +72,21 @@ describe('single GGUF import', () => {
       {op:'set',path:['localModels',0],value:{opaqueRef:1}},
       {op:'remove',path:['localModels',1]},
     ]));
+  });
+});
+
+describe('directory local model files', () => {
+  it('keeps the manifest shard order for wllama GGUF files', () => {
+    const manifest = {kind:'gguf-sharded' as const,entrypoint:'model-00001-of-00002.gguf',shards:[
+      'model-00001-of-00002.gguf','model-00002-of-00002.gguf',
+    ],totalSize:8};
+    const model = {...prepared.model,id:'split',engine:'wllama' as const,manifest};
+    const output = JSON.parse(localModelFiles(JSON.stringify({model,files:[
+      'model-00002-of-00002.gguf','model-00001-of-00002.gguf',
+    ]})));
+    expect(output.requiredFiles).toEqual(manifest.shards);
+    expect(output.entrypoint).toBe(manifest.entrypoint);
+    expect(output.files).toEqual(['model-00002-of-00002.gguf','model-00001-of-00002.gguf']);
+    expect(() => localModelFiles(JSON.stringify({model,files:['model-00001-of-00002.gguf','model-00002-of-00002.gguf.part']}))).toThrow('incomplete');
   });
 });

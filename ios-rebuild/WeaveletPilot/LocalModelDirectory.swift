@@ -20,16 +20,169 @@ extension LocalModelFiles {
         fileprivate let target: URL
         fileprivate let inspection: DirectoryInspection
         fileprivate var published = false
+        fileprivate var publishedTargetRevision: ModelFileRevision?
+        fileprivate var preservesPending = false
         fileprivate init(pending: URL, target: URL, inspection: DirectoryInspection) {
             self.pending = pending; self.target = target; self.inspection = inspection
         }
-        func discard() { try? FileManager.default.removeItem(at:pending) }
+        func discard() {
+            guard !preservesPending else { return }
+            try? FileManager.default.removeItem(at:pending)
+        }
         deinit { discard() }
+    }
+    final class DownloadCache {
+        let url: URL
+        private let cacheParent: Int32
+        private let root: Int32
+        private let parts: Int32
+        private let name: String
+        private var closed = false
+
+        fileprivate init(url: URL, cacheParent: Int32, root: Int32, parts: Int32, name: String) {
+            self.url = url; self.cacheParent = cacheParent; self.root = root; self.parts = parts; self.name = name
+        }
+        deinit { closeDescriptors() }
+
+        func readHashes() throws -> OrderedJSON {
+            let descriptor = openat(root,"verified.json",O_RDONLY | O_NOFOLLOW)
+            if descriptor < 0 {
+                if errno == ENOENT { return .object([]) }
+                throw modelFilePOSIXError()
+            }
+            let file = FileHandle(fileDescriptor:descriptor,closeOnDealloc:true)
+            defer { try? file.close() }
+            var info = stat()
+            guard fstat(descriptor,&info) == 0, info.st_mode & S_IFMT == S_IFREG else {
+                throw ExchangeError.invalid("モデルキャッシュの検証情報が不正です")
+            }
+            let revision = try ModelFileRevision(descriptor)
+            guard revision.size <= 1024 * 1024 else { throw ExchangeError.invalid("モデルキャッシュの検証情報が大きすぎます") }
+            guard let data = try file.readToEnd(), UInt64(data.count) == revision.size else {
+                throw ExchangeError.invalid("モデルキャッシュの検証情報を読み込めません")
+            }
+            return try OrderedJSON.decode(data)
+        }
+
+        func writeHashes(_ hashes: OrderedJSON) throws {
+            let bytes = try hashes.encoded()
+            let temporary = ".verified-\(UUID().uuidString).part"
+            let descriptor = openat(root,temporary,O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW,0o600)
+            guard descriptor >= 0 else { throw modelFilePOSIXError() }
+            var committed = false
+            defer { if !committed { _ = unlinkat(root,temporary,0) } }
+            let file = FileHandle(fileDescriptor:descriptor,closeOnDealloc:true)
+            defer { try? file.close() }
+            try file.write(contentsOf:bytes)
+            try file.synchronize()
+            guard renameat(root,temporary,root,"verified.json") == 0 else { throw modelFilePOSIXError() }
+            committed = true
+        }
+
+        func inspect(path: String, expectedHash: OrderedJSON? = nil) throws -> (name: String, hash: String, size: Int64)? {
+            try ModelDirectoryAccess.validatePaths([path])
+            let descriptor: Int32
+            do { descriptor = try ModelDirectoryAccess.descriptor(path,from:parts,directory:false) }
+            catch let error as POSIXError where error.code == .ENOENT { return nil }
+            let file = FileHandle(fileDescriptor:descriptor,closeOnDealloc:true)
+            defer { try? file.close() }
+            var info = stat()
+            guard fstat(descriptor,&info) == 0, info.st_mode & S_IFMT == S_IFREG else {
+                throw ExchangeError.invalid("モデルキャッシュには通常のファイルのみ使用できます")
+            }
+            let revision = try ModelFileRevision(descriptor)
+            guard revision.size >= 4, try file.read(upToCount:4) == Data("GGUF".utf8) else {
+                throw ExchangeError.invalid("GGUFファイルではありません")
+            }
+            try file.seek(toOffset:0)
+            let hash = try ModelDirectoryAccess.transfer(file)
+            guard try ModelFileRevision(descriptor) == revision else {
+                throw ExchangeError.invalid("確認中にモデルキャッシュのファイルが変わりました")
+            }
+            guard expectedHash == nil || expectedHash == .string(hash) else { return nil }
+            return (path,hash,Int64(revision.size))
+        }
+
+        func install(_ source: URL, path: String) throws -> (name: String, hash: String, size: Int64) {
+            try ModelDirectoryAccess.validatePaths([path])
+            let scoped = source.startAccessingSecurityScopedResource()
+            defer { if scoped { source.stopAccessingSecurityScopedResource() } }
+            let sourceDescriptor = open(source.path,O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+            guard sourceDescriptor >= 0 else { throw modelFilePOSIXError() }
+            let input = FileHandle(fileDescriptor:sourceDescriptor,closeOnDealloc:true)
+            defer { try? input.close() }
+            var sourceInfo = stat()
+            guard fstat(sourceDescriptor,&sourceInfo) == 0, sourceInfo.st_mode & S_IFMT == S_IFREG else {
+                throw ExchangeError.invalid("ダウンロードしたモデルファイルが不正です")
+            }
+            let sourceRevision = try ModelFileRevision(sourceDescriptor)
+            guard sourceRevision.size >= 4, try input.read(upToCount:4) == Data("GGUF".utf8) else {
+                throw ExchangeError.invalid("GGUFファイルではありません")
+            }
+            try input.seek(toOffset:0)
+            let components = path.split(separator:"/").map(String.init)
+            guard let filename = components.last else { throw ExchangeError.invalid("モデルファイル名が不正です") }
+            let parent = try ModelDirectoryAccess.openOrCreateDirectory(components.dropLast().joined(separator:"/"),from:parts)
+            defer { close(parent) }
+            let temporary = ".download-\(UUID().uuidString).part"
+            let destination = openat(parent,temporary,O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW,0o600)
+            guard destination >= 0 else { throw modelFilePOSIXError() }
+            defer { _ = unlinkat(parent,temporary,0) }
+            let output = FileHandle(fileDescriptor:destination,closeOnDealloc:true)
+            defer { try? output.close() }
+            let hash = try ModelDirectoryAccess.transfer(input,to:output)
+            try output.synchronize()
+            guard try ModelFileRevision(sourceDescriptor) == sourceRevision else {
+                throw ExchangeError.invalid("コピー中にダウンロードしたモデルファイルが変わりました")
+            }
+            // The temporary entry is descriptor-relative; rename replaces only this cache entry,
+            // including a stale symlink, and never follows a target outside the cache.
+            guard renameat(parent,temporary,parent,filename) == 0 else { throw modelFilePOSIXError() }
+            return (path,hash,Int64(sourceRevision.size))
+        }
+
+        func discard() {
+            guard !closed else { return }
+            do { try ModelDirectoryAccess.removeContents(root) }
+            catch { return }
+            close(parts); close(root)
+            _ = unlinkat(cacheParent,name,AT_REMOVEDIR)
+            closed = true
+            close(cacheParent)
+        }
+
+        private func closeDescriptors() {
+            guard !closed else { return }
+            closed = true
+            close(parts); close(root); close(cacheParent)
+        }
     }
     private static let directoryLock = NSLock()
 
     func directoryURL(modelID: String) throws -> URL {
         try url(modelID:modelID).deletingPathExtension()
+    }
+
+    func openDownloadCache(name: String) throws -> DownloadCache {
+        try ModelDirectoryAccess.validatePaths([name])
+        guard !name.contains("/") else { throw ExchangeError.invalid("モデルキャッシュ名が不正です") }
+        try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+        let models = open(directory.path,O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+        guard models >= 0 else { throw modelFilePOSIXError() }
+        var cacheParent: Int32 = -1, root: Int32 = -1, parts: Int32 = -1
+        do {
+            cacheParent = try ModelDirectoryAccess.openOrCreateDirectory(".catalog-cache",from:models)
+            root = try ModelDirectoryAccess.openOrCreateDirectory(name,from:cacheParent)
+            parts = try ModelDirectoryAccess.openOrCreateDirectory("parts",from:root)
+        } catch {
+            if parts >= 0 { close(parts) }
+            if root >= 0 { close(root) }
+            if cacheParent >= 0 { close(cacheParent) }
+            close(models)
+            throw error
+        }
+        close(models)
+        return DownloadCache(url:directory.appendingPathComponent(".catalog-cache").appendingPathComponent(name).appendingPathComponent("parts"),cacheParent:cacheParent,root:root,parts:parts,name:name)
     }
 
     private func directoryPlan(_ model: OrderedJSON, files: [String] = []) throws -> OrderedJSON {
@@ -61,7 +214,7 @@ extension LocalModelFiles {
             guard (revision.size > 0 || !required.contains { Data($0.utf8) == Data(path.utf8) }), identities.insert(revision.identity).inserted else {
                 throw ExchangeError.invalid("モデルファイルが空か同じファイルの別名です")
             }
-            let digest = try reader.transfer(handle)
+            let digest = try ModelDirectoryAccess.transfer(handle)
             try reader.check(path,revision:revision)
             return DirectoryFile(path:path,hash:digest,size:revision.size,revision:revision)
         }
@@ -111,7 +264,7 @@ extension LocalModelFiles {
             guard descriptor >= 0 else { throw modelFilePOSIXError() }
             let output = FileHandle(fileDescriptor:descriptor,closeOnDealloc:true)
             defer { try? output.close() }
-            let hash = try reader.transfer(handle,to:output)
+            let hash = try ModelDirectoryAccess.transfer(handle,to:output)
             try output.synchronize()
             guard hash == file.hash else { throw ExchangeError.invalid("コピーしたモデルのハッシュが一致しません") }
             try reader.check(file.path,revision:file.revision)
@@ -143,6 +296,80 @@ extension LocalModelFiles {
         } else { flags = UInt32(RENAME_EXCL) }
         guard renamex_np(staged.pending.path,staged.target.path,flags) == 0 else { throw modelFilePOSIXError() }
         staged.published = true
+        do {
+            guard let revision = try directoryRevision(staged.target) else {
+                throw ExchangeError.invalid("登録したモデルのディレクトリが見つかりません")
+            }
+            staged.publishedTargetRevision = revision
+        } catch {
+            staged.preservesPending = true
+            throw error
+        }
+    }
+
+    func rollbackDirectory(_ staged: DirectoryStage, model: OrderedJSON) throws {
+        Self.directoryLock.lock(); defer { Self.directoryLock.unlock() }
+        guard staged.published else {
+            throw ExchangeError.invalid("登録済みのモデルディレクトリを選択してください")
+        }
+        do {
+            guard try directoryPlan(model).encoded() == staged.inspection.declaration,
+                  try directoryURL(modelID:model.required("id").string("id")) == staged.target,
+                  let publishedTargetRevision = staged.publishedTargetRevision,
+                  try directoryRevision(staged.target) == publishedTargetRevision else {
+                throw ExchangeError.invalid("登録後にモデルのディレクトリが変わりました")
+            }
+            if staged.inspection.targetRevision != nil {
+                guard renamex_np(staged.pending.path,staged.target.path,UInt32(RENAME_SWAP)) == 0 else { throw modelFilePOSIXError() }
+            } else {
+                guard rename(staged.target.path,staged.pending.path) == 0 else { throw modelFilePOSIXError() }
+            }
+        } catch {
+            staged.preservesPending = true
+            throw error
+        }
+        staged.published = false
+        staged.publishedTargetRevision = nil
+    }
+
+    func installed(model: OrderedJSON) throws -> URL {
+        let id = try model.required("id").string("id")
+        guard try model.required("engine").string("engine") == "wllama" else {
+            throw ExchangeError.invalid("GGUF モデルを選択してください")
+        }
+        let manifest = try model.required("manifest")
+        let kind = try manifest.required("kind").string("manifest kind")
+        if kind == "single-file" { return try installed(modelID:id) }
+        guard kind == "gguf-sharded" else {
+            throw ExchangeError.invalid("GGUF モデルを選択してください")
+        }
+        let plan = try directoryPlan(model)
+        let required = try plan.required("requiredFiles").array("required files").map { try $0.string("file") }
+        let entrypoint = try plan.required("entrypoint").string("entrypoint")
+        try ModelDirectoryAccess.validatePaths(required)
+        let root = try directoryURL(modelID:id)
+        let reader = try ModelDirectoryAccess(root)
+        let names = try reader.enumerate()
+        let selected = try directoryPlan(model,files:names).required("files").array("files").map { try $0.string("file") }
+        guard required.allSatisfy({ path in selected.contains { Data($0.utf8) == Data(path.utf8) } }) else {
+            throw ExchangeError.invalid("モデルの必須ファイルがありません")
+        }
+        var identities = Set<ModelFileIdentity>()
+        for path in required {
+            let file = try reader.openFile(path)
+            defer { try? file.close() }
+            let revision = try ModelFileRevision(file.fileDescriptor)
+            guard revision.size >= 4, identities.insert(revision.identity).inserted else {
+                throw ExchangeError.invalid("GGUF ファイルが不正です")
+            }
+            guard try file.read(upToCount:4) == Data("GGUF".utf8) else {
+                throw ExchangeError.invalid("GGUF ファイルが不正です")
+            }
+            try reader.check(path,revision:revision)
+        }
+        try reader.checkDirectories()
+        try reader.checkRootPath()
+        return root.appendingPathComponent(entrypoint)
     }
 
     func directoryEntries(model: OrderedJSON) throws -> [(path: String, data: Data)] {
@@ -238,7 +465,7 @@ private final class ModelDirectoryAccess {
             }
         }
     }
-    func descriptor(_ path: String, directory: Bool) throws -> Int32 {
+    static func descriptor(_ path: String, from root: Int32, directory: Bool) throws -> Int32 {
         if path.isEmpty && directory { return dup(root) }
         try Self.validatePaths([path])
         let components = path.split(separator:"/").map(String.init)
@@ -247,6 +474,25 @@ private final class ModelDirectoryAccess {
         for (index,name) in components.enumerated() {
             let isDirectory = directory || index < components.count - 1
             let next = openat(current,name,O_RDONLY | O_NOFOLLOW | (isDirectory ? O_DIRECTORY : O_NONBLOCK))
+            close(current)
+            guard next >= 0 else { throw modelFilePOSIXError() }
+            current = next
+        }
+        return current
+    }
+    func descriptor(_ path: String, directory: Bool) throws -> Int32 {
+        try Self.descriptor(path,from:root,directory:directory)
+    }
+    static func openOrCreateDirectory(_ path: String, from root: Int32) throws -> Int32 {
+        if path.isEmpty { return dup(root) }
+        try validatePaths([path])
+        var current = dup(root)
+        guard current >= 0 else { throw modelFilePOSIXError() }
+        for name in path.split(separator:"/").map(String.init) {
+            if mkdirat(current,name,0o700) != 0, errno != EEXIST {
+                close(current); throw modelFilePOSIXError()
+            }
+            let next = openat(current,name,O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
             close(current)
             guard next >= 0 else { throw modelFilePOSIXError() }
             current = next
@@ -293,7 +539,7 @@ private final class ModelDirectoryAccess {
         try Self.validatePaths(paths)
         return paths.sorted { Array($0.utf8).lexicographicallyPrecedes(Array($1.utf8)) }
     }
-    func transfer(_ input: FileHandle, to output: FileHandle? = nil) throws -> String {
+    static func transfer(_ input: FileHandle, to output: FileHandle? = nil) throws -> String {
         var hash = SHA256()
         while let chunk = try input.read(upToCount:1024 * 1024), !chunk.isEmpty {
             try Task.checkCancellation()
@@ -301,6 +547,32 @@ private final class ModelDirectoryAccess {
             try output?.write(contentsOf:chunk)
         }
         return hash.finalize().map { String(format:"%02x",$0) }.joined()
+    }
+    static func removeContents(_ descriptor: Int32) throws {
+        guard let stream = fdopendir(dup(descriptor)) else { throw modelFilePOSIXError() }
+        defer { closedir(stream) }
+        errno = 0
+        while let item = readdir(stream) {
+            let name = withUnsafePointer(to:&item.pointee.d_name) { pointer in
+                pointer.withMemoryRebound(to:CChar.self,capacity:1024) { String(validatingCString:$0) }
+            }
+            guard let name else { throw ExchangeError.invalid("UTF8ではないモデルファイル名です") }
+            if name == "." || name == ".." { continue }
+            var info = stat()
+            guard fstatat(descriptor,name,&info,AT_SYMLINK_NOFOLLOW) == 0 else { throw modelFilePOSIXError() }
+            if info.st_mode & S_IFMT == S_IFDIR {
+                let child = openat(descriptor,name,O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+                guard child >= 0 else { throw modelFilePOSIXError() }
+                do { try removeContents(child) }
+                catch { close(child); throw error }
+                close(child)
+                guard unlinkat(descriptor,name,AT_REMOVEDIR) == 0 else { throw modelFilePOSIXError() }
+            } else {
+                guard unlinkat(descriptor,name,0) == 0 else { throw modelFilePOSIXError() }
+            }
+            errno = 0
+        }
+        guard errno == 0 else { throw modelFilePOSIXError() }
     }
     func check(_ path: String, revision: ModelFileRevision) throws {
         let file = try openFile(path)

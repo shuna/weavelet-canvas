@@ -60,6 +60,36 @@ final class LocalLlamaTests: XCTestCase {
         #endif
     }
 
+    func testOfficialSplitTinyGGUFLoadsAllShardsAndRejectsMissingShard() async throws {
+        #if targetEnvironment(macCatalyst) && arch(arm64)
+        let firstPath = ProcessInfo.processInfo.environment["WEAVELET_LLAMA_SPLIT_TEST_MODEL"] ?? "/private/tmp/weavelet-local-llama-test/split/stories260K-00001-of-00002.gguf"
+        let first = URL(fileURLWithPath:firstPath)
+        let second = first.deletingLastPathComponent().appendingPathComponent("stories260K-00002-of-00002.gguf")
+        guard FileManager.default.fileExists(atPath:first.path), FileManager.default.fileExists(atPath:second.path) else {
+            throw XCTSkip("Optional official split GGUF fixture is not present; create it with llama-gguf-split before running this test")
+        }
+        let copiedDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("split-gguf-\(UUID().uuidString)",isDirectory:true)
+        try FileManager.default.createDirectory(at:copiedDirectory,withIntermediateDirectories:true)
+        defer { try? FileManager.default.removeItem(at:copiedDirectory) }
+        let copiedFirst = copiedDirectory.appendingPathComponent(first.lastPathComponent)
+        let copiedSecond = copiedDirectory.appendingPathComponent(second.lastPathComponent)
+        try FileManager.default.copyItem(at:first,to:copiedFirst)
+        try FileManager.default.copyItem(at:second,to:copiedSecond)
+        let request = LocalLlamaRequest(messages:[.init(role:"user",content:"Once upon a time")],assistantPrefix:nil,maxTokens:8,temperature:0,contextSize:128,fallbackPrompt:"Once upon a time")
+        let texts = LocalLlamaTexts()
+        try await LocalLlama.generate(modelURL:copiedFirst,request:request) { text in await texts.add(text,stop:false) }
+        let values = await texts.values
+        XCTAssertEqual(values.count,8)
+        try FileManager.default.removeItem(at:copiedSecond)
+        do {
+            try await LocalLlama.generate(modelURL:copiedFirst,request:request) { _ in XCTFail("Missing shard produced output"); return false }
+            XCTFail("Missing split shard accepted")
+        } catch LocalLlamaError.modelLoad {}
+        #else
+        throw XCTSkip("Catalyst arm64 engine boundary")
+        #endif
+    }
+
     func testScopedModelSessionKeepsFreshContextsAndUnwindsCallbackFailure() async throws {
         #if targetEnvironment(macCatalyst) && arch(arm64)
         let path = ProcessInfo.processInfo.environment["WEAVELET_LLAMA_TEST_MODEL"] ?? "/private/tmp/weavelet-local-llama-test/stories260K.gguf"

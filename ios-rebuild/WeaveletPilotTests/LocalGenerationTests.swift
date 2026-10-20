@@ -231,6 +231,132 @@ private final class CatalogDownloadProtocol: URLProtocol {
         XCTAssertEqual(try Data(contentsOf:state.localModelFiles.installed(modelID:catalogID)),bytes)
     }
 
+    private func shardedCandidate() throws -> (result:OrderedJSON,variant:OrderedJSON,id:String,paths:[String]) {
+        let query = try OrderedJSON.decode(Data(#"{"query":"FAKE","engine":"wllama","sort":"downloads"}"#.utf8))
+        let data = try OrderedJSON.decode(Data(#"[{"id":"FAKE/split-instruct","tags":["gguf","text-generation"]}]"#.utf8))
+        let response = try SharedWebOperations.call("hfSearchOperation",.object([
+            .init(key:"operation",value:.string("searchResponse")),.init(key:"query",value:query),.init(key:"data",value:data)
+        ]))
+        let result = try XCTUnwrap(response.required("results").array("results").first)
+        let repo = try OrderedJSON.decode(Data(#"{"siblings":[{"rfilename":"model-Q4_K_M-00002-of-00002.gguf","size":16},{"rfilename":"model-Q4_K_M-00001-of-00002.gguf","size":16}]}"#.utf8))
+        let variants = try SharedWebOperations.call("hfSearchOperation",.object([.init(key:"operation",value:.string("variants")),.init(key:"data",value:repo)]))
+        let variant = try XCTUnwrap(variants.required("variants").array("variants").first)
+        let plan = try SharedWebOperations.call("hfSearchOperation",.object([
+            .init(key:"operation",value:.string("downloadPlan")),.init(key:"result",value:result),.init(key:"variant",value:variant)
+        ]))
+        return try (result,variant,plan.required("model").required("id").string("id"),variant.required("shardFiles").array("shards").map { try $0.string("shard") })
+    }
+
+    func testShardedDownloadResumesVerifiedFilesAcrossRestartAndRollsBackFailedSave() async throws {
+        let original = try store(), gate = LocalSaveGate()
+        let library = LocalStateStore(fileURL:original.fileURL) { bytes,url in
+            if gate.reject { throw CocoaError(.fileWriteNoPermission) }
+            try bytes.write(to:url,options:.atomic)
+        }
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [CatalogDownloadProtocol.self]
+        let state = try catalogState(library), candidate = try shardedCandidate()
+        let root = URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let corpus = try OrderedJSON.decode(Data(contentsOf:root.appendingPathComponent("tests/fixtures/web-native/io-corpus.json"))).required("syncSnapshot")
+        try state.applySnapshot(corpus)
+        let before = try state.publicationSnapshot(), disk = try Data(contentsOf:library.fileURL)
+        let first = Data("GGUFshard first".utf8), second = Data("GGUFshard second".utf8)
+        CatalogDownloadProtocol.handler = { request in
+            if request.url?.lastPathComponent == candidate.paths[0] { return (200,first) }
+            XCTAssertEqual(request.url?.lastPathComponent,candidate.paths[1])
+            return (503,Data())
+        }
+        defer { CatalogDownloadProtocol.handler = nil }
+        try state.startHfModelDownload(result:candidate.result,variant:candidate.variant)
+        try await wait { state.catalogDownload(id:candidate.id)?.running == false }
+        XCTAssertNotNil(state.catalogDownload(id:candidate.id)?.error)
+        XCTAssertTrue(state.catalogDownload(id:candidate.id)?.canResume == true)
+        XCTAssertEqual(try state.publicationSnapshot(),before)
+        XCTAssertEqual(try Data(contentsOf:library.fileURL),disk)
+        XCTAssertFalse(try state.localModelFiles.directoryIsPresent(modelID:candidate.id))
+        let resumed = ChatState(store:library,catalogDownloadConfiguration:config)
+        CatalogDownloadProtocol.handler = { request in
+            XCTAssertEqual(request.url?.lastPathComponent,candidate.paths[1],"Verified first shard must survive restart")
+            return (200,second)
+        }
+        gate.reject = true
+        try resumed.startHfModelDownload(result:candidate.result,variant:candidate.variant)
+        try await wait { resumed.catalogDownload(id:candidate.id)?.running == false }
+        XCTAssertNotNil(resumed.catalogDownload(id:candidate.id)?.error)
+        XCTAssertEqual(try resumed.publicationSnapshot(),before)
+        XCTAssertEqual(try Data(contentsOf:library.fileURL),disk)
+        XCTAssertFalse(try resumed.localModelFiles.directoryIsPresent(modelID:candidate.id))
+        gate.reject = false
+        let retried = ChatState(store:library,catalogDownloadConfiguration:config)
+        CatalogDownloadProtocol.handler = { _ in XCTFail("All verified shards must be reused after a save failure"); return (500,Data()) }
+        try retried.startHfModelDownload(result:candidate.result,variant:candidate.variant)
+        try await wait { retried.catalogDownload(id:candidate.id)?.running == false }
+        XCTAssertNil(retried.catalogDownload(id:candidate.id)?.error)
+        let after = try retried.publicationSnapshot(), roots = try after.required("state")
+        let changed = ["localModels","savedModelMeta"]
+        XCTAssertEqual(OrderedJSON.object(try roots.object("state").filter { !changed.contains($0.key.text) }),
+                       .object(try before.required("state").object("state").filter { !changed.contains($0.key.text) }))
+        let model = try XCTUnwrap(retried.localModelDefinitions().first { $0["id"] == .string(candidate.id) })
+        XCTAssertEqual(try retried.localModelFiles.installed(model:model).lastPathComponent,candidate.paths[0])
+        let entries = Dictionary(uniqueKeysWithValues:try retried.localModelFiles.directoryEntries(model:model).map { ($0.path,$0.data) })
+        XCTAssertEqual(entries[candidate.paths[0]],first); XCTAssertEqual(entries[candidate.paths[1]],second)
+        XCTAssertEqual(roots["savedModelMeta"]?[candidate.id]?["storedFiles"],.array(candidate.paths.map(OrderedJSON.string)))
+        XCTAssertEqual(try ChatState(store:library).publicationSnapshot(),after)
+        let records = try SyncRecords.toRecords(after)
+        XCTAssertEqual(try SyncRecords.canonical(SyncRecords.toRecords(SyncRecords.fromRecords(records))),try SyncRecords.canonical(records))
+    }
+
+    func testLocalGenerationConnectsShardedDefinitionToFirstFile() async throws {
+        let library = try store(), candidate = try shardedCandidate()
+        let requestModel = "test-local"
+        let running = try state(library) { url,_,onText in
+            XCTAssertEqual(url.lastPathComponent,candidate.paths[0])
+            XCTAssertTrue(FileManager.default.fileExists(atPath:url.deletingLastPathComponent().appendingPathComponent(candidate.paths[1]).path))
+            _ = try await onText("FAKE split output")
+        }
+        let definitionPlan = try SharedWebOperations.call("hfSearchOperation",.object([
+            .init(key:"operation",value:.string("downloadPlan")),.init(key:"result",value:candidate.result),.init(key:"variant",value:candidate.variant)
+        ]))
+        let definition = try definitionPlan.required("definition").replacing("id",with:.string(requestModel))
+        let snapshot = try running.publicationSnapshot(), roots = try snapshot.required("state")
+        try running.applySnapshot(snapshot.replacing("state",with:roots.replacing("localModels",with:.array([definition])).replacing("localModelEnabled",with:.bool(true)).replacing("activeLocalModels",with:.object([.init(key:"generation",value:.string(requestModel)),.init(key:"analysis",value:.string(requestModel))]))))
+        let directory = library.fileURL.deletingLastPathComponent().appendingPathComponent("split-source")
+        try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+        for path in candidate.paths { try Data("GGUFfixture connection".utf8).write(to:directory.appendingPathComponent(path)) }
+        let files = running.localModelFiles
+        try files.installDirectory(directory,model:definition,inspection:files.inspectDirectory(directory,model:definition))
+        XCTAssertEqual(try NativeLocalEvaluation.modelURL(state:running.publicationSnapshot().required("state"),files:files).lastPathComponent,candidate.paths[0])
+        try running.startGeneration(input:"split input",readProviderCredential:{ _ in XCTFail("Local split generation must not read credentials"); return nil })
+        try await wait { running.generation == nil }
+        XCTAssertNil(running.generationError)
+        XCTAssertEqual(running.conversation?.visibleMessages.last?.parts,[.text("FAKE split output")])
+    }
+
+    func testShardedCancellationPreservesCompletedFilesAndIgnoresLateResponse() async throws {
+        let library = try store(), state = try catalogState(library), candidate = try shardedCandidate()
+        let before = try state.publicationSnapshot()
+        CatalogDownloadProtocol.handler = { request in
+            if request.url?.lastPathComponent == candidate.paths[0] { CatalogDownloadProtocol.hold = true }
+            return (200,Data("GGUFcancel boundary".utf8))
+        }
+        defer { CatalogDownloadProtocol.hold = false; CatalogDownloadProtocol.handler = nil; CatalogDownloadProtocol.held = nil }
+        try state.startHfModelDownload(result:candidate.result,variant:candidate.variant)
+        try await wait { CatalogDownloadProtocol.held != nil }
+        state.cancelCatalogDownload(id:candidate.id)
+        CatalogDownloadProtocol.hold = false
+        CatalogDownloadProtocol.release()
+        try await wait { state.catalogDownload(id:candidate.id)?.running == false }
+        XCTAssertEqual(try state.publicationSnapshot(),before)
+        XCTAssertFalse(try state.localModelFiles.directoryIsPresent(modelID:candidate.id))
+        CatalogDownloadProtocol.handler = { request in
+            XCTAssertEqual(request.url?.lastPathComponent,candidate.paths[1])
+            return (200,Data("GGUFcancel boundary".utf8))
+        }
+        try state.startHfModelDownload(result:candidate.result,variant:candidate.variant)
+        try await wait { state.catalogDownload(id:candidate.id)?.running == false }
+        XCTAssertNil(state.catalogDownload(id:candidate.id)?.error)
+        XCTAssertEqual(state.catalogDownload(id:candidate.id)?.installedModelID,candidate.id)
+    }
+
     func testCatalogDownloadRegistersSharedDefinitionAndLocalRevision() async throws {
         let store = try store(), state = try catalogState(store)
         let before = try state.publicationSnapshot()

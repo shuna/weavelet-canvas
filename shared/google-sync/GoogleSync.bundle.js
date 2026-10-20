@@ -28394,8 +28394,9 @@ ${text}`;
   // shared/google-sync/localModelFiles.ts
   function localModelFiles(json) {
     const { model, files = [] } = JSON.parse(json);
-    if (typeof model.id !== "string" || !model.id.trim() || model.engine !== "transformers.js" || model.manifest?.kind !== "multi-file") {
-      throw new Error("Select a Transformers.js multi-file model");
+    const supported = model.engine === "transformers.js" && model.manifest?.kind === "multi-file" || model.engine === "wllama" && model.manifest?.kind === "gguf-sharded";
+    if (typeof model.id !== "string" || !model.id.trim() || !supported) {
+      throw new Error("Select a supported multi-file model");
     }
     const requiredFiles = getManifestFiles(model.manifest);
     const entrypoint = getManifestPrimaryFile(model.manifest);
@@ -28907,7 +28908,7 @@ ${text}`;
         return model.id;
     }
     for (const model of models) {
-      if (model.origin === repoId && model.manifest.kind === "single-file" && model.manifest.entrypoint === fileName) {
+      if (model.origin === repoId && (model.manifest.kind === "single-file" || model.manifest.kind === "gguf-sharded") && getManifestPrimaryFile(model.manifest) === fileName) {
         return model.id;
       }
     }

@@ -19,6 +19,16 @@ import CryptoKit
             ])),.init(key:"unknown",value:.object([.init(key:"bytes",value:.number("1e02"))]))
         ])
     }
+    private func shardedModel(_ id: String = "org/split") -> OrderedJSON {
+        let shards = ["model-00001-of-00002.gguf","model-00002-of-00002.gguf"]
+        return .object([
+            .init(key:"id",value:.string(id)),.init(key:"engine",value:.string("wllama")),
+            .init(key:"manifest",value:.object([
+                .init(key:"kind",value:.string("gguf-sharded")),.init(key:"entrypoint",value:.string(shards[0])),
+                .init(key:"shards",value:.array(shards.map(OrderedJSON.string))),.init(key:"totalSize",value:.number("18"))
+            ]))
+        ])
+    }
     private func write(_ root: URL, _ path: String, _ bytes: Data) throws {
         let url = root.appendingPathComponent(path)
         try FileManager.default.createDirectory(at:url.deletingLastPathComponent(),withIntermediateDirectories:true)
@@ -28,6 +38,12 @@ import CryptoKit
         let dir = root.appendingPathComponent(name)
         try write(dir,"config.json",Data("{\"opaque\":1.00}".utf8))
         try write(dir,"onnx/model.onnx",Data(("binary\0"+suffix).utf8))
+        return dir
+    }
+    private func shardSource(_ root: URL, name: String = "shards", suffix: String = "original") throws -> URL {
+        let dir = root.appendingPathComponent(name)
+        try write(dir,"model-00001-of-00002.gguf",Data("GGUFfirst-\(suffix)".utf8))
+        try write(dir,"model-00002-of-00002.gguf",Data("GGUFsecond-\(suffix)".utf8))
         return dir
     }
     private func install(_ dir: URL, _ files: LocalModelFiles, _ model: OrderedJSON) throws {
@@ -146,5 +162,91 @@ import CryptoKit
         try FileManager.default.removeItem(at:target)
         try FileManager.default.createSymbolicLink(at:target,withDestinationURL:dir.appendingPathComponent("onnx/model.onnx"))
         XCTAssertThrowsError(try files.directoryEntries(model:metadata))
+    }
+    func testShardedGGUFInstalledRequiresEveryFinalShardAndHeader() throws {
+        let (root,files) = try setup(), metadata = shardedModel(), source = try shardSource(root)
+        try install(source,files,metadata)
+        let entrypoint = try files.installed(model:metadata)
+        XCTAssertEqual(entrypoint.lastPathComponent,"model-00001-of-00002.gguf")
+        XCTAssertEqual(try Data(contentsOf:entrypoint),Data("GGUFfirst-original".utf8))
+
+        let target = try files.directoryURL(modelID:"org/split")
+        try write(target,"model-00002-of-00002.gguf.part",Data())
+        XCTAssertThrowsError(try files.installed(model:metadata))
+        try FileManager.default.removeItem(at:target.appendingPathComponent("model-00002-of-00002.gguf.part"))
+        try write(target,"model-00002-of-00002.gguf",Data("BAD!second".utf8))
+        XCTAssertThrowsError(try files.installed(model:metadata))
+
+        let single = OrderedJSON.object([
+            .init(key:"id",value:.string("org/single")),.init(key:"engine",value:.string("wllama")),
+            .init(key:"manifest",value:.object([.init(key:"kind",value:.string("single-file")),.init(key:"entrypoint",value:.string("single.gguf"))]))
+        ])
+        let singleURL = root.appendingPathComponent("single.gguf")
+        try Data("GGUFsingle".utf8).write(to:singleURL)
+        try files.install(singleURL,modelID:"org/single")
+        XCTAssertEqual(try files.installed(model:single),try files.installed(modelID:"org/single"))
+    }
+    func testDirectoryRollbackRestoresPreviousGenerationOrRemovesNewGeneration() throws {
+        let (root,files) = try setup(), metadata = shardedModel(), old = try shardSource(root,suffix:"old")
+        try install(old,files,metadata)
+        let replacement = try shardSource(root,name:"replacement",suffix:"replacement")
+        let inspection = try files.inspectDirectory(replacement,model:metadata)
+        let staged = try files.stageDirectory(replacement,model:metadata,inspection:inspection)
+        try files.publishDirectory(staged,model:metadata)
+        XCTAssertEqual(try Data(contentsOf:files.installed(model:metadata)),Data("GGUFfirst-replacement".utf8))
+        try files.rollbackDirectory(staged,model:metadata)
+        staged.discard()
+        XCTAssertEqual(try Data(contentsOf:files.installed(model:metadata)),Data("GGUFfirst-old".utf8))
+
+        let fresh = shardedModel("org/fresh-split")
+        let freshInspection = try files.inspectDirectory(replacement,model:fresh)
+        let freshStage = try files.stageDirectory(replacement,model:fresh,inspection:freshInspection)
+        try files.publishDirectory(freshStage,model:fresh)
+        try files.rollbackDirectory(freshStage,model:fresh)
+        freshStage.discard()
+        XCTAssertFalse(try files.directoryIsPresent(modelID:"org/fresh-split"))
+    }
+    func testFailedDirectoryRollbackPreservesPendingPreviousGeneration() throws {
+        let (root,files) = try setup(), metadata = shardedModel(), old = try shardSource(root,suffix:"old")
+        try install(old,files,metadata)
+        let replacement = try shardSource(root,name:"replacement",suffix:"replacement")
+        let inspection = try files.inspectDirectory(replacement,model:metadata)
+        let staged = try files.stageDirectory(replacement,model:metadata,inspection:inspection)
+        try files.publishDirectory(staged,model:metadata)
+        let target = try files.directoryURL(modelID:"org/split")
+        try FileManager.default.moveItem(at:target,to:root.appendingPathComponent("external-generation"))
+        try FileManager.default.createDirectory(at:target,withIntermediateDirectories:true)
+        try write(target,"replacement.gguf",Data("GGUFexternal".utf8))
+
+        XCTAssertThrowsError(try files.rollbackDirectory(staged,model:metadata))
+        staged.discard()
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath:files.directory.path).contains { $0.hasSuffix(".part") })
+        XCTAssertTrue(FileManager.default.fileExists(atPath:target.appendingPathComponent("replacement.gguf").path))
+    }
+    func testDownloadCacheRejectsRootAndIntermediateSymlinksWithoutTouchingOutsideFiles() throws {
+        let (root,files) = try setup()
+        try FileManager.default.createDirectory(at:files.directory,withIntermediateDirectories:true)
+        let outside = root.appendingPathComponent("outside")
+        try write(outside,"kept.gguf",Data("GGUFoutside".utf8))
+        let cacheRoot = files.directory.appendingPathComponent(".catalog-cache")
+        try FileManager.default.createSymbolicLink(at:cacheRoot,withDestinationURL:outside)
+        XCTAssertThrowsError(try files.openDownloadCache(name:"plan"))
+        XCTAssertEqual(try Data(contentsOf:outside.appendingPathComponent("kept.gguf")),Data("GGUFoutside".utf8))
+
+        try FileManager.default.removeItem(at:cacheRoot)
+        let cache = try files.openDownloadCache(name:"plan")
+        try FileManager.default.createSymbolicLink(at:cache.url.appendingPathComponent("nested"),withDestinationURL:outside)
+        let downloaded = root.appendingPathComponent("download.gguf")
+        try Data("GGUFdownload".utf8).write(to:downloaded)
+        XCTAssertThrowsError(try cache.install(downloaded,path:"nested/model.gguf"))
+        XCTAssertEqual(try Data(contentsOf:outside.appendingPathComponent("kept.gguf")),Data("GGUFoutside".utf8))
+
+        try FileManager.default.removeItem(at:cache.url.appendingPathComponent("nested"))
+        try FileManager.default.createDirectory(at:cache.url.appendingPathComponent("nested"),withIntermediateDirectories:false)
+        try FileManager.default.createSymbolicLink(at:cache.url.appendingPathComponent("nested/model.gguf"),withDestinationURL:outside.appendingPathComponent("kept.gguf"))
+        let installed = try cache.install(downloaded,path:"nested/model.gguf")
+        XCTAssertEqual(installed.hash,SHA256.hash(data:Data("GGUFdownload".utf8)).map { String(format:"%02x",$0) }.joined())
+        XCTAssertEqual(try Data(contentsOf:cache.url.appendingPathComponent("nested/model.gguf")),Data("GGUFdownload".utf8))
+        XCTAssertEqual(try Data(contentsOf:outside.appendingPathComponent("kept.gguf")),Data("GGUFoutside".utf8))
     }
 }

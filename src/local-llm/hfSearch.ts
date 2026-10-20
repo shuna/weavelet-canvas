@@ -28,7 +28,7 @@ import type {
   ResolvedSearchCandidate,
 } from './types';
 import { formatBytes } from './device';
-import { groupShardFiles, isShardGroupComplete } from './ggufShardUtils';
+import { getManifestPrimaryFile, groupShardFiles, isShardGroupComplete } from './ggufShardUtils';
 import { buildHfUrl } from './catalogPlan';
 import { CURATED_MODELS } from './catalog';
 
@@ -707,7 +707,7 @@ export function findExistingModelForVariant(
     if (model.huggingFaceRepo === repoId && model.downloadFiles.includes(fileName)) return model.id;
   }
   for (const model of models) {
-    if (model.origin === repoId && model.manifest.kind === 'single-file' && model.manifest.entrypoint === fileName) {
+    if (model.origin === repoId && (model.manifest.kind === 'single-file' || model.manifest.kind === 'gguf-sharded') && getManifestPrimaryFile(model.manifest) === fileName) {
       return model.id;
     }
   }

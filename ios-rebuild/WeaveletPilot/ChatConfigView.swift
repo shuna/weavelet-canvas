@@ -22,7 +22,8 @@ struct LocalModelSettingsView: View {
         model["engine"] == .string("wllama") && model["manifest"]?["kind"] == .string("single-file")
     }
     private func multiFile(_ model: OrderedJSON) -> Bool {
-        model["engine"] == .string("transformers.js") && model["manifest"]?["kind"] == .string("multi-file")
+        (model["engine"] == .string("transformers.js") && model["manifest"]?["kind"] == .string("multi-file")) ||
+            (model["engine"] == .string("wllama") && model["manifest"]?["kind"] == .string("gguf-sharded"))
     }
     private func candidateKey(_ result: OrderedJSON, _ variant: OrderedJSON) -> Data? {
         guard let repository = try? result.required("repoId").string("repository"),
@@ -212,10 +213,7 @@ struct LocalModelSettingsView: View {
 
     @ViewBuilder private func hfVariantActions(_ result: OrderedJSON, _ variant: OrderedJSON) -> some View {
         let status = (try? variant.required("supportStatus").string("variant status")) ?? "unsupported"
-        let shards = (try? variant["shardFiles"]?.array("GGUF shards")) ?? []
-        if shards.count > 1 {
-            Text("分割GGUFにはまだ対応していません。").font(.footnote).foregroundStyle(.secondary)
-        } else if status == "unsupported" {
+        if status == "unsupported" {
             Text((try? variant["supportReason"]?.string("variant reason")) ?? "このGGUFは利用できません。").font(.footnote).foregroundStyle(.secondary)
         } else {
             if status == "not-recommended", let reason = try? variant["supportReason"]?.string("variant reason") {
@@ -224,8 +222,9 @@ struct LocalModelSettingsView: View {
             if let key = candidateKey(result, variant), let id = hfDownloadIDs[key] {
                 let installedID = state.catalogDownload(id:id)?.installedModelID ?? id
                 let installed = (try? state.localModelDefinitions())?.contains { model in
-                    (try? model.required("id").string("model ID"))?.utf8.elementsEqual(installedID.utf8) == true
-                } == true && (try? state.localModelFiles.installed(modelID:installedID)) != nil
+                    (try? model.required("id").string("model ID"))?.utf8.elementsEqual(installedID.utf8) == true &&
+                        (try? state.localModelFiles.installed(model:model)) != nil
+                } == true
                 if installed {
                     Text("この端末にファイルあり").font(.footnote).foregroundStyle(.secondary)
                 } else if let job = state.catalogDownload(id:id), job.running {

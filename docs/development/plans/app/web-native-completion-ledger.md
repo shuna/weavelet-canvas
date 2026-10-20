@@ -1448,3 +1448,19 @@ Web関連22件・型検査・Vite build・bundle鮮度成功。Catalyst ChatLibr
 独立Astraの機能群監査と期待訂正の限定監査は新規P1/P2なし。全消去を初期化として設定/clipboardまで消す別実装は追加していない。ログは/private/tmp/weavelet-clear-library-{generate,web,types,build,native,isolate,native-final,ui-build}.log。isolateは原因調査用の失敗runであり成功数に含めない。実cloud相互運用・実端末/狭幅/文字拡大/VoiceOver等の最終受入は引き続き未完了。iPhone導入・push/main統合は行っていない。
 
 Catalyst final UI build succeeded. Isolated FAKE settings showed the all-conversations/folders entry, the explicit scope and irreversible-action warning, and cancellation returning to settings. The destructive confirmation was not exercised through the UI; execution and failure preservation are covered by the automated boundary tests above. The exact app process was stopped and built Info.plist was restored byte-for-byte.
+
+## 分割GGUFの取得・配置・実行接続（2026-10-21）
+
+WebのhfSearch.downloadPlanとggufShardUtilsが返す全shard・順序・entrypointをnativeへ接続した。shared localModelFilesは既存manifest helperを使い、transformers.js multi-fileに加えてwllama gguf-shardedを扱う。既存モデル判定も共有のgetManifestPrimaryFileへ接続し、Web/native双方で登録済み分割モデルを見つける。Swiftでshard命名規則・候補分類・登録ルールを作り直していない。
+
+native取得は既存URLSession download transportを逐次利用し、取消時は待機中のshard処理も終端へ進める。plan hashごとの端末専用cacheに取得済みshardとSHAを保持し、再起動/通信失敗/保存失敗後は再検証して利用する。各shardの取得元はHTTPS Hugging Face、downgrade redirectを拒否し、原本URL/revisionの一致時だけ既存resume dataを利用する。全shard取得後に実bytesから共有定義を作り、既存directory inspect/stage/publishを使う。配置直前に全path/SHAを再照合、既存同IDの異内容は拒否、未変更の最新stateへ共有catalogCommitを適用して一回保存する。単一GGUFと分割GGUFは同じ登録/metadata境界を利用し、未知model/root項目をopaqueのまま保つ。新依存・保存/sync schema変更はない。
+
+directory publish後の保存失敗は、公開したroot revisionと一致する場合だけatomic rollbackする。別世代に変わっていれば削除せず、旧pending世代をdiscard/deinitから保全する。取得後cleanupまで同IDを予約する。独立Astraは当初、cacheのFileManager書込みが中間symlinkを追って既存assetを上書きするP2を検出した。既存descriptorアクセスへ統合し、cache親/root/partsをopenat/mkdirat+O_NOFOLLOWで開き、file/markerはdescriptor相対temp→renameat、cleanupもdescriptor相対削除へ修正した。外部symlink targetを変更しないtestを追加。限定再監査は新規P1/P2なし。
+
+生成・品質評価は定義に応じて単一fileまたはdirectory内の先頭shardを返す既存LocalModelFilesへ接続する。分割では全必須shard・partial不在・GGUF header・file identityを確認し、全量Data読込や実行開始ごとの全hash計算を行わない。OS側は既存llama_model_load_from_fileを利用する。設定では分割定義も生成/分析の役割候補とfolder取込の対象にし、HF候補の未対応表示を除いた。
+
+Web関連13件（2file）・型検査・Vite build・bundle生成/鮮度成功。Catalyst初回42件中41成功/任意の実GGUF五軸評価1skip。最初の実split loader filterは誤記により0件であり成功と数えない。cache修正後は影響16件中15成功/新接続test1失敗。失敗はflat→treeの実編集経路に必要な新node IDが、testで一つだけ指定されて足りなかったため。既存同種testと同じ通常UUID生成へ戻し、期待値を変えず接続case/cache/shard取得取消の4件のみ最終成功。関連ログ間のtest名を集計して固有44件成功/1skipを確認した。一括44件成功とはしない。HTTP失敗→再起動後の完了済shard再利用、保存失敗で全corpus/disk/登録先不変、再取得なしretry、取消と古い応答、既存世代rollbackと別世代保全、全非対象root raw保持、再起動snapshot一致、全record往復一致、生成/分析entrypointとcredential不使用を確認。変更しない暗号/sync基盤の全項目I/O・実Web暗号化wireの既存成功を再利用する。
+
+公式tinyモデルはNativeLlama/test-model.jsonの固定URL・SHA 270cba1bd5109f42d03350f60406024560464db173c0e387d91f0426d3bd256d（1,185,376bytes）を使用。固定済みllama.cppの公式llama-gguf-splitを別/tmp host buildで作り、`--split-max-size 1M`で2shardを生成した。firstは1,003,168bytes/SHA 7b273e1dbfab11dc67dce479deb5923fef27c39cbf56a20b3a928a47b77dab3c、secondは182,400bytes/SHA 50d019817c2626eb9e8a41f361ff5bfa538757e6f708a3076cd3356354a75694。Catalyst実engineで第1shardから8token生成、copyした第2shardを除去するとmodelLoad拒否を確認した。元fixtureは変更せず、配布物へモデル/host tool/新依存を追加していない。これは実モデルの分割loader証拠であり、大容量性能や品質五軸実行の証拠ではない。
+
+最終Catalystで隔離FAKE定義とtiny split filesを一時配置し、生成roleの候補/選択、保存済みモデルのfolder表示/置換入口を確認した。UI fixture準備の最初の2scriptは保存snapshot/stateのJSON文字列wrapperを誤認して変更前に停止し、LocalStateStoreの実encoderを読んで修正した。アプリ終了後にfixture state/built Infoをbyte一致復元し、一時モデルだけを撤去した。大量モデルの実HTTP Range/resume、OS中断/復帰・大容量性能、実cloud相互運用・全UI最終受入は未確認。HF revisionはWeb同様mainであり、固定commitやモデル署名を保証しない。ログは/private/tmp/weavelet-sharded-{generate,web,web-final,types,types-final,web-build,native,native-final,connection-final}.log。iPhone照会/導入、push/main統合は行っていない。

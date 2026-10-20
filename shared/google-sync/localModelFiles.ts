@@ -4,8 +4,10 @@ import type { LocalModelDefinition } from '../../src/local-llm/types';
 
 export function localModelFiles(json: string): string {
   const { model, files = [] } = JSON.parse(json) as { model: LocalModelDefinition; files?: string[] };
-  if (typeof model.id !== 'string' || !model.id.trim() || model.engine !== 'transformers.js' || model.manifest?.kind !== 'multi-file') {
-    throw new Error('Select a Transformers.js multi-file model');
+  const supported = (model.engine === 'transformers.js' && model.manifest?.kind === 'multi-file')
+    || (model.engine === 'wllama' && model.manifest?.kind === 'gguf-sharded');
+  if (typeof model.id !== 'string' || !model.id.trim() || !supported) {
+    throw new Error('Select a supported multi-file model');
   }
   const requiredFiles = getManifestFiles(model.manifest);
   const entrypoint = getManifestPrimaryFile(model.manifest);

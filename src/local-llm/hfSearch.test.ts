@@ -67,6 +67,12 @@ describe('Hugging Face search plans', () => {
       id: 'custom', engine: 'wllama', tasks: [], label: 'custom', origin: 'bartowski/Qwen_Qwen3-0.6B-GGUF', source: 'opfs',
       manifest: { kind: 'single-file', entrypoint: 'Qwen_Qwen3-0.6B-Q4_K_M.gguf' },
     }])).toBe('qwen3-0.6b-q4km');
+    expect(findExistingModelForVariant('org/split', 'model-00001-of-00002.gguf', [{
+      id: 'split', engine: 'wllama', tasks: [], label: 'split', origin: 'org/split', source: 'opfs',
+      manifest: { kind: 'gguf-sharded', entrypoint: 'model-00001-of-00002.gguf', shards: [
+        'model-00001-of-00002.gguf', 'model-00002-of-00002.gguf',
+      ], totalSize: 8 },
+    }])).toBe('split');
     expect(findExistingModelForVariant('org/model-gguf', 'model-Q4_K_M.gguf', [{
       id: 'custom', engine: 'wllama', tasks: [], label: 'custom', origin: 'org/model-gguf', source: 'opfs',
       manifest: { kind: 'single-file', entrypoint: 'model-Q4_K_M.gguf' },

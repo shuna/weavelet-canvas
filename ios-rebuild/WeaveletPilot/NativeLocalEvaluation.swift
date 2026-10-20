@@ -9,11 +9,11 @@ enum NativeLocalEvaluation {
         guard let model = models.first(where: {
             guard let id = $0["id"], case .string(let value) = id else { return false }
             return value.utf8.elementsEqual(modelID.utf8)
-        }), model["engine"] == .string("wllama"), model["manifest"]?["kind"] == .string("single-file"),
+        }), model["engine"] == .string("wllama"), [.string("single-file"),.string("gguf-sharded")].contains(model["manifest"]?["kind"] ?? .null),
               try model.required("tasks").array("local tasks").contains(.string("analysis")) else {
-            throw ExchangeError.invalid("選択した分析モデルは単一GGUFによる品質評価に対応していません")
+            throw ExchangeError.invalid("選択した分析モデルはGGUFによる品質評価に対応していません")
         }
-        return try files.installed(modelID:modelID)
+        return try files.installed(model:model)
     }
 
     @MainActor
