@@ -8,6 +8,8 @@ import {
   buildExportContentStore,
   resolveContent,
 } from './contentStore';
+import { flatChatToBranchTree } from './branchUtils';
+import { selectBubbleSummary } from './bubbleSummaryOperations';
 import { prepareChatForExport } from './chatExport';
 
 const text = (t: string): ContentInterface[] => [{ type: 'text', text: t }];
@@ -15,6 +17,54 @@ const L = 'This is a fairly long text that simulates a real chat message with en
 const lt = (suffix: string): ContentInterface[] => [{ type: 'text', text: L + suffix }];
 
 describe('prepareChatForExport', () => {
+  it('retains flat summary references through branch normalization and export', () => {
+    const chat: ChatInterface = {
+      id: 'flat-summary',
+      title: 'Flat summary',
+      config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+      titleSet: false,
+      imageDetail: 'auto',
+      messages: [
+        { role: 'user', content: text('first') },
+        { role: 'assistant', content: text('second') },
+      ],
+      summaryTargets: { '0': true, '1': false, invalid: true },
+    };
+    const selected = selectBubbleSummary(chat, ['0', '1'], 'range', '1', undefined, chat.config, {
+      favoriteModels: [], providers: {}, fallbackProvider: { endpoint: 'https://example.test/v1/chat/completions' },
+    }, 'saved', 1);
+    chat.summaries = [{ ...selected.summary, text: 'saved summary', useForSubmit: true }, {
+      id: 'invalid', mode: 'single', useForSubmit: false, text: 'invalid source',
+      sources: [{ nodeId: '1', parentId: '0', role: 'user', textParts: ['stale source'] }],
+    }];
+    const summaryMetadata = { futureSummary: { version: 4 } };
+    const sourceMetadata = { futureSource: { retained: true } };
+    Object.assign(chat.summaries![0], summaryMetadata);
+    Object.assign(chat.summaries![0].sources[1], sourceMetadata);
+    const store: ContentStoreData = {};
+
+    flatChatToBranchTree(chat, store);
+
+    const [first, second] = chat.branchTree!.activePath;
+    expect(chat.summaryTargets).toEqual({ [first]: true, [second]: false, invalid: true });
+    expect(chat.summaries![0]).toMatchObject({
+      id: 'saved', mode: 'range', useForSubmit: true, text: 'saved summary',
+      ...summaryMetadata,
+      sources: [
+        { nodeId: first, parentId: null, role: 'user', textParts: ['first'] },
+        { nodeId: second, parentId: first, role: 'assistant', textParts: ['second'], ...sourceMetadata },
+      ],
+    });
+    expect(chat.summaries![1]).toEqual({
+      id: 'invalid', mode: 'single', useForSubmit: false, text: 'invalid source',
+      sources: [{ nodeId: second, parentId: '0', role: 'user', textParts: ['stale source'] }],
+    });
+
+    const exported = prepareChatForExport(chat, store).chat;
+    expect(exported.summaryTargets).toEqual({ [first]: true, [second]: false });
+    expect(exported.summaries).toEqual([chat.summaries![0]]);
+  });
+
   it('keeps only the currently visible branch when requested', () => {
     const chat: ChatInterface = {
       id: 'chat-1',

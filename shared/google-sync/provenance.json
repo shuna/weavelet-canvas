@@ -14,7 +14,7 @@
     "src/utils/chatFolders.ts": "2da5de3f25f587c475b75eee69ec7d8e56f60ae6dccc9dac7df640ea23827942",
     "src/utils/chatShallowClone.ts": "aaf8c20c6ff4f172b21b0a5887bd56afb0d705fdaaf196516449693563c2939f",
     "src/types/chat.ts": "e8c6584c8170cd13c2ebd6c3d652178f456553f60f2091270ccc3a7b86d1b6dd",
-    "src/utils/branchUtils.ts": "ec27dd03a6de366b40e53fcf1902a166ca83c43a94dbd3333e53cae6c942d091",
+    "src/utils/branchUtils.ts": "566f33b4157446434abb761f4c1634d2e7a82a76df4202802b0eee03ae95923e",
     "src/store/branch-domain.ts": "b5d0192d1ac80b6b881198cc105f2556eda8ab33ff25055974bd60de69ca207e",
     "src/utils/streamingBuffer.ts": "4040506b5be29b03bf1a67b82efe71357c2f77b7b3b35d9e2edae03d7acf5ae9",
     "src/utils/contentStore.ts": "7610d2105447f05b47b256cc2ec1de1c739154fa200e9cea933b8c5234fc0f8b",
@@ -203,7 +203,7 @@
     "src/utils/jsonChanges.ts": "b6b3069fbd3632e4ace431aa4334923955f7a0c933e848f18a985f36de1d2e7b",
     "shared/google-sync/editing.ts": "bbc1882c0939239d88fbb91ccd48657f080ebd958e4997a7a46f927d28287747",
     "shared/google-sync/adapters/uuid.ts": "27a7e045a0ebbb429ad65b4f3d1757f34c5b4187d8555aa523afaf337ddb010a",
-    "src/utils/branchUtils.ts": "ec27dd03a6de366b40e53fcf1902a166ca83c43a94dbd3333e53cae6c942d091",
+    "src/utils/branchUtils.ts": "566f33b4157446434abb761f4c1634d2e7a82a76df4202802b0eee03ae95923e",
     "src/store/branch-domain.ts": "b5d0192d1ac80b6b881198cc105f2556eda8ab33ff25055974bd60de69ca207e",
     "src/utils/streamingBuffer.ts": "4040506b5be29b03bf1a67b82efe71357c2f77b7b3b35d9e2edae03d7acf5ae9",
     "src/utils/contentStore.ts": "7610d2105447f05b47b256cc2ec1de1c739154fa200e9cea933b8c5234fc0f8b",
@@ -424,5 +424,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "f57db0aa52afe6c22c8f72970f0e4924f3ab41bb04bc74d36e3fb06152acac61"
+  "bundleSHA256": "dcdac0cb333ea04a42a6d75c05551d8d1323874864ff53d7e376b5fa324e1d1b"
 }

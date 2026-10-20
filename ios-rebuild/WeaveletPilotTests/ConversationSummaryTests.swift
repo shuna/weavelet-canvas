@@ -124,6 +124,13 @@ final class ConversationSummaryTests: XCTestCase {
             let prepared = try XCTUnwrap(ConversationSummary.prepare(source:value,state:state,chatID:"chat",sourceNodeIDs:["message-0"],mode:index == 0 ? "single" : "through",originNodeID:"message-0",summaryID:id,now:Double(index + 1),legacy:legacy))
             value = try XCTUnwrap(ConversationSummary.apply(("Saved version \(index + 1)",nil),prepared:prepared,source:value,state:state)).source
         }
+        let rawChat = try value.required("chats").array("chats")[0]
+        let rawSurrogate = try OrderedJSON.decode(Data(#""\ud800""#.utf8))
+        let enriched = try rawChat.required("summaries").array("summaries").map { summary in
+            let sources = try summary.required("sources").array("sources").map { $0.replacing("xRaw",with:rawSurrogate) }
+            return summary.replacing("xFuture",with:.number("9007199254740993")).replacing("sources",with:.array(sources))
+        }
+        value = value.replacing("chats",with:.array([rawChat.replacing("summaries",with:.array(enriched))]))
         let app = ChatState(store: store)
         try app.importWebData(value.replacing("version",with:.number("3")).encoded())
         let info = try XCTUnwrap(app.summaryInfo(chatID:"chat",nodeID:"message-0"))
@@ -145,6 +152,17 @@ final class ConversationSummaryTests: XCTestCase {
         XCTAssertEqual(try app.summaryInfo(chatID:"chat",nodeID:"message-0")?["tab"], .string("original"))
         XCTAssertEqual(try app.summaryInfo(chatID:"chat",nodeID:"message-0")?["summary"]?["id"], .string("summary-e\u{0301}"))
         XCTAssertEqual(try ChatState(store:store).exportWebData(), try app.exportWebData())
+        try app.ensureBranchTreeForEditor(chatID:"chat")
+        let treeNodeID = try XCTUnwrap(app.conversation?.visibleMessages.first?.id)
+        XCTAssertNotEqual(treeNodeID, "message-0")
+        let converted = try XCTUnwrap(app.summaryInfo(chatID:"chat",nodeID:treeNodeID))
+        XCTAssertEqual(try converted.required("savedVersions").array("versions"), versions)
+        XCTAssertEqual(converted["anchor"], .string(treeNodeID))
+        XCTAssertEqual(converted["summary"]?["xFuture"], .number("9007199254740993"))
+        XCTAssertEqual(try converted["summary"]?.required("sources").array("sources")[0]["xRaw"], rawSurrogate)
+        let receiver = ChatState()
+        try receiver.importWebData(app.exportWebData())
+        XCTAssertEqual(try receiver.summaryInfo(chatID:"chat",nodeID:treeNodeID)?["savedVersions"], converted["savedVersions"])
     }
 
     func testGeneratedSummaryAppliesAndRestartsThroughTheNativeStore() async throws {

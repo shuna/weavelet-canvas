@@ -1371,3 +1371,10 @@ Web関連12件・型検査・Vite build・bundle鮮度が成功。Catalyst Summa
 隔離FAKE Catalystでtree付き合成会話を通常取込し、バブル内二候補表示、原文を維持した版選択、要約表示後のSaved version 1→2更新を確認した。終了後process不在・built Info byte一致復元済み。flat会話の選択追加取込ではsummary参照がtree生成IDへ追従せず、後段の範囲抽出で候補が除外される共有元の問題を別途発見し、修正中。tree付き表示確認をこのflat保全の成功とは数えない。設定入口の追加照合では評価safety/quality閾値編集とdebug panel入口/実表示にnative差を確認し、後続対象とする。モデルcatalog/downloadの機能差は端末file importだけで同等と推定せず、別途判断する。
 
 保存/同期schemaは未変更で、全項目I/O・暗号化wireの既存成功を再利用。実cloud、狭幅/文字拡大/VoiceOver、drag開始/完了を含む全機能/UI最終受入は未完了。iPhone照会/導入・push・main統合は行っていない。
+## flat会話の要約参照をtree変換で保全（2026-10-21）
+
+前節のflat選択取込での候補消失を修正した。実Web previewSourceFromPlanはflatChatToBranchTreeでUUIDを割当てるが、summaryTargetsとsummary sourceは旧indexのままで、後段prepareChatForExportの参照判定から除外されていた。既存flat変換で同じcanonical index→UUID対応を適用する。実summarySourcesはflatの全parentIdをnullにするため、元nullだけ新treeの親関係へ更新し、元からnonnullの不整合parent・role・textPartsは勝手に修復しない。未知summary/source metadata、本文、候補順、useForSubmitを保持する。
+
+WebのchatExport/importService/summary関連87件、branch-domain26件、計113件、型検査・Vite build・bundle鮮度が成功。最初の手書きrange fixtureはflatの第2parentを誤ってindex文字列にしていたため、実selectBubbleSummaryから作る形に修正した。native追加testの初回はSharedWebProjection.chatがsummariesをopaque参照としていたためTypeErrorとなり、独立Astraでも同じP1を検出した。既存ConversationSummaryの構造投影を共通chat境界へ移して重複を除去し、全native flat→tree callerへ適用した。修正後のCatalyst Summary7＋MessageEditing36、計43件が成功。追加境界testはensure後も同候補保持、source参照更新、未知巨大数/孤立UTF16保持、V3再取込を確認する。該当投影とparent変換の限定Astra再監査は新規P1/P2なし。ログ /private/tmp/weavelet-flat-summary-{generate,web-test,branch-test,types,build,freshness,native-test,native-final-test}.log。
+
+修正後の隔離FAKE Catalystで同じflat合成ファイルの選択追加取込を再確認し、二候補が表示され、原文からSaved version 1へ切替できることを確認した。隔離保存sourceにも二要約があり、全source.nodeId/parentIdがtreeと整合する。終了後process不在・built Info byte一致復元済み。origin/mainをfetchしa4d83db6から追加commitなしを確認。保存/同期schemaとwireは未変更で、全項目I/O・実Web→native→Web暗号化wireの既存成功を再利用した。実cloudと全機能/UI/OSの最終受入は未完了、前節の設定差も継続対象。iPhone照会/導入・push・main統合は行っていない。

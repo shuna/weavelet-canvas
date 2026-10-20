@@ -9,6 +9,7 @@ import { _defaultChatConfig, _defaultImageDetail } from '@constants/chat';
 import type { ChatInterface, FolderCollection } from '@type/chat';
 import { addContent, addContentDelta, computeContentHash, resolveContent, type ContentStoreData } from '@utils/contentStore';
 import { flatMessagesToBranchTree } from '@utils/branchUtils';
+import { selectBubbleSummary } from '@utils/bubbleSummaryOperations';
 import { PartialImportError } from '@utils/import';
 
 const testContext = vi.hoisted(() => {
@@ -1055,6 +1056,35 @@ describe('importService', () => {
     expect(testContext.invalidateAiTasks).not.toHaveBeenCalled();
     expect(testContext.resolveLegacyRemoteSnapshot).not.toHaveBeenCalled();
     expect(testContext.setLocalStorageItem).not.toHaveBeenCalled();
+  });
+
+  it('retains saved summaries when a flat chat is normalized for preview selection import', async () => {
+    const flat = createChat('flat-summary');
+    flat.messages = [
+      { role: 'user', content: [{ type: 'text', text: 'first' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'second' }] },
+    ];
+    flat.summaryTargets = { '0': true, '1': false };
+    const selected = selectBubbleSummary(flat, ['0', '1'], 'range', '1', undefined, flat.config, {
+      favoriteModels: [], providers: {}, fallbackProvider: { endpoint: 'https://example.test/v1/chat/completions' },
+    }, 'saved', 1);
+    flat.summaries = [{ ...selected.summary, text: 'saved summary', useForSubmit: true }];
+    const source = await prepareImportPreview(new File([JSON.stringify({ version: 3,
+      chats: [flat], contentStore: {}, folders: {},
+    })], 'flat-summary.json'), t);
+    const [first, second] = source.chats[0].branchTree!.activePath;
+    expect(source.chats[0].summaries?.[0].sources).toMatchObject([
+      { nodeId: first, parentId: null }, { nodeId: second, parentId: first },
+    ]);
+
+    expect((await importSelectedPreview(source, [source.chats[0].id], t)).success).toBe(true);
+
+    const imported = testContext.storeState.chats[0];
+    expect(imported.summaryTargets).toEqual({ [first]: true, [second]: false });
+    expect(imported.summaries?.[0]).toMatchObject({
+      useForSubmit: true,
+      sources: [{ nodeId: first, parentId: null }, { nodeId: second, parentId: first }],
+    });
   });
 
   it('selectively imports all branches, resolves external delta bases, remaps collisions and preserves the latest workspace', async () => {

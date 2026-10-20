@@ -397,10 +397,36 @@ struct SharedWebProjection {
     mutating func config(_ value: OrderedJSON) throws -> OrderedJSON {
         try fields(value, known: ["systemPrompt"])
     }
+    mutating private func projectedSummaries(_ value: OrderedJSON) throws -> OrderedJSON {
+        .array(try value.array("summaries").map { summary in
+            var projected = try fields(summary, known: ["id", "mode", "format", "text", "useForSubmit", "sources", "generation"])
+            if let sources = summary["sources"] {
+                projected = projected.replacing("sources", with: .array(try sources.array("sources").map { source in
+                    try fields(source, known: ["nodeId", "parentId", "role", "textParts"])
+                }))
+            }
+            if let generation = summary["generation"] {
+                var projectedGeneration = try fields(generation, known: ["model", "providerId", "createdAt", "settings"])
+                if let settings = generation["settings"] {
+                    projectedGeneration = projectedGeneration.replacing("settings", with: try fields(settings, known: ["temperature", "max_tokens", "reasoning_effort"]))
+                }
+                projected = projected.replacing("generation", with: projectedGeneration)
+            }
+            return projected
+        })
+    }
+    mutating private func projectedSummaryTargets(_ value: OrderedJSON) throws -> OrderedJSON {
+        .object(try value.object("summary targets").map { field in
+            if case .bool = field.value { return field }
+            return .init(key: field.key, value: try reference(field.value))
+        })
+    }
     mutating func chat(_ value: OrderedJSON) throws -> OrderedJSON {
         var result = try fields(value, known: ["id", "title", "titleSet", "imageDetail", "messages", "config", "branchTree", "collapsedNodes", "omittedNodes", "protectedNodes"])
         if let configuration = value["config"] { result = result.replacing("config", with: try config(configuration)) }
         if case .array = value["messages"] { result = result.replacing("messages", with: try messages(value.required("messages"))) }
+        if let summaries = value["summaries"] { result = result.replacing("summaries", with: try projectedSummaries(summaries)) }
+        if let targets = value["summaryTargets"] { result = result.replacing("summaryTargets", with: try projectedSummaryTargets(targets)) }
         if let tree = value["branchTree"] {
             var projectedTree = try fields(tree, known: ["nodes", "rootId", "activePath", "messageAttributesV1"])
             var nodes: [JSONField] = []

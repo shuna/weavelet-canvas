@@ -201,14 +201,28 @@ export function flatMessagesToBranchTree(
 export function flatChatToBranchTree(chat: ChatInterface, contentStore: ContentStoreData): void {
   if (chat.branchTree) return;
   const tree = flatMessagesToBranchTree(chat.messages, contentStore);
-  for (const field of ['collapsedNodes', 'omittedNodes', 'protectedNodes'] as const) {
+  const remapFlatNodeId = (id: string) => {
+    const index = Number(id);
+    return Number.isInteger(index) && index >= 0 && String(index) === id
+      ? tree.activePath[index] ?? id
+      : id;
+  };
+  for (const field of ['collapsedNodes', 'omittedNodes', 'protectedNodes', 'summaryTargets'] as const) {
     if (!chat[field]) continue;
-    chat[field] = Object.fromEntries(Object.entries(chat[field]!).map(([key, value]) => {
-      const index = Number(key);
-      const id = Number.isInteger(index) && index >= 0 && String(index) === key ? tree.activePath[index] : undefined;
-      return [id ?? key, value];
-    }));
+    chat[field] = Object.fromEntries(Object.entries(chat[field]!).map(([key, value]) => [remapFlatNodeId(key), value]));
   }
+  if (chat.summaries) chat.summaries = chat.summaries.map(summary => ({
+    ...summary,
+    sources: summary.sources.map(source => ({
+      ...source,
+      nodeId: remapFlatNodeId(source.nodeId),
+      // Flat summaries use null for every parent; rebuild that relation from the new tree.
+      // A non-null legacy value was never valid for a flat chat, so preserve it as invalid.
+      parentId: source.parentId === null
+        ? tree.nodes[remapFlatNodeId(source.nodeId)]?.parentId ?? null
+        : source.parentId,
+    })),
+  }));
   chat.branchTree = tree;
   chat.messages = materializeActivePath(tree, contentStore);
 }

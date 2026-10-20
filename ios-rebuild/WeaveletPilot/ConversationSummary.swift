@@ -43,11 +43,6 @@ enum ConversationSummary {
             displayNodeID(try $0.required("nodeId").string("node ID"),chat:rawChat)
         }
     }
-    private static func project(_ value: OrderedJSON, known: [String], boundary: inout SharedWebProjection) throws -> OrderedJSON {
-        .object(try value.object("summary field").map { field in
-            .init(key:field.key,value:known.contains(where: field.key.matches) ? field.value : try boundary.reference(field.value))
-        })
-    }
     private static func projectedConfig(_ config: OrderedJSON, boundary: inout SharedWebProjection) throws -> OrderedJSON {
         var projected = try ChatConfig.projection(config,boundary:&boundary)
         for key in ["temperature", "top_p", "presence_penalty", "frequency_penalty"] {
@@ -59,31 +54,6 @@ enum ConversationSummary {
         var result = try boundary.chat(chat)
         if let config = chat["config"] {
             result = result.replacing("config",with:try projectedConfig(config,boundary:&boundary))
-        }
-        if let summaries = chat["summaries"] {
-            let projected = try summaries.array("summaries").map { summary -> OrderedJSON in
-                var value = try project(summary,known:["id", "mode", "format", "text", "useForSubmit", "sources", "generation"],boundary:&boundary)
-                if let sources = summary["sources"] {
-                    value = value.replacing("sources",with:.array(try sources.array("sources").map {
-                        try project($0,known:["nodeId", "parentId", "role", "textParts"],boundary:&boundary)
-                    }))
-                }
-                if let generation = summary["generation"] {
-                    var projectedGeneration = try project(generation,known:["model", "providerId", "createdAt", "settings"],boundary:&boundary)
-                    if let settings = generation["settings"] {
-                        projectedGeneration = projectedGeneration.replacing("settings",with:try project(settings,known:["temperature", "max_tokens", "reasoning_effort"],boundary:&boundary))
-                    }
-                    value = value.replacing("generation",with:projectedGeneration)
-                }
-                return value
-            }
-            result = result.replacing("summaries",with:.array(projected))
-        }
-        if let targets = chat["summaryTargets"] {
-            result = result.replacing("summaryTargets",with:.object(try targets.object("summary targets").map { field in
-                if case .bool = field.value { return field }
-                return .init(key:field.key,value:try boundary.reference(field.value))
-            }))
         }
         return result
     }
