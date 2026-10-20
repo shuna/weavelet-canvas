@@ -130,8 +130,8 @@ struct ChatView: View {
                 activeContent
             }
             .environment(\.conversationFind,conversationFind)
-            .task(id:FindInput(query:conversationFind.query,enabled:conversationFind.enabled,bodies:conversationFindBodies,running:state.generation?.running ?? false,starredOnly:conversationFind.starredOnly)) {
-                if conversationFind.enabled && state.generation?.running == true { conversationFind.suspend() }
+            .task(id:FindInput(query:conversationFind.query,enabled:conversationFind.active,bodies:conversationFindBodies,running:state.generation?.running ?? false,starredOnly:conversationFind.starredOnly,highlightsNodes:conversationFind.highlightsNodes,nodeNavigation:conversationFind.nodeNavigation)) {
+                if conversationFind.active && state.generation?.running == true { conversationFind.suspend() }
                 else { await conversationFind.search(conversationFindBodies) }
             }
             .navigationTitle((state.conversation.flatMap { $0.title.isEmpty ? nil : $0.title } ?? "Weavelet Pilot") + (RemoteFixture.enabled ? " · FAKE" : ""))
@@ -709,14 +709,14 @@ struct ChatView: View {
         }
     }
     private var conversationFindBodies: [ConversationFindBody] {
-        guard conversationFind.enabled, !conversationFind.query.isEmpty else { return [] }
+        guard conversationFind.active, !conversationFind.query.isEmpty else { return [] }
         guard let conversation = state.conversation,
               let nodes = try? DisplaySettings.messagesForDisplay(conversation.visibleMessages,advancedMode:advancedMode) else { return [] }
         let inlineLatex = (try? state.displaySetting(.inlineLatex)) != .bool(false)
         let defaultRendered = MarkdownTextView.defaultRendered(settings:(try? state.publicationSnapshot().required("state")) ?? .object([]))
         return nodes.flatMap { node -> [ConversationFindBody] in
             let summary = try? state.summaryInfo(chatID:conversation.id,nodeID:node.id)
-            guard (!conversationFind.starredOnly || node.options.starred), summary?["hidden"] != .bool(true), inlineDraft?.targets(chatID:conversation.id,nodeID:node.id) != true else { return [] }
+            guard (conversationFind.highlightsNodes || !conversationFind.starredOnly || node.options.starred), summary?["hidden"] != .bool(true), inlineDraft?.targets(chatID:conversation.id,nodeID:node.id) != true else { return [] }
             let rendered = conversationFind.modes[ConversationFindBody.key(node.id,"mode",context:conversation.identity)] ?? defaultRendered
             return MessageBodyItem.items(node:node,summaryInfo:summary,generation:generation(at:node,in:conversation),context:conversation.identity).compactMap { $0.findBody(rendered:rendered && !conversationFind.rawFallbacks.contains($0.id),inlineLatex:inlineLatex) }
         }
@@ -727,7 +727,9 @@ struct ChatView: View {
         let bodies: [ConversationFindBody]
         let running: Bool
         let starredOnly: Bool
-        static func == (a:Self,b:Self) -> Bool { a.query.utf8.elementsEqual(b.query.utf8) && a.enabled == b.enabled && a.bodies == b.bodies && a.running == b.running && a.starredOnly == b.starredOnly }
+        let highlightsNodes: Bool
+        let nodeNavigation: UUID
+        static func == (a:Self,b:Self) -> Bool { a.query.utf8.elementsEqual(b.query.utf8) && a.enabled == b.enabled && a.bodies == b.bodies && a.running == b.running && a.starredOnly == b.starredOnly && a.highlightsNodes == b.highlightsNodes && a.nodeNavigation == b.nodeNavigation }
     }
     private var chatContent: some View {
             GeometryReader { viewport in

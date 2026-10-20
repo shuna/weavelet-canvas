@@ -183,3 +183,96 @@ extension ConversationFindTests {
         XCTAssertEqual(find.ranges["body"],[NSRange(location:0,length:2),NSRange(location:10,length:2)])
     }
 }
+
+extension ConversationFindTests {
+    func testAllNodeSearchBarNavigatesBranchesAndKeepsNodeCountSeparateFromHighlights() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("all-node-find-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+        defer { try? FileManager.default.removeItem(at:directory) }
+        let state = ChatState(store:LocalStateStore(fileURL:directory.appendingPathComponent("state.json")))
+        let repository = URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        var source = try OrderedJSON.decode(Data(contentsOf:repository.appendingPathComponent("tests/fixtures/web-native/io-corpus.json"))).required("exportV3")
+        let store = try source.required("contentStore")
+        let inactive = try store.required("inactive").replacing("content",with:.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string("本文 本文"))])]))
+        source = source.replacing("contentStore",with:store.replacing("inactive",with:inactive))
+        try state.importWebData(source.encoded())
+        let find = ConversationFind()
+        var navigations: [String?] = []
+        let host = UIHostingController(rootView:ChatSearchView(state:state,initialMode:.nodes,initialScope:.all,inline:true,dismissOnSelection:false,bodyFind:find) { result, _ in
+            try state.navigate(chatID:result.chatID,nodeID:result.nodeID,source:.search)
+            navigations.append(result.nodeID)
+        })
+        let window = UIWindow(frame:CGRect(x:0,y:0,width:393,height:600))
+        window.rootViewController = host; window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        host.view.frame = CGRect(x:0,y:0,width:393,height:600)
+        func field(_ view:UIView) -> UITextField? {
+            if let view = view as? UITextField { return view }
+            return view.subviews.lazy.compactMap { field($0) }.first
+        }
+        let mounted = XCTNSPredicateExpectation(predicate:NSPredicate { _, _ in
+            host.view.setNeedsLayout(); host.view.layoutIfNeeded()
+            return field(host.view) != nil
+        },object:nil)
+        await fulfillment(of:[mounted],timeout:5)
+        let input = try XCTUnwrap(field(host.view))
+        input.text = "本文"; input.sendActions(for:.editingChanged)
+        let first = XCTNSPredicateExpectation(predicate:NSPredicate { _, _ in
+            host.view.setNeedsLayout(); host.view.layoutIfNeeded()
+            return navigations.first == "n-user"
+        },object:nil)
+        await fulfillment(of:[first],timeout:5)
+        XCTAssertTrue(find.highlightsNodes); XCTAssertFalse(find.enabled)
+        let nodeResults = try ChatSearch.results(in:try XCTUnwrap(state.exchange?.source),query:"本文",mode:.nodes,scope:.all,chatID:"chat-a")
+        XCTAssertEqual(nodeResults.map(\.nodeID),["n-user","n-inactive"])
+        let refresh = find.nodeNavigation
+        input.sendActions(for:.editingDidEndOnExit)
+        let next = XCTNSPredicateExpectation(predicate:NSPredicate { _, _ in
+            host.view.setNeedsLayout(); host.view.layoutIfNeeded()
+            return navigations.last == "n-inactive"
+        },object:nil)
+        await fulfillment(of:[next],timeout:5)
+        XCTAssertNotEqual(find.nodeNavigation,refresh)
+        let conversation = try XCTUnwrap(state.conversation)
+        XCTAssertTrue(conversation.visibleMessages.contains { $0.id == "n-inactive" })
+        func displayedBodies() -> [ConversationFindBody] {
+            guard let conversation = state.conversation else { return [] }
+            return conversation.visibleMessages.flatMap { node in
+                MessageBodyItem.items(node:node,summaryInfo:try? state.summaryInfo(chatID:conversation.id,nodeID:node.id),generation:nil,context:conversation.identity)
+                    .compactMap { $0.findBody(rendered:false,inlineLatex:false) }
+            }
+        }
+        // The corpus explicitly starts with n-inactive collapsed; node search still finds its source.
+        await find.search(displayedBodies())
+        XCTAssertEqual(find.matches.count,1)
+        XCTAssertEqual(nodeResults.count,2)
+        XCTAssertEqual(find.selected?.nodeID,"n-user") // Web highlights the first match on the displayed path.
+        try state.setAllMessagesCollapsed(false)
+        host.view.setNeedsLayout(); host.view.layoutIfNeeded()
+        let bodies = displayedBodies()
+        await find.search(bodies)
+        XCTAssertEqual(find.matches.count,3)
+        let inactiveBody = try XCTUnwrap(bodies.first { $0.nodeID == "n-inactive" && $0.text == "本文 本文" })
+        XCTAssertEqual(find.ranges[inactiveBody.id]?.count,2)
+        XCTAssertNotNil(find.request(for:inactiveBody.id))
+        let samePathRefresh = find.nodeNavigation
+        find.refreshAfterNodeNavigation()
+        XCTAssertNotEqual(find.nodeNavigation,samePathRefresh)
+        XCTAssertTrue(find.matches.isEmpty)
+        find.configure(query:"本文",enabled:true)
+        XCTAssertFalse(find.highlightsNodes); XCTAssertTrue(find.active)
+        await find.search(bodies)
+        XCTAssertEqual(find.matches.count,3)
+        find.configure(query:"",enabled:false)
+        XCTAssertFalse(find.active); XCTAssertNil(find.request(for:inactiveBody.id))
+        // Web matches UTF-16 literally; native task identity must not normalize the query.
+        for query in ["é","e\u{301}"] {
+            input.text = query; input.sendActions(for:.editingChanged)
+            let changed = XCTNSPredicateExpectation(predicate:NSPredicate { _, _ in
+                host.view.setNeedsLayout(); host.view.layoutIfNeeded()
+                return find.query.utf8.elementsEqual(query.utf8)
+            },object:nil)
+            await fulfillment(of:[changed],timeout:3)
+        }
+    }
+}

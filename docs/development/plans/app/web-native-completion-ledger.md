@@ -1082,3 +1082,14 @@ native WK接続はrequest ID付きのquery/index入力と、件数・選択位�
 Catalystは関連unique 10件の成功結果を機能群内で回収した（複数run合算であり、最終全10件の一括runではない）。共有索引の原文/整形/Text境界/Unicode/NEL、未mount本文、遅延query拒否、表示選択と会話ID、UIKitの範囲/本文保全・font/幅・選択矩形、原文/整形それぞれの長文末尾への実ScrollViewReader移動と1件wrap、実WK process終了からの原文再索引、既存Markdown描画接続を確認した。初回のSwiftUI testはwindow未接続、scroll fixtureは更新後layout未確定だったため、標準windowと実layout確定で確認するよう直した。font>17の期待はCatalyst標準Text/ScaledMetric/UIFontがaccessibility3でも17である独立実測を根拠に、同じ環境のUIFont標準値との一致へ訂正した。根拠 `/private/tmp/weavelet-font-probe.{swift,txt}`。UI/layout/整形/fallback/境界/最終移動ログは `/private/tmp/weavelet-conversation-find-{ui-layout,rendered-ui,boundary,final-reveal}-test.log`。型検査・bundle鮮度・手書き差分検査も成功。変更のないWeb共有テスト・全I/O/暗号化同期は既存の成功結果を再利用した。
 
 通常画面の手動受入、大規模会話での実測、全ノードscopeの強調、実オンライン相互運用等は未確認/未完了のまま。iPhone Air照会・導入とmain統合は行っていない。
+
+
+## 全ノード検索の本文強調接続（2026-10-20）
+
+既存の共有chatSearchによるnode単位の件数・前後移動を維持し、全ノードscopeもConversationFindの同じ共有本文索引・強調・scrollへ接続した。Web ChatFindBarの実callerと同様に、新しいquery/scopeでは先頭nodeへ移動し、その後に表示経路の先頭本文一致を強調する。同じ経路でのnode移動もnonceで再索引する。スター条件はnode検索に適用し、全ノードscopeの本文強調は表示経路を対象とする。node件数と本文一致数を置換せず、終了・scope変更時は旧要求を失効させる。
+
+実標準UITextFieldを使うCatalyst追加caseで、入力から自動node移動、Returnから非表示分岐への移動、同経路の再強調要求、node 2件と表示本文1件→展開後3件の分離、mode切替/解除を確認した。初回はReturn delegateの可否問い合わせだけを実行していたためsubmitされず、UIControlのeditingDidEndOnExitへ訂正。次の失敗はio-corpusのcollapsedNodes.n-inactive=trueの見落としであり、既存Web由来の展開操作を通して折畳時1件・展開後3件の両方を検証した。件数のassertを削除していない。
+
+同じ実入力caseでUnicode正規化等価なqueryの切替が状態更新されない不具合を検出した。標準入力を維持し、query状態とtask識別をUTF-8 DataにしてWebのliteral一致と同じ区別を保持する。éとe+combiningの入力切替をbyte一致で確認した。最終の追加1case成功 `/private/tmp/weavelet-node-find-ui-final-test.log`、最初の群で成功した既存raw長文scroll/遅延query拒否2caseを再利用する（unique 3件）。独立Astraの機能差分とUnicode/fixture期待根拠の限定監査は新規なし。手書き差分検査成功。保存・同期形式と共有JSを変更しておらず、未変更の全I/O/同期・Web検索テストの成功結果を再利用した。
+
+今回で前章の全ノードscope強調の残件を解消した。通常画面の手動受入・大規模会話の性能、旧iOS保存データの移行可否、実クラウド等は残る。iPhone Air照会・導入とmain統合は行っていない。

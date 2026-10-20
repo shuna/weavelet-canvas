@@ -20,6 +20,9 @@ struct ConversationFindBody: Equatable {
     struct ScrollTarget: Equatable { let bodyID: String; let rect: CGRect; let height: CGFloat; let revision: UUID }
     @Published private(set) var query = ""
     @Published private(set) var enabled = false
+    @Published private(set) var highlightsNodes = false
+    @Published private(set) var nodeNavigation = UUID()
+    var active: Bool { enabled || highlightsNodes }
     @Published private(set) var starredOnly = false
     @Published private(set) var matches: [Match] = []
     @Published private(set) var selectedIndex = -1
@@ -43,16 +46,21 @@ struct ConversationFindBody: Equatable {
     private var indexedCounts: [String:Int] = [:]
     private var epoch = UUID()
     var selected: Match? { matches.indices.contains(selectedIndex) ? matches[selectedIndex] : nil }
-    func configure(query: String, enabled: Bool, starredOnly: Bool = false) {
-        guard !self.query.utf8.elementsEqual(query.utf8) || self.enabled != enabled || self.starredOnly != starredOnly else { return }
-        self.query = query; self.enabled = enabled; self.starredOnly = starredOnly; invalidate()
+    @discardableResult func configure(query: String, enabled: Bool, starredOnly: Bool = false, highlightsNodes: Bool = false) -> Bool {
+        guard !self.query.utf8.elementsEqual(query.utf8) || self.enabled != enabled || self.starredOnly != starredOnly || self.highlightsNodes != highlightsNodes else { return false }
+        self.query = query; self.enabled = enabled; self.starredOnly = starredOnly; self.highlightsNodes = highlightsNodes; invalidate()
+        return true
+    }
+    func refreshAfterNodeNavigation() {
+        guard highlightsNodes else { return }
+        invalidate(); nodeNavigation = UUID()
     }
     func setMode(_ value: Bool, nodeID: String, context: Data? = nil) { modes[ConversationFindBody.key(nodeID,"mode",context:context)] = value }
     private func invalidate() {
         epoch = UUID(); indexedBodies = []; indexedCounts = [:]; matches = []; ranges = [:]; selectedIndex = -1; scrollTarget = nil; error = nil; busy = false; revision = UUID()
     }
     func search(_ bodies: [ConversationFindBody]) async {
-        guard enabled, !query.isEmpty else { invalidate(); return }
+        guard active, !query.isEmpty else { invalidate(); return }
         let token = UUID(); epoch = token; busy = true; error = nil
         let previous = selected
         indexedBodies = []; indexedCounts = [:]
@@ -72,7 +80,7 @@ struct ConversationFindBody: Equatable {
             }
             indexedBodies = bodies; indexedCounts = indexed.mapValues(\.count)
             matches = found; ranges = raw
-            selectedIndex = previous.flatMap { found.firstIndex(of:$0) } ?? (found.isEmpty ? -1 : 0)
+            selectedIndex = highlightsNodes ? (found.isEmpty ? -1 : 0) : previous.flatMap { found.firstIndex(of:$0) } ?? (found.isEmpty ? -1 : 0)
             busy = false; revision = UUID(); reveal = revision; scrollTarget = nil
         } catch is CancellationError {
             if epoch == token { busy = false }
@@ -86,7 +94,7 @@ struct ConversationFindBody: Equatable {
         catch { self.error = error.localizedDescription }
     }
     func request(for bodyID: String) -> MarkdownFindRequest? {
-        guard enabled, !query.isEmpty, ranges[bodyID] != nil else { return nil }
+        guard active, !query.isEmpty, ranges[bodyID] != nil else { return nil }
         return .init(query:query,index:selected?.bodyID == bodyID ? selected!.index : -1,requestID:revision.uuidString + bodyID)
     }
     func accept(_ result: MarkdownFindResult, bodyID: String) {
@@ -230,6 +238,13 @@ struct ConversationFindControls: View {
             Button { navigate(true) } label: { Image(systemName:"chevron.up").frame(width:44,height:44) }.accessibilityLabel("前の一致箇所")
             Button { navigate(false) } label: { Image(systemName:"chevron.down").frame(width:44,height:44) }.accessibilityLabel("次の一致箇所")
         }.disabled(find.busy || find.matches.isEmpty || find.error != nil)
+        ConversationFindIssue(find:find)
+    }
+}
+
+struct ConversationFindIssue: View {
+    @ObservedObject var find: ConversationFind
+    var body: some View {
         if let error = find.error { Text(error).font(.footnote).foregroundStyle(.red) }
     }
 }

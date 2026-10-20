@@ -14,7 +14,13 @@ struct ChatSearchView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var inlineContentVisible = false
     @State private var inlineIsMounted = false
-    @State private var query = ""
+    // Keep literal query identity; Swift String equality merges canonical Unicode variants.
+    @State private var queryBytes = Data()
+    private var query: String {
+        get { String(decoding:queryBytes,as:UTF8.self) }
+        nonmutating set { queryBytes = Data(newValue.utf8) }
+    }
+    private var queryBinding: Binding<String> { Binding(get:{query},set:{query = $0}) }
     @State private var mode: ChatSearchMode = .grep
     @State private var scope: ChatSearchScope = .all
     @State private var starredOnly = false
@@ -81,6 +87,7 @@ struct ChatSearchView: View {
         do {
             if saveQuery { try state.saveSearchQueryToHistory(query,field:historyField) }
             try navigate(results[index],mode)
+            if mode == .nodes { bodyFind?.refreshAfterNodeNavigation() }
             currentResultIndex = index
             errorMessage = nil
             if dismissAfter {
@@ -112,7 +119,7 @@ struct ChatSearchView: View {
     }
 
     private struct Request: Equatable {
-        let query: String
+        let query: Data
         let mode: ChatSearchMode
         let scope: ChatSearchScope
         let starredOnly: Bool
@@ -122,7 +129,7 @@ struct ChatSearchView: View {
         let chatIDs: [Data]?
     }
     private var request: Request {
-        Request(query: query, mode: mode, scope: scope, starredOnly: starredOnly, chatID: state.selectedConversationID, path: state.conversation?.visibleMessages.map(\.id) ?? [], source: state.exchange?.source, chatIDs:chatIDs?.map { Data($0.utf8) })
+        Request(query: Data(query.utf8), mode: mode, scope: scope, starredOnly: starredOnly, chatID: state.selectedConversationID, path: state.conversation?.visibleMessages.map(\.id) ?? [], source: state.exchange?.source, chatIDs:chatIDs?.map { Data($0.utf8) })
     }
     var body: some View {
         Group {
@@ -130,7 +137,7 @@ struct ChatSearchView: View {
                 VStack(spacing: 4) {
                     HStack {
                         Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                        TextField(searchPrompt, text: $query).textFieldStyle(.roundedBorder)
+                        TextField(searchPrompt, text: queryBinding).textFieldStyle(.roundedBorder)
                             .accessibilityLabel(searchPrompt)
                             .focused($queryFocused)
                             .onSubmit { stepResult(backward:false) }
@@ -157,6 +164,7 @@ struct ChatSearchView: View {
                             }.disabled(state.generation != nil)
                         } else {
                             resultControls
+                            if let bodyFind { ConversationFindIssue(find:bodyFind) }
                             ScrollView { LazyVStack(alignment:.leading,spacing:0) { resultRows } }
                                 .frame(maxHeight:library ? .infinity : 180).buttonStyle(.plain)
                         }
@@ -199,7 +207,7 @@ struct ChatSearchView: View {
                             resultRows
                         }
                     }
-                    .searchable(text: $query, prompt: "検索")
+                    .searchable(text: queryBinding, prompt: "検索")
                     .navigationTitle("会話を検索")
                     .toolbar {
                         ToolbarItem(placement:.topBarLeading) { historyMenu }
@@ -210,7 +218,8 @@ struct ChatSearchView: View {
             }
         }
         .task(id: request) {
-            bodyFind?.configure(query:query,enabled:usesBodyFind,starredOnly:starredOnly)
+            let highlightsNodes = bodyFind != nil && mode == .nodes && scope == .all
+            let resetHighlight = bodyFind?.configure(query:query,enabled:usesBodyFind,starredOnly:starredOnly,highlightsNodes:highlightsNodes) ?? false
             if usesBodyFind { results = []; currentResultIndex = -1; errorMessage = nil; return }
             do {
                 guard let source = state.exchange?.source else { results = []; return }
@@ -220,10 +229,10 @@ struct ChatSearchView: View {
                                                  currentChatID: state.selectedConversationID, currentPath: chatIDs == nil ? state.conversation?.visibleMessages.map(\.id) : nil)
                 let selection = try ChatSearch.resultSelection(previous:results,index:currentResultIndex,results:found)
                 results = found
-                currentResultIndex = selection.index
+                currentResultIndex = highlightsNodes && resetHighlight ? (found.isEmpty ? -1 : 0) : selection.index
                 errorMessage = nil
-                if chatIDs != nil && selection.shouldNavigate && state.generation == nil {
-                    activate(selection.index,saveQuery:false)
+                if (chatIDs != nil || highlightsNodes) && (selection.shouldNavigate || resetHighlight) && state.generation == nil {
+                    activate(currentResultIndex,saveQuery:false)
                 }
             } catch { results = []; currentResultIndex = -1; errorMessage = error.localizedDescription }
         }
