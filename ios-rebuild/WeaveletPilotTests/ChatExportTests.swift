@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 @testable import WeaveletPilot
 
 final class ChatExportTests: XCTestCase {
@@ -12,6 +13,22 @@ final class ChatExportTests: XCTestCase {
         try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true)
         addTeardownBlock { try? FileManager.default.removeItem(at:root) }
         return LocalStateStore(fileURL:root.appendingPathComponent("local.json"))
+    }
+    @MainActor func testPNGExportLeavesFullRawStateAndDiskUnchanged() async throws {
+        let future = try OrderedJSON.decode(Data(#"{"large":9007199254740993,"decimal":1.2300,"utf16":"\ud800"}"#.utf8))
+        let local = try store(), state = ChatState(store: local)
+        try state.importWebData(input().replacing("xFuture", with: future).encoded())
+        state.selectedConversationID = "other"
+        let before = try state.publicationSnapshot(), raw = try state.exportWebData(), disk = try Data(contentsOf: local.fileURL)
+        let image = try await state.exportChatImage(dark: false)
+        XCTAssertEqual(image.contentType, .png)
+        XCTAssertTrue(image.filename.hasSuffix(".png"))
+        XCTAssertNotNil(UIImage(data: image.data))
+        XCTAssertEqual(try state.publicationSnapshot(), before)
+        XCTAssertEqual(try state.exportWebData(), raw)
+        XCTAssertEqual(try Data(contentsOf: local.fileURL), disk)
+        XCTAssertEqual(try ChatState(store: local).exportWebData(), raw)
+        XCTAssertThrowsError(try state.exportWebData(format: .image, scope: .branch))
     }
     func testAllV3GzipKeepsRawBytesAndImportsThroughAtomicSaveRestart() throws {
         let future = OrderedJSON.object([.init(key:"z",value:.number("9007199254740993")),.init(key:"a",value:.number("1.2300")),.init(key:"word",value:.string("e\u{301} 日本語🌿"))])

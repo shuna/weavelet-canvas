@@ -1961,6 +1961,23 @@ final class ChatState: ObservableObject {
         let v3 = try OrderedJSON.decode(exportWebData())
         return try ChatExport.make(v3:v3,format:format,scope:scope,chatID:conversation?.id,visiblePath:scope == .all ? nil : conversation?.visibleMessages.map(\.id),compressed:compressed)
     }
+    @MainActor func exportChatImage(dark: Bool) async throws -> ChatExport.Artifact {
+        guard generation == nil, let conversation else { throw ExchangeError.invalid("会話の生成結果を保存してから書き出してください") }
+        let snapshot = try publicationSnapshot(), path = conversation.visibleMessages.map(\.identity)
+        func summaries(_ chat: Conversation) throws -> [Data: OrderedJSON] {
+            var values: [Data: OrderedJSON] = [:]
+            for node in chat.visibleMessages { values[node.identity] = try summaryInfo(chatID: chat.id, nodeID: node.id) }
+            return values
+        }
+        let presentation = try summaries(conversation)
+        let artifact = try await ChatImageExport.make(messages: conversation.visibleMessages, title: conversation.title,
+            settings: snapshot.required("state"), dark: dark, summaries: presentation)
+        try Task.checkCancellation()
+        guard generation == nil, let current = self.conversation,
+              current.id.utf8.elementsEqual(conversation.id.utf8), current.visibleMessages.map(\.identity) == path,
+              try publicationSnapshot() == snapshot, try summaries(current) == presentation else { throw ExchangeError.invalid("会話または設定が変更されました。書出しをやり直してください") }
+        return artifact
+    }
     func recoveryExport(exportedAt: Date = Date()) async throws -> Data {
         let snapshot = document?.snapshot
         let fileURL = store?.fileURL

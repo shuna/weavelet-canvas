@@ -30,6 +30,7 @@ const ContentBody = memo(function ContentBody({
   isGeneratingMessage,
   environment,
   onCopy,
+  renderer,
 }: {
   currentTextContent: string;
   markdownMode: boolean;
@@ -38,7 +39,9 @@ const ContentBody = memo(function ContentBody({
   isGeneratingMessage: boolean;
   environment?: StreamingMarkdownEnvironment;
   onCopy?: (text: string) => Promise<void>;
+  renderer?: typeof import('./MarkdownRenderer').default;
 }) {
+  const Renderer = renderer ?? MarkdownRenderer;
   const hasCodeBlock = currentTextContent.includes('```');
   const streamingMode = resolveStreamingMarkdownMode({
     policy: streamingMarkdownPolicy,
@@ -97,7 +100,7 @@ const ContentBody = memo(function ContentBody({
           ) : (
             <>
               <Suspense fallback={<MarkdownSkeleton charCount={currentTextContent.length} newlineCount={(currentTextContent.match(/\n/g) || []).length} />}>
-                <MarkdownRenderer
+                <Renderer
                   content={renderContent}
                   inlineLatex={inlineLatex}
                   onCopy={onCopy}

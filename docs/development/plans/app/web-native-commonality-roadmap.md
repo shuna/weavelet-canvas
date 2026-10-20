@@ -1,6 +1,8 @@
 # Web版とネイティブ版の共通化に向けた段階的計画
 
 最新補足（2026-10-20）：旧iOS JSON・TLVW/zstd・旧CloudKitに続き、旧Google appData保存のreadonly取得も既存確認・選択取込みへ接続した。最新main=a4d83db6の同期wire差分、proxy管理、永続stream状態は共有処理を両版で使用する形で反映済み。通常同期のtarget/etag/baselineは移行取得では変更しない。旧Google取得は専用scopeとメモリ内資格情報で通常認証から分離し、Webの通常認証scopeは拡張しない。実Google/CloudKit相互運用、旧Google appData可視性、実iCloud配信、残るUI/OS/性能確認は未完了。将来AppState version2と既存WebV2の曖昧性を対応済みと扱わない。詳細は[検証台帳](web-native-completion-ledger.md)。
+最新の機能差照合（2026-10-20）：PNG書出しを既存Markdown描画・表示projectionとnative WebKit画像化で接続し、サイドバーから既存書出し画面を開けるようにした。固有12件のCatalyst成功、実PNG保存/目視、独立Astraの指摘解消を確認。Cohere固有生成とtool実行はWebにもなく、単なる一覧掲載を機能対応と扱わない。次の具体的な接続差はサイドバー会話行からの生成停止。全オンライン・UI/OS受入は未完了のまま。
+
 
 2026-10-12。状態は段階的に実行中。Web版の機能仕様を起点に、Web版とiOS版で共通仕様・内部APIの責務・必要な共通コードを育てる。iOS版はUI・ドメイン処理・保存・通信・ビルド構成を含めて全面的に作り直すことを許容し、旧実装の構造を維持する制約は置かない。目的は、同じ機能の修正で両版の意味がずれることを減らし、各環境に適した実装を保ちながら保守と移植の負担を下げること。
 

@@ -1182,3 +1182,20 @@ Web関連6files48件成功。Catalystでは関連RemoteGenerationの固有9件�
 初回はWeb関連4件とCatalyst関連22件が成功。独立AstraでnextPageToken未取得により途中の空ページを未検出と誤判定するP2を指摘され修正した。[Google files.list仕様](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list)の継続tokenを根拠に、次ページ取得と空/反復cursor拒否を追加。修正後は共有2件とnative影響2件のみ再確認して成功（前結果と重複、新しいpaginationケース1件を含む）。限定再監査は新規P1/P2なし。nativeの既存sync fileに選択先/cache/acceptedを用意し、正常・破損の取得後とも全bytesと主保存state/diskが不変であることを確認。通常認証、401 refresh、取消、保存失敗・refresh競合などの既存成功を再利用し、変更のない全I/O/暗号化同期suiteは反復しない。
 
 型検査・共有bundle鮮度・差分確認が成功し、Catalyst test用buildも成功。ログ `/private/tmp/weavelet-legacy-google-{web-test,web-final-test,types,native-test,native-final-test,generate,freshness}.log`。実Catalystで同期→Google同期→旧データ取込みの表示、説明、OAuth未設定時のボタン無効と正常なシート開閉を確認した。既存debug fixtureのみを使い、終了後にprocess不在とbuilt Info.plistの原本復元を確認。取得後の実画面操作・実OAuth・旧アプリのappData可視性は未確認。[Google appData仕様](https://developers.google.com/workspace/drive/api/guides/appdata)では作成したアプリのみアクセス可能であり、新nativeクライアントと旧アプリのGoogle設定の関係を実接続時に確認する必要がある。iPhone照会/導入・main統合・pushはしていない。全機能完成・実オンライン相互運用の完成とは扱わない。
+
+
+## PNG書出しとサイドバー書出し入口（2026-10-20）
+
+実Web DownloadChatの画像書出しに対応するnative入口を既存ChatExportViewへ追加し、画像は現在の表示枝だけを対象とした。先頭systemの表示判定は既存DisplaySettings/messageDisplayIndexes、要約によるhidden・選択中要約・折りたたみ・ラベルは既存summaryInfo/MessageBodyItemを再利用する。保存元の本文を別のルールで再構築しない。Markdownは既存ContentBody/MarkdownRendererを同じ配布物から使い、Web既存callerのlazy既定値は維持。nativeのPNGだけ描画器のimport完了後に注入して最終DOMを確定する。WebKitの最終画像decodeとfonts完了後にsnapshotし、横overflow・高さ16,384超・添付PNG単体12MiB/合計32MiB超では切捨てず失敗する。PNGは幅1024実画素の表示用出力で、保存・同期の形式は変更しない。新ライブラリは追加していない。
+
+画像作成は取消可能で、完了後に会話ID/経路/全snapshot/要約presentationを照合して古い出力を公開しない。ラベル/注記/折りたたみ文字列はplainとしてReactテキストノードで出力し、MarkdownやHTMLとして解釈しない。構造化添付は既存native ImageLoaderを再利用する。Markdown内のHTTPS画像は既存rendererと同じCSP/nonpersistent WebKitで取得し、認証や独自headerを渡さない。取得失敗や破損画像は欠落PNGとして成功させない。top-level navigationは既存bundle resource内に限定する。
+
+独立Astraの初回P2は、外部Markdown画像の遮断/失敗済み画像の成功扱い、遅延renderer完了前の確定、長いコードの横切れの3件。固定のDOM静止待ち/rAFを除去し、明示import・image.decode・fonts完了、export専用折返しCSSと内部scroll領域の横overflow検査へ修正した。続く限定確認のplain label再解釈P2も前述のplain種別で解消。修正範囲の限定再監査は新規なし。最初のcompileではconfiguration変数の重複、その後summary比較のtry不足を修正した。最初の実描画testはwindow未接続でrAFが進まず停止していたため、該当xcodebuildを明示中断し、時間待ちではない完了判定へ修正した。
+
+Catalyst関連11件が成功し、その後plain修正に対する新1件とPNG1件だけを確認して2件成功（前結果と重複）。固有12件の成功であり最終一括12件のrunとはしない。画像の実幅・Markdown/添付/推論/tool本文、長いコードの折返し、過大画像拒否、破損Markdown画像拒否、取消、plainラベルの完全保持と選択要約/折りたたみ、全raw snapshot/disk/export/restart不変、既存Markdown表示の接続を確認した。Web関連6件、型検査、Vite build、共有bundle/Markdown鮮度、最終Catalyst buildが成功。未変更の全暗号化同期suiteは既存成功を再利用した。生成JS内の既存highlight grammar文字列由来の末尾空白警告は文字列の意味を変えず保持し、手書き差分の空白検査を成功させた。
+
+サイドバーの選択中会話行に既存書出し画面への入口を追加した。実Catalystで初回範囲が全件になるSwiftUI bool+別scopeの不整合を見つけ、optional Scopeをsheet(item:)に直接渡す形へ修正。限定Astraは新規P1/P2なし。再起動後、行からは「選択した会話」、通常ファイルメニューからは「全件」を確認。PNG選択→表示枝→標準保存panel→一時folderへのPNG保存を完了した。実ファイルは1024×372のdark PNGで、文字/背景/余白/両roleと本文を目視確認。別の合成PNGでもMarkdown・推論・添付・tool本文の実描画を目視確認した。AX popupの初回click未確定はEnd/Returnで選択し直し、保存panel復帰後の古いAX IDはfull tree再取得で訂正した。製品の保存処理変更ではない。通常store/実Keychainを使わず既存debug fixtureだけを使用し、終了後にprocess不在とbuilt Info.plistの原本復元を確認した。
+
+ログ `/private/tmp/weavelet-png-export-{native-test,native-final-test,native-corrected-test,native-render-test,native-label-test,types-final,web-test,web-build,freshness,sync-freshness,ui-final-build,renderer-generate}.log`。確認画像 `/private/tmp/weavelet-png-export-proof.png` と `/private/tmp/weavelet-png-export-ui-proof.png`。外部HTTPS画像の実取得、狭幅/VoiceOver、実cloud、iPhoneは未確認。main統合・pushはしていない。
+
+残機能差の追加照合では、Cohere固有生成形式とtool実行は現Webにも実装がなく、provider選択肢だけを生成対応と数えないことを確認した（Web api/requestBody/submitRuntimeとshared generation/remoteOutput）。nativeだけの不足として無条件に機能追加しない。別途Web会話行にある生成停止はnative sidebarでは未接続であり、既存stopGenerationへの接続を次の限定範囲として残す。実オンライン相互運用・UI/OS/性能の受入も継続する。

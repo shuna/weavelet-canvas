@@ -67,7 +67,7 @@ struct ChatView: View {
     @State private var pendingPartialImport: (data: Data, filename: String, message: String)?
     @State private var confirmsPartialImport = false
     @State private var showsExporter = false
-    @State private var showsExportOptions = false
+    @State private var exportScope: ChatExport.Scope?
     @State private var pendingExport: ChatExport.Artifact?
     @State private var exportContentType: UTType = .json
     @State private var exportFilename = "weavelet-native-v3"
@@ -113,6 +113,8 @@ struct ChatView: View {
             if horizontalSizeClass == .compact { closeLibrary() }
         },onClose:{
             closeLibrary()
+        },onExport:{
+            presentAfterLibrary { exportScope = .chat }
         },showsSearch:$showsLibrarySearch,footer:{ libraryFooter })
         .navigationSplitViewColumnWidth(min:260,ideal:300,max:380)
     }
@@ -294,12 +296,12 @@ struct ChatView: View {
         .alert("データを処理できませんでした", isPresented: Binding(get: { errorMessage != nil || state.persistenceError != nil }, set: { if !$0 { errorMessage = nil; state.persistenceError = nil } })) {
             Button("閉じる", role: .cancel) { errorMessage = nil; state.persistenceError = nil }
         } message: { Text(errorMessage ?? state.persistenceError ?? "") }
-        .sheet(isPresented: $showsExportOptions, onDismiss: {
+        .sheet(item: $exportScope, onDismiss: {
             if let artifact = pendingExport {
                 exportDocument = WebJSONDocument(data: artifact.data); exportContentType = artifact.contentType; exportFilename = artifact.filename
                 pendingExport = nil; showsExporter = true
             }
-        }) { ChatExportView(state: state) { pendingExport = $0 } }
+        }) { scope in ChatExportView(state: state, initialScope: scope) { pendingExport = $0 } }
         .confirmationDialog("一部のデータを除いて取り込みますか？", isPresented: $confirmsPartialImport, titleVisibility: .visible) {
             Button("取り込める内容を確認する") {
                 if let pending = pendingPartialImport {
@@ -419,7 +421,7 @@ struct ChatView: View {
                 }
             }
             .disabled(state.exchange == nil)
-            Button("形式・範囲を指定して書き出す") { presentAfterLibrary { showsExportOptions = true } }
+            Button("形式・範囲を指定して書き出す") { presentAfterLibrary { exportScope = .all } }
                 .disabled(state.exchange == nil)
             Button("中断した応答を復旧",systemImage:"arrow.clockwise") { state.runProxyRecovery() }
                 .disabled(state.isRecoveringStream || state.exchange == nil)
@@ -1588,7 +1590,7 @@ struct MessagePartView: View {
 }
 
 struct WebJSONDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.json, .gzip, .data, UTType(filenameExtension:"md") ?? .plainText] }
+    static var readableContentTypes: [UTType] { [.json, .gzip, .png, .data, UTType(filenameExtension:"md") ?? .plainText] }
     let data: Data
     init(data: Data) { self.data = data }
     init(configuration: ReadConfiguration) throws {
@@ -1605,6 +1607,7 @@ struct ConversationLibraryView<Footer: View>: View {
     @ObservedObject var state: ChatState
     let onSelect: () -> Void
     let onClose: (() -> Void)?
+    var onExport: (() -> Void)? = nil
     @Binding var showsSearch: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ViewBuilder let footer: () -> Footer
@@ -1835,6 +1838,7 @@ struct ConversationLibraryView<Footer: View>: View {
                         renameTitle = conversation.title
                         showsRename = true
                     }
+                    if active, let onExport { Button("書き出す", systemImage: "square.and.arrow.up", action: onExport) }
                     Button("複製") {
                         if perform({ try state.duplicateChat(id: conversation.id) }) { onSelect() }
                     }
@@ -2051,11 +2055,17 @@ struct ImportConversationPreview: View {
 struct ChatExportView: View {
     @ObservedObject var state: ChatState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var exportTask: Task<Void, Never>?
     let exported: (ChatExport.Artifact) -> Void
     @State private var format = ChatExport.Format.v3
     @State private var scope = ChatExport.Scope.all
     @State private var compressed = false
     @State private var errorMessage: String?
+    init(state: ChatState, initialScope: ChatExport.Scope = .all, exported: @escaping (ChatExport.Artifact) -> Void) {
+        self.state = state; self.exported = exported
+        _scope = State(initialValue: initialScope)
+    }
     var body: some View {
         NavigationStack {
             Form {
@@ -2076,19 +2086,40 @@ struct ChatExportView: View {
                 case .openRouter, .lmStudio:
                     Text("各会話の現在枝のテキスト本文を書き出します。選択した会話では表示中の経路を使います。メッセージの属性、画像・推論・tool call・tool resultは含めません。")
                         .font(.footnote).foregroundStyle(.secondary)
+                case .image:
+                    Text("表示中の枝と本文の表示状態を画像にします。高度な操作を非表示にしている場合、先頭のシステム本文は含めません。")
+                        .font(.footnote).foregroundStyle(.secondary)
                 case .markdown:
                     Text("現在の本文と画像URLを書き出します。メッセージの属性、推論・tool call・tool resultは含めません。")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
                 Button("書き出しファイルを選ぶ") {
-                    do { exported(try state.exportWebData(format:format,scope:scope,compressed:format == .v3 && compressed)); dismiss() }
-                    catch { errorMessage = error.localizedDescription }
+                    guard exportTask == nil else { return }
+                    errorMessage = nil
+                    if format == .image {
+                        let dark = colorScheme == .dark
+                        exportTask = Task { @MainActor in
+                            defer { exportTask = nil }
+                            do {
+                                let artifact = try await state.exportChatImage(dark: dark)
+                                try Task.checkCancellation()
+                                exported(artifact); dismiss()
+                            } catch is CancellationError { }
+                            catch { errorMessage = error.localizedDescription }
+                        }
+                    } else {
+                        do { exported(try state.exportWebData(format:format,scope:scope,compressed:format == .v3 && compressed)); dismiss() }
+                        catch { errorMessage = error.localizedDescription }
+                    }
                 }.disabled(state.generation != nil || state.exchange == nil)
+                if exportTask != nil { ProgressView("画像を作成中") }
             }
+            .disabled(exportTask != nil)
             .navigationTitle("会話を書き出す")
             .onChange(of: format) { _, next in if !next.scopes.contains(scope) { scope = next.scopes.first ?? .all } }
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { exportTask?.cancel(); dismiss() } } }
+            .onDisappear { exportTask?.cancel() }
         }
     }
 }

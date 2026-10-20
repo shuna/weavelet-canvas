@@ -3,13 +3,13 @@ import UniformTypeIdentifiers
 
 enum ChatExport {
     enum Format: String, CaseIterable, Identifiable {
-        case v3, v1, openAI = "openai", openRouter = "openrouter", lmStudio = "lmstudio", markdown
+        case v3, v1, openAI = "openai", openRouter = "openrouter", lmStudio = "lmstudio", markdown, image
         var id: String { rawValue }
         var label: String {
-            switch self { case .v3: return "V3"; case .v1: return "V1"; case .openAI: return "OpenAI"; case .openRouter: return "OpenRouter"; case .lmStudio: return "LM Studio"; case .markdown: return "Markdown" }
+            switch self { case .v3: return "V3"; case .v1: return "V1"; case .openAI: return "OpenAI"; case .openRouter: return "OpenRouter"; case .lmStudio: return "LM Studio"; case .markdown: return "Markdown"; case .image: return "画像（PNG）" }
         }
         var scopes: [Scope] {
-            switch self { case .v1: return [.all]; case .openRouter: return [.all, .chat]; case .markdown: return [.chat, .branch]; default: return [.all, .chat, .branch] }
+            switch self { case .image: return [.branch]; case .v1: return [.all]; case .openRouter: return [.all, .chat]; case .markdown: return [.chat, .branch]; default: return [.all, .chat, .branch] }
         }
     }
     enum Scope: String, CaseIterable, Identifiable {
@@ -23,6 +23,7 @@ enum ChatExport {
         let contentType: UTType
     }
     static func make(v3: OrderedJSON, format: Format, scope: Scope, chatID: String?, visiblePath: [String]?, compressed: Bool) throws -> Artifact {
+        guard format != .image else { throw ExchangeError.invalid("画像は非同期の書出し処理を使用してください") }
         var boundary = SharedWebProjection()
         let projected = try OrderedJSON.object(v3.object("V3").map { field -> JSONField in
             let value: OrderedJSON
