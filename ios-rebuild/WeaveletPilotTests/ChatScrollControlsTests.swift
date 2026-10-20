@@ -1,7 +1,26 @@
 import XCTest
+import UIKit
 @testable import WeaveletPilot
 
 final class ChatScrollControlsTests: XCTestCase {
+    @MainActor func testSharedRestorationDeltaUsesNativeScrollBoundsAndRetainsHorizontalPosition() throws {
+        let view = UIScrollView(frame:CGRect(x:0,y:0,width:400,height:600))
+        view.contentSize = CGSize(width:500,height:2000)
+        view.contentOffset = CGPoint(x:17,y:800)
+        let offset = ChatScrollOffset(); offset.attach(view)
+        let desired = try SharedWebOperations.Session().call("bubbleScroll",.object([
+            .init(key:"operation",value:.string("restore")),
+            .init(key:"anchor",value:.object([.init(key:"wasAtBottom",value:.bool(false)),.init(key:"offsetWithinItem",value:.number("225"))])),
+            .init(key:"scrollTop",value:.number("800")),.init(key:"scrollHeight",value:.number("2000")),
+            .init(key:"clientHeight",value:.number("600")),.init(key:"itemTop",value:.number("-150"))]))
+        offset.move(by:CGFloat(try desired.number("scroll top")) - 800)
+        XCTAssertEqual(view.contentOffset,CGPoint(x:17,y:875))
+        offset.move(by:10_000)
+        XCTAssertEqual(view.contentOffset.y,1400)
+        offset.move(by:-10_000)
+        XCTAssertEqual(view.contentOffset,CGPoint(x:17,y:0))
+    }
+
     func testNativeMeasuredCoordinatesUseSharedWebTargetsWithoutChangingFrames() throws {
         let ids = [Data("é".utf8), Data("e\u{0301}".utf8), Data("last".utf8)]
         let frames: [ChatScrollMarker: CGRect] = [

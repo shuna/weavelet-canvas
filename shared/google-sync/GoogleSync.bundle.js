@@ -8564,10 +8564,35 @@ var WeaveletGoogleSync = (() => {
     }
     return { previous, next };
   }
+  function captureBubbleScrollAnchor(input) {
+    const first = input.items.find((item) => item.bottom > 0);
+    return {
+      firstVisibleItemIndex: first?.index ?? -1,
+      offsetWithinItem: first ? -first.top : 0,
+      wasAtBottom: input.scrollTop >= input.scrollHeight - input.clientHeight - 0.5,
+      ...first?.nodeId !== void 0 ? { nodeId: first.nodeId } : {},
+      scrollTop: input.scrollTop
+    };
+  }
+  function restoredBubbleScrollTop(input) {
+    const { anchor } = input;
+    if (!anchor)
+      return null;
+    if (anchor.wasAtBottom)
+      return input.scrollHeight;
+    if (input.itemTop != null)
+      return input.scrollTop + input.itemTop + anchor.offsetWithinItem;
+    return anchor.scrollTop ?? null;
+  }
 
   // shared/google-sync/bubbleScroll.ts
   function bubbleScroll(json) {
-    return JSON.stringify(bubbleNavigationTargets(JSON.parse(json)));
+    const input = JSON.parse(json);
+    if (input.operation === "capture")
+      return JSON.stringify(captureBubbleScrollAnchor(input));
+    if (input.operation === "restore")
+      return JSON.stringify(restoredBubbleScrollTop(input));
+    return JSON.stringify(bubbleNavigationTargets(input));
   }
 
   // shared/google-sync/adapters/host.ts

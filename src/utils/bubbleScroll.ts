@@ -1,4 +1,12 @@
 export type BubbleScrollItem = { index: number; top: number };
+export type BubbleAnchorItem = { index: number; nodeId?: string; top: number; bottom: number };
+export type BubbleScrollAnchor = {
+  firstVisibleItemIndex: number;
+  offsetWithinItem: number;
+  wasAtBottom: boolean;
+  nodeId?: string;
+  scrollTop: number;
+};
 
 export function bubbleNavigationTargets(input: {
   items: BubbleScrollItem[];
@@ -14,4 +22,34 @@ export function bubbleNavigationTargets(input: {
     if (next < 0 && Math.min(input.scrollTop + item.top, maxScrollTop) > input.scrollTop + 0.5) next = item.index;
   }
   return { previous, next };
+}
+
+export function captureBubbleScrollAnchor(input: {
+  items: BubbleAnchorItem[];
+  scrollTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+}): BubbleScrollAnchor {
+  const first = input.items.find(item => item.bottom > 0);
+  return {
+    firstVisibleItemIndex: first?.index ?? -1,
+    offsetWithinItem: first ? -first.top : 0,
+    wasAtBottom: input.scrollTop >= input.scrollHeight - input.clientHeight - 0.5,
+    ...(first?.nodeId !== undefined ? { nodeId: first.nodeId } : {}),
+    scrollTop: input.scrollTop,
+  };
+}
+
+export function restoredBubbleScrollTop(input: {
+  anchor?: Omit<BubbleScrollAnchor, 'scrollTop'> & { scrollTop?: number };
+  scrollTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+  itemTop?: number;
+}): number | null {
+  const { anchor } = input;
+  if (!anchor) return null;
+  if (anchor.wasAtBottom) return input.scrollHeight;
+  if (input.itemTop != null) return input.scrollTop + input.itemTop + anchor.offsetWithinItem;
+  return anchor.scrollTop ?? null;
 }

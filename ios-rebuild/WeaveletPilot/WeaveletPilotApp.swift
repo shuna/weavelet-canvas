@@ -796,6 +796,7 @@ struct ChatView: View {
                 .frame(maxWidth: horizontalSizeClass == .compact ? .infinity : 900)
                 .frame(maxWidth: .infinity)
                 .chatScrollMarker(.content)
+                .chatScrollMarker(.context(state.conversation?.identity ?? Data()))
             }
             .modifier(ChatScrollControls(state:state,scroll:scroll,ids:chatScrollIDs,viewportHeight:viewport.size.height,isEditing:inlineDraft != nil || composerFocused,reportError:{ errorMessage = $0.localizedDescription }))
             .environment(\.messageViewport,viewport.frame(in:.global))

@@ -1236,3 +1236,16 @@ Catalyst test用buildと隔離native接続は成功したが、今回は並行2�
 隔離FAKE Catalystの実画面で先頭→次→前、移動可否の切替、全折畳→全展開を確認し、composerより上の操作配置を目視した。通常データ/実Keychainを使わず、検証後はprocess不在とbuilt Info.plist復元を確認した。最初のQuit後のAX取得でprocessが残ったため再度終了操作を行い、terminalで不在を確認するまで終了扱いにしていない。監査後の座標補完/再計算は自動境界確認までで、狭幅・文字拡大・実keyboard・全行操作の重なりは未確認。iPhone照会/導入・main統合・pushは行わない。
 
 U21の操作入口は接続したが、実Web recordExplicitScrollNavigationにあるスクロール位置の履歴capture/復元と、行左端の独立折畳入口（U22）は残る。これらを単なるボタン配置の完成から推定せず、次の接続範囲とする。全UI/OS・実オンライン互換の最終受入は引き続き未完了。
+
+
+## スクロール位置の履歴capture・復元（2026-10-21）
+
+Web captureVisibleAnchorとChatContentの位置取得/復元式を既存bubbleScrollへ切り出し、Web実callerとnativeで共用する。最初のbottom>viewportTop、offset=-top、下端0.5の境界、node ID優先と欠損時のscrollTop fallbackを維持。DOM測定は従来どおり最初の可視行までに限定する。nativeはSwiftUI座標を渡し、既存ScrollViewProxyで未描画nodeを表示した後、public UIScrollViewのcontentOffsetへ共有計算の差分を適用する。新しい依存や独自の履歴規則は追加していない。
+
+履歴は既存BranchNavigation.historyのcapture/push/back/forwardを利用し、会話ごとのcacheはUTF8 Dataキー、復元要求はUUID tokenで所有する。Web同様runtimeのみで、スクロール通知は主保存/同期stateを書き換えない。会話切替と明示scroll操作の離脱位置を捕捉し、戻る/進むは表示文脈とデータを同じatomic保存に含め、保存成功後だけ位置復元を公開する。未知raw値・内部保存形式・同期schemaは維持。全置換後の古いcacheを破棄し、明示focusは古い復元を取消す。1.2秒のlayout収束期間はWebに合わせ、手動scroll・入力focus・別要求で旧復元を止める。geometryも会話contextを付け、同じnode IDを使う別会話の古い座標を適用しない。
+
+Web関連32件、型検査、bundle鮮度・差分確認成功。初回型検査のanchorRef optional nodeId推論差は戻り型を明示して解消。Catalyst初回19件中18成功、残る1件はruntime座標123.50が共有JSで123.5に直列化される表記差の期待だった。実WebもNumberの座標をJSON化するため入力を実際の123.5表現へ揃え、異なる前後位置123.5/456.25を復元するassertへ強化した。外部state/diskの全bytes不変の確認は維持し、外部I/O数値を丸める変更は行わない。表示文脈のatomic保存/失敗保持を追加し、最終はhistory4+controls5の9件のみ成功。変更のないBranchNavigation7件と並行生成4件は初回成功を再利用する。固有20件の関連成功であり最終20件一括runではない。
+
+独立Astraで入力focus/keyboard対応のscrollを復元が打ち消すP2を確認し、編集開始/復元開始/継続時に自tokenを取消すよう修正。限定再監査は新規P1/P2なし。Native境界は共有計算→UIScrollView位置と上下限/横位置保持、node欠損/Lazy行/viewport、Unicode別ID、古いtoken拒否、保存失敗時のstate/diskと履歴非公開、runtime非永続を確認した。保存/暗号/recordsの基盤は変更せず全項目I/O・実Web暗号化同期の既存成功を再利用した。ログ /private/tmp/weavelet-scroll-history-{web-test,types,types-final,native-test,native-final-test,generate-final,web-build}.log。
+
+隔離FAKE Catalyst実画面で、スクロール途中（先頭user本文の下端が残りassistant見出しが約406px）→次バブル→戻るで同じ配置を復元し、進むで移動先へ戻ること、別会話→元会話でも位置を復元することを確認した。AX containerへのscrollはnoValueだったため、取得した画面内の本文座標で操作し直した。通常データ/実Keychainは使わず、終了後のprocess不在とbuilt Info.plistのbyte一致復元を確認。狭幅/文字拡大、実keyboardとの同時操作、長時間の動的layout、VoiceOverの全操作、実API/cloudは未確認。iPhone照会/導入・main統合・pushは行わない。U22の行左端折畳入口、全UI/OS/性能と実オンライン互換の最終受入は引き続き残る。

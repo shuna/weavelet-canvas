@@ -19,7 +19,7 @@ import countTokens, { limitMessageTokens } from '@utils/messageUtils';
 import { perfStart, perfEnd } from '@utils/perfTrace';
 import { defaultModel, reduceMessagesToTotalToken } from '@constants/chat';
 import { showToast } from '@utils/showToast';
-import { bubbleNavigationTargets } from '@utils/bubbleScroll';
+import { bubbleNavigationTargets, captureBubbleScrollAnchor, restoredBubbleScrollTop } from '@utils/bubbleScroll';
 
 const EMPTY_MESSAGES: never[] = [];
 const EMPTY_ACTIVE_PATH: string[] = [];
@@ -288,7 +288,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
   // Scroll anchor tracking (local refs, saved to store on departure)
   const saveChatScrollAnchor = useStore((state) => state.saveChatScrollAnchor);
   const getChatScrollAnchor = useStore((state) => state.getChatScrollAnchor);
-  const anchorRef = useRef({ firstVisibleItemIndex: 0, offsetWithinItem: 0, wasAtBottom: true, nodeId: undefined as string | undefined, scrollTop: 0 });
+  const anchorRef = useRef<ReturnType<typeof captureBubbleScrollAnchor>>({ firstVisibleItemIndex: 0, offsetWithinItem: 0, wasAtBottom: true, nodeId: undefined as string | undefined, scrollTop: 0 });
   const atBottomRef = useRef(true);
   const streamFollowRef = useRef(true);
   const streamScrollerRef = useRef<HTMLElement | null>(null);
@@ -392,8 +392,17 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
       // Anchor update must remain exact even within the visual "at bottom" threshold.
       const scrollerRect = scroller.getBoundingClientRect();
       const nodeItems = scroller.querySelectorAll<HTMLElement>(MESSAGE_ITEM_SELECTOR);
-      anchorRef.current.scrollTop = scroller.scrollTop;
-      anchorRef.current.wasAtBottom = scroller.scrollTop >= scroller.scrollHeight - scroller.clientHeight - SCROLL_ALIGN_TOLERANCE;
+      const anchorItems = [];
+      for (const item of nodeItems) {
+        const rect = item.getBoundingClientRect();
+        anchorItems.push({ index: Number(item.dataset.itemIndex), nodeId: item.dataset.nodeId, top: rect.top - scrollerRect.top, bottom: rect.bottom - scrollerRect.top });
+        if (rect.bottom > scrollerRect.top) break;
+      }
+      const capturedAnchor = captureBubbleScrollAnchor({
+        items: anchorItems,
+        scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight,
+      });
+      anchorRef.current = capturedAnchor;
       // Layout measurements must not change the user's streaming follow choice.
       if (event || streamScrollerRef.current !== scroller) {
         if (scroller.scrollTop !== streamScrollTopRef.current || streamScrollerRef.current !== scroller) {
@@ -404,23 +413,6 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
         streamScrollerRef.current = scroller;
         streamScrollTopRef.current = scroller.scrollTop;
       }
-      let foundAnchorItem = false;
-      for (const item of nodeItems) {
-        const rect = item.getBoundingClientRect();
-        if (rect.bottom > scrollerRect.top) {
-          anchorRef.current.firstVisibleItemIndex = Number(item.dataset.itemIndex);
-          anchorRef.current.offsetWithinItem = scrollerRect.top - rect.top;
-          anchorRef.current.nodeId = item.dataset.nodeId;
-          foundAnchorItem = true;
-          break;
-        }
-      }
-      if (!foundAnchorItem) {
-        anchorRef.current.firstVisibleItemIndex = -1;
-        anchorRef.current.offsetWithinItem = 0;
-        anchorRef.current.nodeId = undefined;
-      }
-
       // Keep navigation departures accurate without writing on every scroll event.
       if (saveAnchorTimerRef.current) clearTimeout(saveAnchorTimerRef.current);
       saveAnchorTimerRef.current = setTimeout(() => {
@@ -572,23 +564,15 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
       const scroller = scrollerRef.current;
       const anchor = navEntry.scrollAnchor;
       if (stopped || !scroller || !anchor || scroller.clientHeight === 0) return;
-      if (anchor.wasAtBottom) {
-        scroller.scrollTop = scroller.scrollHeight;
-        return;
-      }
-      if (!anchor.nodeId && anchor.firstVisibleItemIndex < 0 && anchor.scrollTop != null) {
-        scroller.scrollTop = anchor.scrollTop;
-        return;
-      }
       const item = anchor.nodeId
         ? Array.from(scroller.querySelectorAll<HTMLElement>('[data-node-id]')).find((element) => element.dataset.nodeId === anchor.nodeId)
         : scroller.querySelector<HTMLElement>(`[data-item-index="${anchor.firstVisibleItemIndex}"]`);
-      if (!item) {
-        if (anchor.scrollTop != null) scroller.scrollTop = anchor.scrollTop;
-        return;
-      }
       const scrollerTop = scroller.getBoundingClientRect().top;
-      scroller.scrollTop += item.getBoundingClientRect().top - scrollerTop + anchor.offsetWithinItem;
+      const desired = restoredBubbleScrollTop({
+        anchor, scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight,
+        itemTop: item ? item.getBoundingClientRect().top - scrollerTop : undefined,
+      });
+      if (desired != null) scroller.scrollTop = desired;
     };
     const observer = new ResizeObserver(restore);
     const mutations = new MutationObserver(restore);
@@ -639,9 +623,13 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
     requestAnimationFrame(() => {
       const scroller = scrollerRef.current;
       const item = scroller?.querySelector<HTMLElement>(`[data-item-index="${anchor.firstVisibleItemIndex}"]`);
-      if (!item || !scroller) return;
-      item.scrollIntoView({ block: 'start' });
-      scroller.scrollTop += anchor.offsetWithinItem;
+      if (!scroller) return;
+      const scrollerTop = scroller.getBoundingClientRect().top;
+      const desired = restoredBubbleScrollTop({
+        anchor, scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight,
+        itemTop: item ? item.getBoundingClientRect().top - scrollerTop : undefined,
+      });
+      if (desired != null) scroller.scrollTop = desired;
     });
   }, [currentChatIndex]); // intentionally only on chat switch (mount)
 

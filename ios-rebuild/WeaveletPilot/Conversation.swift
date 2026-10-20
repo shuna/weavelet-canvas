@@ -107,6 +107,16 @@ struct NavigationFocus: Equatable {
     let token = UUID()
 }
 
+struct ChatScrollRestoration: Equatable {
+    let id = UUID()
+    let chatID: String
+    let anchor: OrderedJSON
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id && lhs.chatID.utf8.elementsEqual(rhs.chatID.utf8)
+            && (try? lhs.anchor.encoded()) == (try? rhs.anchor.encoded())
+    }
+}
+
 struct BranchEditorFocus: Equatable {
     let chatID: String
     let nodeID: String
@@ -185,11 +195,13 @@ final class ChatState: ObservableObject {
     private let localModerationClassify: NativeLocalModeration.Classifier?
     private var initialLoadFailed = false
     @Published private(set) var navigationFocus: NavigationFocus?
+    @Published private(set) var chatScrollRestoration: ChatScrollRestoration?
     @Published var branchEditorSyncEnabled = true
     @Published private(set) var branchEditorFocus: BranchEditorFocus?
     @Published private(set) var canNavigateBack = false
     @Published private(set) var canNavigateForward = false
     private var navigationHistory: OrderedJSON?
+    private var chatScrollAnchors: [Data: OrderedJSON] = [:]
     private var branchCandidates: [BranchNavigation.ChatCandidates] = []
     @Published private var editingHistory: MessageEditing.HistoryState?
     var generation: ActiveGeneration? { generations[Data(selectedID.utf8)] }
@@ -338,7 +350,7 @@ final class ChatState: ObservableObject {
         document = candidate
         initialLoadFailed = false
         branchCandidates = candidates
-        navigationHistory = nil; navigationFocus = nil; canNavigateBack = false; canNavigateForward = false
+        navigationHistory = nil; navigationFocus = nil; chatScrollAnchors = [:]; chatScrollRestoration = nil; canNavigateBack = false; canNavigateForward = false
         persistenceError = nil
     }
 
@@ -427,6 +439,45 @@ final class ChatState: ObservableObject {
         return try BranchNavigation.history(history, action: .initialize, in: source, chatID: selectedID, view: chatActiveView.rawValue, viewingPath: conversation?.visibleMessages.map(\.id))
     }
 
+    func captureChatScroll(chatID: String, anchor: OrderedJSON) {
+        guard selectedID.utf8.elementsEqual(chatID.utf8), chatScrollRestoration == nil else { return }
+        chatScrollAnchors[Data(chatID.utf8)] = anchor
+    }
+
+    func recordChatScrollNavigation(chatID: String, anchor: OrderedJSON) throws {
+        guard selectedID.utf8.elementsEqual(chatID.utf8), chatScrollRestoration == nil,
+              let exchange, let conversation else { return }
+        captureChatScroll(chatID: chatID, anchor: anchor)
+        let current = try captureNavigationScroll(try currentNavigationHistory(in: exchange.source), in: exchange.source)
+        let entry = OrderedJSON.object([
+            .init(key:"chatId",value:.string(chatID)),
+            .init(key:"activePath",value:.array(conversation.visibleMessages.map { .string($0.id) })),
+            .init(key:"viewContext",value:.string(chatActiveView.rawValue)),
+            .init(key:"source",value:.string(BranchNavigation.Source.scroll.rawValue)),
+            .init(key:"scrollAnchor",value:anchor)
+        ])
+        publishNavigation(try BranchNavigation.history(current.history, action: .push, in: exchange.source, entry: entry), focus: nil)
+    }
+
+    func completeChatScrollRestoration(id: UUID) {
+        if chatScrollRestoration?.id == id { chatScrollRestoration = nil }
+    }
+
+    private func captureNavigationScroll(_ current: BranchNavigation.HistoryResult, in source: OrderedJSON) throws -> BranchNavigation.HistoryResult {
+        guard let anchor = chatScrollAnchors[Data(selectedID.utf8)], chatScrollRestoration == nil else { return current }
+        return try BranchNavigation.history(current.history, action: .capture, in: source, scrollAnchor: anchor)
+    }
+
+    private func restoreChatScroll(chatID: String, anchor: OrderedJSON?, focus: String?) {
+        guard focus == nil, let anchor else {
+            chatScrollRestoration = nil
+            navigationFocus = focus.map { NavigationFocus(nodeID: $0) }
+            return
+        }
+        chatScrollRestoration = ChatScrollRestoration(chatID:chatID,anchor:anchor)
+        navigationFocus = nil
+    }
+
     func focusBranchEditor(nodeID: String) throws {
         guard generation == nil, branchEditorSyncEnabled,
               chatActiveView == .splitHorizontal || chatActiveView == .splitVertical,
@@ -434,7 +485,7 @@ final class ChatState: ObservableObject {
               conversation.visibleMessages.contains(where: { $0.id.utf8.elementsEqual(nodeID.utf8) }),
               let chat = try exchange.source.required("chats").array("chats").first(where: { $0["id"] == .string(conversation.id) }),
               let tree = chat["branchTree"], case .object = tree else { return }
-        let current = try currentNavigationHistory(in: exchange.source)
+        let current = try captureNavigationScroll(try currentNavigationHistory(in: exchange.source), in: exchange.source)
         let entry = OrderedJSON.object([
             .init(key: "chatId", value: .string(conversation.id)),
             .init(key: "activePath", value: .array(conversation.visibleMessages.map { .string($0.id) })),
@@ -453,41 +504,47 @@ final class ChatState: ObservableObject {
 
     func navigate(chatID: String, nodeID: String? = nil, source: BranchNavigation.Source) throws {
         guard let exchange else { throw ExchangeError.invalid("保存済み会話がありません") }
-        let history = try currentNavigationHistory(in: exchange.source)
+        let history = try captureNavigationScroll(try currentNavigationHistory(in: exchange.source), in: exchange.source)
         let path = conversations.first { $0.id.utf8.elementsEqual(chatID.utf8) }?.visibleMessages.map(\.id)
         let target = try BranchNavigation.navigate(in: exchange.source, chatID: chatID, nodeID: nodeID, source: source, viewingPath: path)
         guard target.status == .reached else { throw ExchangeError.invalid("移動先の会話またはメッセージがありません") }
         let next = try BranchNavigation.history(history.history, action: .push, in: target.source, target: target, view: "chat", navigationSource: source)
         try applyLibrary(target.source, selectedID: chatID, resetViewFor: chatID, navigation: next)
-        navigationFocus = (target.focusedNodeID ?? target.path.last).map { NavigationFocus(nodeID: $0) }
+        let focus = nodeID == nil ? nil : (target.focusedNodeID ?? target.path.last)
+        let anchor = next.entry?["scrollAnchor"] ?? (nodeID == nil && source == .chatSwitch ? chatScrollAnchors[Data(chatID.utf8)] : nil)
+        restoreChatScroll(chatID:chatID,anchor:anchor,focus:focus)
     }
 
     func navigateBranchSearch(_ result: ChatSearchResult) throws {
         guard let nodeID = result.nodeID else { throw ExchangeError.invalid("移動先のメッセージがありません") }
         guard let exchange else { throw ExchangeError.invalid("保存済み会話がありません") }
-        let current = try currentNavigationHistory(in: exchange.source)
+        let current = try captureNavigationScroll(try currentNavigationHistory(in: exchange.source), in: exchange.source)
         let target = try BranchNavigation.navigate(in: exchange.source, chatID: result.chatID, nodeID: nodeID, source: .search)
         guard target.status == .reached else { throw ExchangeError.invalid("移動先の会話またはメッセージがありません") }
         let next = try BranchNavigation.history(current.history, action: .push, in: target.source, target: target,
                                                 view: chatActiveView.rawValue, navigationSource: .search)
         try applyLibrary(target.source, selectedID: selectedID, resetViewFor: result.chatID, navigation: next)
+        chatScrollRestoration = nil
         branchEditorFocus = BranchEditorFocus(chatID: result.chatID, nodeID: nodeID)
     }
 
     func moveNavigation(_ direction: BranchNavigation.HistoryAction) throws {
         guard let exchange, direction == .back || direction == .forward else { throw ExchangeError.invalid("現在は履歴を移動できません") }
-        let current = try currentNavigationHistory(in: exchange.source)
+        let current = try captureNavigationScroll(try currentNavigationHistory(in: exchange.source), in: exchange.source)
         let next = try BranchNavigation.history(current.history, action: direction, in: exchange.source)
         guard next.history != current.history, let entry = next.entry else { return }
         let target = try BranchNavigation.restore(in: exchange.source, entry: entry)
         guard target.status == .reached, let chatID = target.chatID else { throw ExchangeError.invalid("移動先の会話がありません") }
-        try applyLibrary(target.source, selectedID: chatID, resetViewFor: chatID, navigation: next)
-        navigationFocus = (target.focusedNodeID ?? target.path.last).map { NavigationFocus(nodeID: $0) }
+        let restoredView = entry["viewContext"].flatMap { try? $0.string("view context") }.flatMap(ChatActiveView.init(rawValue:))
+        try applyLibrary(target.source, selectedID: chatID, resetViewFor: chatID, navigation: next, activeView: restoredView)
+        if let restoredView, restoredView != .chat, let nodeID = target.focusedNodeID { branchEditorFocus = BranchEditorFocus(chatID:chatID,nodeID:nodeID) }
+        let anchor = next.entry?["scrollAnchor"]
+        restoreChatScroll(chatID:chatID,anchor:anchor,focus:anchor == nil ? target.focusedNodeID ?? target.path.last : nil)
     }
 
     private func historySelecting(_ chatID: String, in source: OrderedJSON) throws -> BranchNavigation.HistoryResult? {
         guard !selectedID.utf8.elementsEqual(chatID.utf8), let exchange else { return nil }
-        let current = try currentNavigationHistory(in: exchange.source)
+        let current = try captureNavigationScroll(try currentNavigationHistory(in: exchange.source), in: exchange.source)
         let target = try BranchNavigation.navigate(in: source, chatID: chatID, source: .chatSwitch)
         guard target.status == .reached else { return nil }
         return try BranchNavigation.history(current.history, action: .push, in: source, target: target, view: "chat", navigationSource: .chatSwitch)
@@ -1967,7 +2024,7 @@ final class ChatState: ObservableObject {
         try applyLibrary(ChatFolders.apply(in: source, operation: operation), selectedID: exchange == nil ? "" : selectedID, preserveGeneration: true, now: now)
     }
 
-    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, resetViewsFor: [String] = [], preserveGeneration: Bool = false, tokenUsage: OrderedJSON? = nil, usageEnabled: Bool? = nil, evaluationResults: OrderedJSON? = nil, navigation: BranchNavigation.HistoryResult? = nil, editing: MessageEditing.HistoryState? = nil, clipboard: OrderedJSON? = nil, openRouterStats: OrderedJSON? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
+    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, resetViewsFor: [String] = [], preserveGeneration: Bool = false, tokenUsage: OrderedJSON? = nil, usageEnabled: Bool? = nil, evaluationResults: OrderedJSON? = nil, navigation: BranchNavigation.HistoryResult? = nil, editing: MessageEditing.HistoryState? = nil, clipboard: OrderedJSON? = nil, openRouterStats: OrderedJSON? = nil, activeView: ChatActiveView? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard !initialLoadFailed else { throw ExchangeError.invalid("保存ファイルを読めなかったため更新できません。明示的な置換が必要です") }
         let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
         let before = try exchange?.source ?? base.uiProjection()
@@ -1985,6 +2042,9 @@ final class ChatState: ObservableObject {
             var roots = try candidate.snapshot.required("state")
             for field in try openRouterStats.object("OpenRouter stats") { roots = roots.replacing(field.key,with:field.value) }
             candidate = try SyncDocument(snapshot:candidate.snapshot.replacing("state",with:roots),v3Sidecar:candidate.v3Sidecar,v3RootOrder:candidate.v3RootOrder)
+        }
+        if let activeView {
+            candidate = try SyncDocument(snapshot:candidate.snapshot.replacing("state",with:candidate.snapshot.required("state").replacing("chatActiveView",with:.string(activeView.rawValue))),v3Sidecar:candidate.v3Sidecar,v3RootOrder:candidate.v3RootOrder)
         }
         let changed = try WebExchange(source: candidate.uiProjection())
         let candidates = try BranchNavigation.candidates(in: changed.source)
@@ -2108,6 +2168,7 @@ final class ChatState: ObservableObject {
         let nextEditing = try exchange.map { try MessageEditing.invalidatingHistory(editingHistory, before: $0.source, after: changed.source) } ?? nil
         try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selected, style: displayStyle))
         invalidateGeneration(); cancelTitles(); cancelSummaries(); cancelEvaluations()
+        chatScrollAnchors = [:]; chatScrollRestoration = nil
         branchCandidates = candidates
         if let nextNavigation { publishNavigation(nextNavigation, focus: nil) }
         editingHistory = nextEditing

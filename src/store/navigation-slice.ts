@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { StoreSlice } from './store';
 import { ChatView } from '@type/chat';
 import { resolveNavigationTarget, navigationEntry, entryWithNavigationKey, navigationEntryWithAnchor, captureNavigationHistory, restoredNavigationPath, emptyNavigationHistory, initializeNavigationHistory, pushNavigationHistory, moveNavigationHistory, canMoveNavigationHistory } from '@utils/branchNavigation';
+import { captureBubbleScrollAnchor } from '@utils/bubbleScroll';
 
 export interface NavScrollAnchor {
   firstVisibleItemIndex: number;
@@ -50,21 +51,18 @@ function captureVisibleAnchor(chatId: string, get: () => any): boolean {
   const scroller = Array.from(document.querySelectorAll<HTMLElement>('[data-chat-scroller]'))
     .find((element) => element.dataset.chatId === chatId);
   if (!scroller || scroller.clientHeight === 0) return false;
-  const wasAtBottom = scroller.scrollTop >= scroller.scrollHeight - scroller.clientHeight - 0.5;
-  let firstVisibleItemIndex = -1;
-  let offsetWithinItem = 0;
-  let nodeId: string | undefined;
   const top = scroller.getBoundingClientRect().top;
+  const items = [];
   for (const item of scroller.querySelectorAll<HTMLElement>('[data-item-index]')) {
     const rect = item.getBoundingClientRect();
-    if (rect.bottom > top) {
-      firstVisibleItemIndex = Number(item.dataset.itemIndex);
-      offsetWithinItem = top - rect.top;
-      nodeId = item.dataset.nodeId;
-      break;
-    }
+    items.push({ index: Number(item.dataset.itemIndex), nodeId: item.dataset.nodeId, top: rect.top - top, bottom: rect.bottom - top });
+    if (rect.bottom > top) break;
   }
-  state.saveChatScrollAnchor?.(chatId, { firstVisibleItemIndex, offsetWithinItem, wasAtBottom, nodeId, scrollTop: scroller.scrollTop });
+  const anchor = captureBubbleScrollAnchor({
+    items,
+    scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight,
+  });
+  state.saveChatScrollAnchor?.(chatId, anchor);
   return true;
 }
 

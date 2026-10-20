@@ -1,5 +1,8 @@
-import { bubbleNavigationTargets } from '../../src/utils/bubbleScroll';
+import { bubbleNavigationTargets, captureBubbleScrollAnchor, restoredBubbleScrollTop } from '../../src/utils/bubbleScroll';
 
 export function bubbleScroll(json: string): string {
-  return JSON.stringify(bubbleNavigationTargets(JSON.parse(json)));
+  const input = JSON.parse(json);
+  if (input.operation === 'capture') return JSON.stringify(captureBubbleScrollAnchor(input));
+  if (input.operation === 'restore') return JSON.stringify(restoredBubbleScrollTop(input));
+  return JSON.stringify(bubbleNavigationTargets(input));
 }
