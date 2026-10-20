@@ -7,6 +7,12 @@ export type LocalModelRegistryState<Model = unknown, Meta = unknown> = {
   savedModelMeta: Record<string, Meta>;
 };
 
+export function modelFileRemovalPaths(fileName: string): string[] {
+  return fileName.endsWith('.part')
+    ? [fileName.slice(0, -'.part'.length), fileName]
+    : [fileName];
+}
+
 function registeredModelID(model: unknown): unknown {
   if (model && typeof model === 'object' && 'id' in model) return model.id;
   return undefined;

@@ -124,6 +124,9 @@ struct LocalModelSettingsView: View {
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }
             .disabled(copying || removing || state.hasGenerations || state.evaluationJobs.values.contains { $0.busy })
+            Section {
+                NavigationLink("モデルストレージ") { ModelStorageView(state:state) }
+            }
             hfSearchSection
             catalogSection
         }
@@ -326,6 +329,122 @@ struct LocalModelSettingsView: View {
                         if let message = job?.error { Text(message).font(.footnote).foregroundStyle(.red) }
                     }
                 }
+            }
+        }
+    }
+}
+
+private struct ModelStorageView: View {
+    typealias Entry = LocalModelFiles.ModelAssetInventoryEntry
+    struct Removal { let entries: [Entry]; let fileName: String? }
+    @ObservedObject var state: ChatState
+    @State private var entries: [Entry] = []
+    @State private var loading = false
+    @State private var removing = false
+    @State private var pending: Removal?
+    @State private var errorMessage: String?
+    @State private var status: String?
+
+    private func size(_ bytes: UInt64) -> String { ByteCountFormatter.string(fromByteCount:Int64(clamping:bytes),countStyle:.file) }
+    private func title(_ entry: Entry) -> String {
+        if let model = try? state.registeredModel(for:entry) {
+            return (try? model["label"]?.string("model label")) ?? (try? model["id"]?.string("model ID")) ?? "モデル"
+        }
+        switch entry.kind {
+        case .modelFile, .modelDirectory: return "未登録モデル " + String(entry.key.prefix(12))
+        case .downloadCache: return "取得キャッシュ " + String(entry.key.prefix(12))
+        case .staleStage: return "保存途中のファイル " + String(entry.key.prefix(16))
+        }
+    }
+    private var disabled: Bool { loading || removing || state.modelStorageBusy || state.modelAssetRecoveryError != nil }
+    private func refresh() async {
+        loading = true
+        defer { loading = false }
+        do { entries = try await state.modelStorageInventory() }
+        catch is CancellationError { }
+        catch { errorMessage = error.localizedDescription }
+    }
+    private func remove(_ request: Removal) {
+        pending = nil; removing = true; errorMessage = nil; status = nil
+        Task { @MainActor in
+            defer { removing = false }
+            var removed = 0, failures: [String] = [], handledModels = Set<Data>()
+            let modelIDs = request.entries.map { entry -> Data? in
+                guard let model = try? state.registeredModel(for:entry), let id = try? model.required("id").string("id") else { return nil }
+                return Data(id.utf8)
+            }
+            for (index,entry) in request.entries.enumerated() {
+                do {
+                    if request.fileName == nil, let id = modelIDs[index] {
+                        guard handledModels.insert(id).inserted else { continue }
+                    }
+                    try await state.removeModelStorageEntry(entry,fileName:request.fileName)
+                    removed += 1
+                } catch { failures.append(title(entry) + ": " + error.localizedDescription) }
+            }
+            await refresh()
+            status = "削除済み: \(removed)件"
+            if !failures.isEmpty { errorMessage = failures.joined(separator:"\n") }
+        }
+    }
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("合計（アプリ内ファイル）",value:size(entries.reduce(UInt64(0)) { $0 + $1.total }))
+                Text("このアプリに保存したモデルと取得キャッシュを表示します。会話は含みません。")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Button("一覧を更新") { errorMessage = nil; Task { await refresh() } }.disabled(loading || removing)
+                if !entries.isEmpty {
+                    Button("すべてのモデルファイルを削除",role:.destructive) { pending = .init(entries:entries,fileName:nil) }.disabled(disabled)
+                }
+                if loading { ProgressView("ファイルを確認中…") }
+                if removing { ProgressView("ファイルを削除中…") }
+                if let status { Text(status).font(.footnote) }
+                if let errorMessage { Text(errorMessage).font(.footnote).foregroundStyle(.red) }
+                if state.modelStorageBusy && !removing { Text("取得・保存・生成・評価が終了すると削除できます。").font(.footnote).foregroundStyle(.secondary) }
+                if state.modelAssetRecoveryError != nil { Text("再起動してファイルの復旧を再試行してください。").font(.footnote).foregroundStyle(.red) }
+                if !loading && entries.isEmpty && errorMessage == nil { Text("モデルファイルはありません。").foregroundStyle(.secondary) }
+            }
+            ForEach(entries.indices,id:\.self) { index in
+                let entry = entries[index]
+                Section {
+                    DisclosureGroup {
+                        ForEach(entry.files.indices,id:\.self) { fileIndex in
+                            let file = entry.files[fileIndex]
+                            HStack {
+                                VStack(alignment:.leading,spacing:4) {
+                                    Text(file.name).font(.footnote).textSelection(.enabled)
+                                    Text((file.isTemp ? "未完了・" : "") + size(file.size)).font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if file.isTemp && (entry.kind == .modelDirectory || entry.kind == .downloadCache) {
+                                    Button("未完了ファイルを削除",systemImage:"trash",role:.destructive) {
+                                        pending = .init(entries:[entry],fileName:file.name)
+                                    }.labelStyle(.iconOnly).buttonStyle(.borderless).frame(minWidth:44,minHeight:44).disabled(disabled)
+                                }
+                            }
+                        }
+                    } label: {
+                        VStack(alignment:.leading,spacing:4) {
+                            Text(title(entry))
+                            Text("\(entry.files.count)ファイル・" + size(entry.total)).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    Button("削除",role:.destructive) { pending = .init(entries:[entry],fileName:nil) }.disabled(disabled)
+                }
+            }
+        }
+        .navigationTitle("モデルストレージ")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await refresh() }
+        .confirmationDialog("ファイルを削除しますか？",isPresented:Binding(get:{pending != nil},set:{if !$0 { pending = nil }}),titleVisibility:.visible) {
+            if let request = pending { Button("削除",role:.destructive) { remove(request) } }
+            Button("取消",role:.cancel) { pending = nil }
+        } message: {
+            if pending?.fileName != nil {
+                Text("この未完了ファイルと対応する取得中ファイルを削除します。モデル定義と会話は保持します。")
+            } else {
+                Text("対象のモデルファイルをこの端末から削除します。登録済みモデルを丸ごと削除する場合は定義・役割・お気に入りも削除します。会話は保持します。")
             }
         }
     }

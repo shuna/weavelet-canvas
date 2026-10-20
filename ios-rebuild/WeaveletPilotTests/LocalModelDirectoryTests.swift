@@ -365,4 +365,240 @@ import Darwin
         try files.recoverModelRemovals(registeredIDs:[])
         XCTAssertEqual(try Data(contentsOf:files.installed(modelID:id)),Data("GGUFfirst".utf8))
     }
+    private func inventoryEntry(_ files: LocalModelFiles, kind: LocalModelFiles.ModelAssetKind, key: String? = nil) throws -> LocalModelFiles.ModelAssetInventoryEntry {
+        try XCTUnwrap(try files.modelAssetInventory().first { $0.kind == kind && (key == nil || $0.key == key) })
+    }
+    private func quarantineDirectory(_ files: LocalModelFiles) throws -> URL {
+        try XCTUnwrap(try FileManager.default.contentsOfDirectory(at:files.directory.appendingPathComponent(".model-removals"),includingPropertiesForKeys:nil).first)
+    }
+    private func markAssetJournalPreparing(_ files: LocalModelFiles) throws {
+        let journal = files.directory.appendingPathComponent(".model-removals-journal.json")
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:journal)) as? [String:Any])
+        var records = try XCTUnwrap(object["records"] as? [[String:Any]])
+        var asset = try XCTUnwrap(records[0]["asset"] as? [String:Any])
+        asset["staged"] = false
+        records[0]["asset"] = asset; object["records"] = records
+        try JSONSerialization.data(withJSONObject:object).write(to:journal)
+    }
+    func testAssetInventoryIncludesHashBucketsCacheAndBothLegacyStageFiles() throws {
+        let (_,files) = try setup()
+        let fileKey = String(repeating:"a",count:64) + ".gguf", directoryKey = String(repeating:"b",count:64), cacheKey = String(repeating:"c",count:64)
+        let directoryStage = ".model-" + UUID().uuidString + ".part"
+        let fileStages = [UUID().uuidString + ".part",UUID().uuidString + ".gguf"]
+        try write(files.directory,fileKey,Data("GGUFmodel".utf8))
+        try write(files.directory,directoryKey + "/nested/model.onnx",Data([1,2,3]))
+        try write(files.directory,".catalog-cache/" + cacheKey + "/parts/model.gguf.part",Data([4,5]))
+        try write(files.directory,directoryStage + "/pending.bin",Data([6]))
+        for name in fileStages { try write(files.directory,name,Data([7])) }
+        try write(files.directory,".model-removals-journal.json",Data("internal".utf8))
+        try write(files.directory,"unrelated.txt",Data([8]))
+        let rows = try files.modelAssetInventory()
+        XCTAssertEqual(rows.count,6)
+        XCTAssertEqual(try inventoryEntry(files,kind:.modelFile).key,fileKey)
+        let directory = try inventoryEntry(files,kind:.modelDirectory)
+        XCTAssertEqual(directory.files.map(\.name),["nested/model.onnx"])
+        XCTAssertEqual(directory.total,3)
+        let cache = try inventoryEntry(files,kind:.downloadCache)
+        XCTAssertEqual(cache.key,cacheKey)
+        XCTAssertEqual(cache.files.first?.name,"parts/model.gguf.part")
+        XCTAssertEqual(cache.files.first?.isTemp,true)
+        XCTAssertEqual(Set(rows.filter { $0.kind == .staleStage }.map(\.key)),Set(fileStages + [directoryStage]))
+    }
+    func testUnknownAssetRemovalUsesCapturedHashNameAndReplaysRegistration() throws {
+        let (_,files) = try setup(), id = "unknown/later-registered"
+        let target = try files.url(modelID:id)
+        try write(files.directory,target.lastPathComponent,Data("GGUFunknown".utf8))
+        let first = try inventoryEntry(files,kind:.modelFile)
+        XCTAssertThrowsError(try files.stageUnregisteredAssetRemoval(first,registeredIDs:[id]))
+        _ = try files.stageUnregisteredAssetRemoval(first,registeredIDs:[])
+        XCTAssertFalse(FileManager.default.fileExists(atPath:target.path))
+        try files.recoverModelRemovals(registeredIDs:[id])
+        XCTAssertEqual(try Data(contentsOf:target),Data("GGUFunknown".utf8))
+        _ = try files.stageUnregisteredAssetRemoval(try inventoryEntry(files,kind:.modelFile),registeredIDs:[])
+        try Data("GGUFnew-generation".utf8).write(to:target)
+        try files.recoverModelRemovals(registeredIDs:[])
+        XCTAssertEqual(try Data(contentsOf:target),Data("GGUFnew-generation".utf8))
+        try files.recoverModelRemovals(registeredIDs:[])
+    }
+    func testUnknownDirectoryCacheAndStaleStagesCommitOnReplay() throws {
+        let (_,files) = try setup()
+        let modelKey = String(repeating:"d",count:64), cacheKey = String(repeating:"e",count:64)
+        let staleNames = [".model-" + UUID().uuidString + ".part",UUID().uuidString + ".part",UUID().uuidString + ".gguf"]
+        try write(files.directory,modelKey + "/nested/model.bin",Data([1]))
+        try write(files.directory,".catalog-cache/" + cacheKey + "/parts/model.bin",Data([2]))
+        try write(files.directory,staleNames[0] + "/pending.bin",Data([3]))
+        for name in staleNames.dropFirst() { try write(files.directory,name,Data([4])) }
+        for row in try files.modelAssetInventory() { _ = try files.stageUnregisteredAssetRemoval(row,registeredIDs:[]) }
+        XCTAssertTrue(try files.modelAssetInventory().isEmpty)
+        try files.recoverModelRemovals(registeredIDs:["unrelated/model"])
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath:files.directory.appendingPathComponent(".model-removals").path).isEmpty)
+        XCTAssertTrue(try files.modelAssetInventory().isEmpty)
+    }
+    func testSubsetRemovalStagesBodyAndMarkerTogetherAndReplaysWithoutDeletingSibling() throws {
+        let (_,files) = try setup(), key = String(repeating:"f",count:64)
+        let bucket = files.directory.appendingPathComponent(key)
+        try write(bucket,"nested/model.bin",Data("body".utf8))
+        try write(bucket,"nested/model.bin.part",Data())
+        try write(bucket,"kept.json",Data("kept".utf8))
+        let paths = ["nested/model.bin","nested/model.bin.part"]
+        let staged = try files.stageAssetFileRemoval(try inventoryEntry(files,kind:.modelDirectory),paths:paths)
+        for path in paths { XCTAssertFalse(FileManager.default.fileExists(atPath:bucket.appendingPathComponent(path).path)) }
+        try staged.rollback()
+        XCTAssertEqual(try Data(contentsOf:bucket.appendingPathComponent(paths[0])),Data("body".utf8))
+        _ = try files.stageAssetFileRemoval(try inventoryEntry(files,kind:.modelDirectory),paths:paths)
+        try write(bucket,paths[0],Data("newer".utf8))
+        try files.recoverModelRemovals(registeredIDs:[])
+        XCTAssertEqual(try Data(contentsOf:bucket.appendingPathComponent(paths[0])),Data("newer".utf8))
+        XCTAssertEqual(try Data(contentsOf:bucket.appendingPathComponent("kept.json")),Data("kept".utf8))
+        XCTAssertFalse(FileManager.default.fileExists(atPath:bucket.appendingPathComponent(paths[1]).path))
+    }
+    func testSubsetRemovalAllowsMissingBodyOnlyWithCapturedMarkerAndRejectsUnsafePaths() throws {
+        let (_,files) = try setup(), key = String(repeating:"a",count:64)
+        let bucket = files.directory.appendingPathComponent(key)
+        try write(bucket,"nested/model.bin.part",Data())
+        let row = try inventoryEntry(files,kind:.modelDirectory)
+        for paths in [["../outside"],["/outside"],["nested/../outside"],["unknown"],["nested/model.bin"],["nested/model.bin.part","nested/model.bin.part"]] {
+            XCTAssertThrowsError(try files.stageAssetFileRemoval(row,paths:paths))
+        }
+        let staged = try files.stageAssetFileRemoval(row,paths:["nested/model.bin","nested/model.bin.part"])
+        try staged.commit()
+        XCTAssertFalse(FileManager.default.fileExists(atPath:bucket.appendingPathComponent("nested/model.bin.part").path))
+    }
+    func testAssetRemovalRejectsChangedTreeAndReplacedRegisteredInventoryEntry() throws {
+        let (_,files) = try setup(), id = "registered/generation"
+        let target = try files.directoryURL(modelID:id)
+        try write(target,"nested/model.bin",Data("old".utf8))
+        let row = try inventoryEntry(files,kind:.modelDirectory)
+        try write(target,"nested/model.bin",Data("new".utf8))
+        XCTAssertThrowsError(try files.stageUnregisteredAssetRemoval(row,registeredIDs:[]))
+        XCTAssertThrowsError(try files.stageAssetFileRemoval(row,paths:["nested/model.bin"]))
+        XCTAssertThrowsError(try files.stageModelRemoval(modelID:id,expectedEntry:row))
+        XCTAssertEqual(try Data(contentsOf:target.appendingPathComponent("nested/model.bin")),Data("new".utf8))
+        let current = try inventoryEntry(files,kind:.modelDirectory)
+        XCTAssertThrowsError(try files.stageModelRemoval(modelID:"another/model",expectedEntry:current))
+        let staged = try files.stageModelRemoval(modelID:id,expectedEntry:current)
+        try staged.rollback()
+        XCTAssertEqual(try Data(contentsOf:target.appendingPathComponent("nested/model.bin")),Data("new".utf8))
+    }
+    func testSubsetPreparedReplayFinishesPartialStageBeforeDeletingAnyEntry() throws {
+        let (_,files) = try setup(), key = String(repeating:"b",count:64)
+        let bucket = files.directory.appendingPathComponent(key)
+        try write(bucket,"nested/model.bin",Data("body".utf8))
+        try write(bucket,"nested/model.bin.part",Data())
+        _ = try files.stageAssetFileRemoval(try inventoryEntry(files,kind:.modelDirectory),paths:["nested/model.bin","nested/model.bin.part"])
+        let quarantine = try quarantineDirectory(files)
+        try FileManager.default.moveItem(at:quarantine.appendingPathComponent("0"),to:bucket.appendingPathComponent("nested/model.bin"))
+        try markAssetJournalPreparing(files)
+        try files.recoverModelRemovals(registeredIDs:[])
+        XCTAssertFalse(FileManager.default.fileExists(atPath:bucket.appendingPathComponent("nested/model.bin").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath:bucket.appendingPathComponent("nested/model.bin.part").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath:quarantine.path))
+    }
+    func testSubsetPreparedReplayCollisionPreservesNewBodyAndOldQuarantine() throws {
+        let (_,files) = try setup(), key = String(repeating:"c",count:64)
+        let bucket = files.directory.appendingPathComponent(key)
+        try write(bucket,"body.bin",Data("old".utf8)); try write(bucket,"body.bin.part",Data())
+        _ = try files.stageAssetFileRemoval(try inventoryEntry(files,kind:.modelDirectory),paths:["body.bin","body.bin.part"])
+        let quarantine = try quarantineDirectory(files)
+        try write(bucket,"body.bin",Data("new".utf8))
+        try markAssetJournalPreparing(files)
+        XCTAssertThrowsError(try files.recoverModelRemovals(registeredIDs:[])) { error in
+            XCTAssertTrue(error is LocalModelFiles.ModelRemovalRecoveryError)
+        }
+        XCTAssertEqual(try Data(contentsOf:bucket.appendingPathComponent("body.bin")),Data("new".utf8))
+        XCTAssertEqual(try Data(contentsOf:quarantine.appendingPathComponent("0")),Data("old".utf8))
+        XCTAssertTrue(FileManager.default.fileExists(atPath:quarantine.appendingPathComponent("1").path))
+    }
+    func testPartialAssetCommitAndJournalWriteFailureCanReplayIdempotently() throws {
+        let (_,files) = try setup(), key = String(repeating:"d",count:64)
+        let bucket = files.directory.appendingPathComponent(key)
+        try write(bucket,"nested/first.bin",Data([1])); try write(bucket,"nested/second.bin",Data([2]))
+        _ = try files.stageUnregisteredAssetRemoval(try inventoryEntry(files,kind:.modelDirectory),registeredIDs:[])
+        let quarantine = try quarantineDirectory(files)
+        try FileManager.default.removeItem(at:quarantine.appendingPathComponent("0/nested/first.bin"))
+        try write(bucket,"new.bin",Data([3]))
+        try files.recoverModelRemovals(registeredIDs:[])
+        XCTAssertEqual(try Data(contentsOf:bucket.appendingPathComponent("new.bin")),Data([3]))
+        let staged = try files.stageUnregisteredAssetRemoval(try inventoryEntry(files,kind:.modelDirectory),registeredIDs:[])
+        let journal = files.directory.appendingPathComponent(".model-removals-journal.json")
+        let savedJournal = try Data(contentsOf:journal)
+        try FileManager.default.removeItem(at:journal)
+        try FileManager.default.createDirectory(at:journal,withIntermediateDirectories:false)
+        XCTAssertThrowsError(try staged.commit())
+        try FileManager.default.removeItem(at:journal)
+        try savedJournal.write(to:journal)
+        try write(bucket,"newer.bin",Data([4]))
+        try files.recoverModelRemovals(registeredIDs:[])
+        try files.recoverModelRemovals(registeredIDs:[])
+        XCTAssertEqual(try Data(contentsOf:bucket.appendingPathComponent("newer.bin")),Data([4]))
+    }
+    func testAssetInventoryAndRemovalNeverTraverseSymlinksOrRestoreIntoNewNestedParent() throws {
+        let (root,files) = try setup(), key = String(repeating:"e",count:64)
+        let bucket = files.directory.appendingPathComponent(key), outside = root.appendingPathComponent("outside")
+        try write(bucket,"nested/model.bin.part",Data())
+        try write(outside,"kept.bin",Data("outside".utf8))
+        let row = try inventoryEntry(files,kind:.modelDirectory)
+        try FileManager.default.removeItem(at:bucket.appendingPathComponent("nested/model.bin.part"))
+        try FileManager.default.createSymbolicLink(at:bucket.appendingPathComponent("nested/model.bin.part"),withDestinationURL:outside.appendingPathComponent("kept.bin"))
+        XCTAssertThrowsError(try files.modelAssetInventory())
+        XCTAssertThrowsError(try files.stageAssetFileRemoval(row,paths:["nested/model.bin.part"]))
+        XCTAssertEqual(try Data(contentsOf:outside.appendingPathComponent("kept.bin")),Data("outside".utf8))
+        try FileManager.default.removeItem(at:bucket.appendingPathComponent("nested/model.bin.part"))
+        try write(bucket,"nested/model.bin.part",Data())
+        let staged = try files.stageAssetFileRemoval(try inventoryEntry(files,kind:.modelDirectory),paths:["nested/model.bin.part"])
+        try FileManager.default.moveItem(at:bucket.appendingPathComponent("nested"),to:bucket.appendingPathComponent("old-nested"))
+        try FileManager.default.createDirectory(at:bucket.appendingPathComponent("nested"),withIntermediateDirectories:false)
+        XCTAssertThrowsError(try staged.rollback()) { error in XCTAssertTrue(error is LocalModelFiles.ModelRemovalRecoveryError) }
+        XCTAssertFalse(FileManager.default.fileExists(atPath:bucket.appendingPathComponent("nested/model.bin.part").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath:try quarantineDirectory(files).appendingPathComponent("0").path))
+        try files.recoverModelRemovals(registeredIDs:[])
+        XCTAssertEqual(try Data(contentsOf:outside.appendingPathComponent("kept.bin")),Data("outside".utf8))
+    }
+
+    func testSubsetPartialRollbackIntentRestoresRemainingMarkerOnRestart() throws {
+        let (_,files) = try setup(), key = String(repeating:"f",count:64)
+        let bucket = files.directory.appendingPathComponent(key)
+        try write(bucket,"body.bin",Data("partial body".utf8))
+        try write(bucket,"body.bin.part",Data())
+        _ = try files.stageAssetFileRemoval(try inventoryEntry(files,kind:.modelDirectory),paths:["body.bin","body.bin.part"])
+        let quarantine = try quarantineDirectory(files)
+        let journal = files.directory.appendingPathComponent(".model-removals-journal.json")
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:journal)) as? [String:Any])
+        var records = try XCTUnwrap(object["records"] as? [[String:Any]])
+        var asset = try XCTUnwrap(records[0]["asset"] as? [String:Any])
+        asset["rollbackRequested"] = true
+        records[0]["asset"] = asset; object["records"] = records
+        try JSONSerialization.data(withJSONObject:object).write(to:journal)
+        // Simulate interruption after the first rename, before the marker returns.
+        try FileManager.default.moveItem(at:quarantine.appendingPathComponent("0"),to:bucket.appendingPathComponent("body.bin"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath:bucket.appendingPathComponent("body.bin.part").path))
+        try files.recoverModelRemovals(registeredIDs:[])
+        try files.recoverModelRemovals(registeredIDs:[])
+        XCTAssertEqual(try Data(contentsOf:bucket.appendingPathComponent("body.bin")),Data("partial body".utf8))
+        XCTAssertTrue(FileManager.default.fileExists(atPath:bucket.appendingPathComponent("body.bin.part").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath:quarantine.path))
+    }
+    func testSubsetRollbackIntentJournalFailureKeepsEveryQuarantinedByte() throws {
+        let (_,files) = try setup(), key = String(repeating:"a",count:64)
+        let bucket = files.directory.appendingPathComponent(key)
+        try write(bucket,"body.bin",Data("partial body".utf8))
+        try write(bucket,"body.bin.part",Data())
+        let staged = try files.stageAssetFileRemoval(try inventoryEntry(files,kind:.modelDirectory),paths:["body.bin","body.bin.part"])
+        let quarantine = try quarantineDirectory(files)
+        let journal = files.directory.appendingPathComponent(".model-removals-journal.json")
+        let savedJournal = try Data(contentsOf:journal)
+        try FileManager.default.removeItem(at:journal)
+        try FileManager.default.createDirectory(at:journal,withIntermediateDirectories:false)
+        XCTAssertThrowsError(try staged.rollback()) { error in XCTAssertTrue(error is LocalModelFiles.ModelRemovalRecoveryError) }
+        XCTAssertFalse(FileManager.default.fileExists(atPath:bucket.appendingPathComponent("body.bin").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath:bucket.appendingPathComponent("body.bin.part").path))
+        XCTAssertEqual(try Data(contentsOf:quarantine.appendingPathComponent("0")),Data("partial body".utf8))
+        XCTAssertTrue(FileManager.default.fileExists(atPath:quarantine.appendingPathComponent("1").path))
+        try FileManager.default.removeItem(at:journal)
+        try savedJournal.write(to:journal)
+        try staged.rollback()
+        XCTAssertEqual(try Data(contentsOf:bucket.appendingPathComponent("body.bin")),Data("partial body".utf8))
+        XCTAssertTrue(FileManager.default.fileExists(atPath:bucket.appendingPathComponent("body.bin.part").path))
+    }
+
 }

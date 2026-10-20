@@ -3,6 +3,13 @@ import CryptoKit
 import Darwin
 
 extension LocalModelFiles {
+    enum ModelAssetKind: String, Codable { case modelFile, modelDirectory, downloadCache, staleStage }
+    struct ModelAssetInventoryFile { let name: String; let size: UInt64; let isTemp: Bool }
+    struct ModelAssetInventoryEntry {
+        let kind: ModelAssetKind; let key: String; let files: [ModelAssetInventoryFile]; let total: UInt64
+        fileprivate let path: URL; fileprivate let snapshot: AssetSnapshot
+        fileprivate let modelsIdentity: ModelFileIdentity; fileprivate let parentIdentity: ModelFileIdentity
+    }
     struct DirectoryInspection {
         fileprivate let declaration: Data
         fileprivate let directories: [String: ModelFileRevision]
@@ -41,10 +48,28 @@ extension LocalModelFiles {
         }
         deinit { discard() }
     }
+    fileprivate struct AssetSnapshot: Codable, Equatable {
+        let revisions: [String: ModelFileRevision]
+        let directories: [String]
+    }
+    fileprivate struct AssetRemoval: Codable {
+        let kind: ModelAssetKind
+        let key: String
+        let subset: Bool
+        let staged: Bool
+        let rollbackRequested: Bool?
+        let snapshot: AssetSnapshot
+        let modelsIdentity: ModelFileIdentity
+        let parentIdentity: ModelFileIdentity
+    }
     fileprivate struct ModelRemovalRecord {
         let id: String
         let quarantine: String
         let entries: [String]
+        let asset: AssetRemoval?
+        init(id: String, quarantine: String, entries: [String], asset: AssetRemoval? = nil) {
+            self.id = id; self.quarantine = quarantine; self.entries = entries; self.asset = asset
+        }
     }
     enum ModelRemovalRecoveryError: Error {
         case incompleteRollback
@@ -185,14 +210,123 @@ extension LocalModelFiles {
     }
     private static let directoryLock = NSLock()
 
+    private func validAssetName(_ kind: ModelAssetKind, _ name: String) -> Bool {
+        func hash(_ value: String) -> Bool {
+            value.utf8.count == 64 && value.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
+        }
+        switch kind {
+        case .modelFile: return name.hasSuffix(".gguf") && hash(String(name.dropLast(5)))
+        case .modelDirectory, .downloadCache: return hash(name)
+        case .staleStage:
+            if name.hasPrefix(".model-"), name.hasSuffix(".part") { return UUID(uuidString:String(name.dropFirst(7).dropLast(5))) != nil }
+            return (name.hasSuffix(".part") || name.hasSuffix(".gguf")) && UUID(uuidString:String(name.dropLast(5))) != nil
+        }
+    }
+    private func assetIsDirectory(_ kind: ModelAssetKind, _ key: String) -> Bool {
+        kind == .modelDirectory || kind == .downloadCache || (kind == .staleStage && key.hasPrefix(".model-"))
+    }
+    private func assetSnapshot(_ descriptor: Int32, isDirectory: Bool) throws -> AssetSnapshot {
+        var rootInfo = stat()
+        guard fstat(descriptor,&rootInfo) == 0, rootInfo.st_mode & S_IFMT == (isDirectory ? S_IFDIR : S_IFREG) else { throw ExchangeError.invalid("モデル資産の形式が不正です") }
+        var revisions = ["": try ModelFileRevision(descriptor)]
+        var directories: [String] = isDirectory ? [""] : []
+        func walk(_ parent: Int32, prefix: String) throws {
+            for name in try inventoryNames(parent) {
+                let path = prefix.isEmpty ? name : prefix + "/" + name
+                var info = stat()
+                guard fstatat(parent,name,&info,AT_SYMLINK_NOFOLLOW) == 0 else { throw modelFilePOSIXError() }
+                let isDirectory = info.st_mode & S_IFMT == S_IFDIR
+                guard isDirectory || info.st_mode & S_IFMT == S_IFREG else {
+                    throw ExchangeError.invalid("モデル資産のリンクまたは特殊ファイルは削除できません")
+                }
+                let child = try ModelDirectoryAccess.descriptor(name,from:parent,directory:isDirectory)
+                defer { close(child) }
+                guard revisions.updateValue(try ModelFileRevision(child),forKey:path) == nil else { throw ExchangeError.invalid("モデル資産のファイル名が重複しています") }
+                if isDirectory { directories.append(path); try walk(child,prefix:path) }
+            }
+        }
+        if isDirectory { try walk(descriptor,prefix:"") }
+        // Reopen every node to catch an edit or replacement during enumeration.
+        for (path,revision) in revisions {
+            let current = path.isEmpty ? dup(descriptor) : try ModelDirectoryAccess.descriptor(path,from:descriptor,directory:directories.contains(path))
+            guard current >= 0 else { throw modelFilePOSIXError() }
+            defer { close(current) }
+            guard try ModelFileRevision(current) == revision else { throw ExchangeError.invalid("確認中にモデル資産が変わりました") }
+        }
+        return AssetSnapshot(revisions:revisions,directories:directories.sorted())
+    }
+    func modelAssetInventory() throws -> [ModelAssetInventoryEntry] {
+        Self.directoryLock.lock(); defer { Self.directoryLock.unlock() }
+        var info = stat()
+        if lstat(directory.path,&info) != 0 { if errno == ENOENT { return [] }; throw modelFilePOSIXError() }
+        let models = try removalModelsDirectory(create:false)
+        defer { close(models) }
+        let modelsIdentity = try ModelFileRevision(models).identity
+        var result: [ModelAssetInventoryEntry] = []
+        func add(_ kind: ModelAssetKind, _ key: String, parent: Int32, url: URL) throws {
+            let isDirectory = assetIsDirectory(kind,key)
+            let descriptor = try ModelDirectoryAccess.descriptor(key,from:parent,directory:isDirectory)
+            defer { close(descriptor) }
+            let snapshot = try assetSnapshot(descriptor,isDirectory:isDirectory)
+            let current = try ModelDirectoryAccess.descriptor(key,from:parent,directory:isDirectory)
+            defer { close(current) }
+            guard try ModelFileRevision(current) == snapshot.revisions[""] else { throw ExchangeError.invalid("確認中にモデル資産が置き換わりました") }
+            let files = snapshot.revisions.keys.filter { !snapshot.directories.contains($0) }.sorted().map { path in
+                let name = isDirectory ? path : key
+                return ModelAssetInventoryFile(name:name,size:snapshot.revisions[path]!.size,isTemp:name.hasSuffix(".part"))
+            }
+            result.append(.init(kind:kind,key:key,files:files,total:files.reduce(0) { $0 + $1.size },path:url,snapshot:snapshot,modelsIdentity:modelsIdentity,parentIdentity:try ModelFileRevision(parent).identity))
+        }
+        for name in try inventoryNames(models).sorted() {
+            var item = stat()
+            guard fstatat(models,name,&item,AT_SYMLINK_NOFOLLOW) == 0 else { throw modelFilePOSIXError() }
+            if item.st_mode & S_IFMT == S_IFREG {
+                if validAssetName(.modelFile,name) { try add(.modelFile,name,parent:models,url:directory.appendingPathComponent(name)) }
+                else if validAssetName(.staleStage,name), !assetIsDirectory(.staleStage,name) { try add(.staleStage,name,parent:models,url:directory.appendingPathComponent(name)) }
+            } else if item.st_mode & S_IFMT == S_IFDIR {
+                if validAssetName(.modelDirectory,name) { try add(.modelDirectory,name,parent:models,url:directory.appendingPathComponent(name)) }
+                else if validAssetName(.staleStage,name) { try add(.staleStage,name,parent:models,url:directory.appendingPathComponent(name)) }
+            }
+        }
+        if try removalExists(".catalog-cache",in:models) {
+            let cache = try ModelDirectoryAccess.descriptor(".catalog-cache",from:models,directory:true)
+            defer { close(cache) }
+            for name in try inventoryNames(cache).sorted() where validAssetName(.downloadCache,name) {
+                var item = stat()
+                guard fstatat(cache,name,&item,AT_SYMLINK_NOFOLLOW) == 0 else { throw modelFilePOSIXError() }
+                if item.st_mode & S_IFMT == S_IFDIR { try add(.downloadCache,name,parent:cache,url:directory.appendingPathComponent(".catalog-cache").appendingPathComponent(name)) }
+            }
+        }
+        return result
+    }
+    private func inventoryNames(_ descriptor: Int32) throws -> [String] {
+        guard let stream = fdopendir(dup(descriptor)) else { throw modelFilePOSIXError() }; defer { closedir(stream) }
+        var result:[String] = []; errno = 0
+        while let item = readdir(stream) { let name = withUnsafePointer(to:&item.pointee.d_name) { $0.withMemoryRebound(to:CChar.self,capacity:1024) { String(validatingCString:$0) } }; guard let name else { throw ExchangeError.invalid("UTF8ではないモデル資産名です") }; if name != "." && name != ".." { result.append(name) }; errno = 0 }
+        guard errno == 0 else { throw modelFilePOSIXError() }; return result
+    }
+
     func directoryURL(modelID: String) throws -> URL {
         try url(modelID:modelID).deletingPathExtension()
     }
 
-    func stageModelRemoval(modelID: String) throws -> ModelRemoval {
+    func stageModelRemoval(modelID: String, expectedEntry: ModelAssetInventoryEntry? = nil) throws -> ModelRemoval {
         Self.directoryLock.lock(); defer { Self.directoryLock.unlock() }
         let models = try removalModelsDirectory(create:true)
         defer { close(models) }
+        if let entry = expectedEntry {
+            let names = try removalEntryNames(modelID:modelID)
+            guard (entry.kind == .modelFile && entry.key.utf8.elementsEqual(names[0].utf8)) ||
+                  (entry.kind == .modelDirectory && entry.key.utf8.elementsEqual(names[1].utf8)),
+                  try ModelFileRevision(models).identity == entry.modelsIdentity,
+                  entry.modelsIdentity == entry.parentIdentity else { throw ExchangeError.invalid("モデル一覧の資産が一致しません") }
+            let source = try ModelDirectoryAccess.descriptor(entry.key,from:models,directory:entry.kind == .modelDirectory)
+            defer { close(source) }
+            guard try assetSnapshot(source,isDirectory:entry.kind == .modelDirectory) == entry.snapshot else { throw ExchangeError.invalid("一覧の取得後にモデル資産が変わりました") }
+            let current = try ModelDirectoryAccess.descriptor(entry.key,from:models,directory:entry.kind == .modelDirectory)
+            defer { close(current) }
+            guard try ModelFileRevision(current) == entry.snapshot.revisions[""] else { throw ExchangeError.invalid("一覧の取得後にモデル資産が置き換わりました") }
+        }
         let entries = try removalEntries(modelID:modelID,models:models)
         guard !entries.isEmpty else { return ModelRemoval(owner:self,record:nil) }
         let quarantines = try ModelDirectoryAccess.openOrCreateDirectory(".model-removals",from:models)
@@ -225,7 +359,7 @@ extension LocalModelFiles {
                     let source = try removalExists(entry,in:quarantine)
                     let target = try removalExists(entry,in:models)
                     guard !(source && target), source || target else { restored = false; continue }
-                    if source { guard renameat(quarantine,entry,models,entry) == 0 else { restored = false; continue } }
+                    if source { guard renameatx_np(quarantine,entry,models,entry,UInt32(RENAME_EXCL)) == 0 else { restored = false; continue } }
                 } catch { restored = false }
             }
             if restored {
@@ -244,6 +378,235 @@ extension LocalModelFiles {
         return ModelRemoval(owner:self,record:record)
     }
 
+    func stageUnregisteredAssetRemoval(_ entry: ModelAssetInventoryEntry, registeredIDs: [String]) throws -> ModelRemoval {
+        Self.directoryLock.lock(); defer { Self.directoryLock.unlock() }
+        if entry.kind == .modelFile || entry.kind == .modelDirectory {
+            let names = try registeredIDs.flatMap { try removalEntryNames(modelID:$0) }
+            guard !names.contains(where:{ $0.utf8.elementsEqual(entry.key.utf8) }) else {
+                throw ExchangeError.invalid("登録済みのモデル資産はモデル一覧から削除してください")
+            }
+        }
+        return try stageAssetRemoval(entry,paths:nil)
+    }
+    func stageAssetFileRemoval(_ entry: ModelAssetInventoryEntry, paths: [String]) throws -> ModelRemoval {
+        Self.directoryLock.lock(); defer { Self.directoryLock.unlock() }
+        guard !paths.isEmpty, assetIsDirectory(entry.kind,entry.key) || entry.kind == .staleStage else { throw ExchangeError.invalid("モデル資産の削除対象が不正です") }
+        try ModelDirectoryAccess.validatePaths(paths)
+        let files = Set(entry.files.map { Data($0.name.utf8) })
+        for path in paths where !files.contains(Data(path.utf8)) {
+            let marker = path + ".part"
+            guard !path.hasSuffix(".part"), paths.contains(marker), files.contains(Data(marker.utf8)) else {
+                throw ExchangeError.invalid("一覧にないモデルファイルは削除できません")
+            }
+        }
+        let selected = paths.filter { files.contains(Data($0.utf8)) }
+        return try stageAssetRemoval(entry,paths:assetIsDirectory(entry.kind,entry.key) ? selected : nil)
+    }
+    private func assetParent(_ asset: AssetRemoval, models: Int32) throws -> Int32 {
+        guard try ModelFileRevision(models).identity == asset.modelsIdentity else { throw ExchangeError.invalid("モデル資産の保存先が置き換わりました") }
+        let parent = asset.kind == .downloadCache ? try ModelDirectoryAccess.descriptor(".catalog-cache",from:models,directory:true) : dup(models)
+        guard parent >= 0 else { throw modelFilePOSIXError() }
+        do {
+            guard try ModelFileRevision(parent).identity == asset.parentIdentity else { throw ExchangeError.invalid("モデル資産の保存先が置き換わりました") }
+        } catch { close(parent); throw error }
+        return parent
+    }
+    private func assetSource(_ asset: AssetRemoval, models: Int32) throws -> Int32 {
+        let parent = try assetParent(asset,models:models)
+        if !asset.subset { return parent }
+        defer { close(parent) }
+        let source = try ModelDirectoryAccess.descriptor(asset.key,from:parent,directory:true)
+        guard try ModelFileRevision(source).identity == asset.snapshot.revisions[""]?.identity else {
+            close(source); throw ExchangeError.invalid("モデル資産が置き換わりました")
+        }
+        return source
+    }
+    private func stageAssetRemoval(_ entry: ModelAssetInventoryEntry, paths: [String]?) throws -> ModelRemoval {
+        guard validAssetName(entry.kind,entry.key) else { throw ExchangeError.invalid("モデル資産名が不正です") }
+        let models = try removalModelsDirectory(create:false)
+        defer { close(models) }
+        let asset = AssetRemoval(kind:entry.kind,key:entry.key,subset:paths != nil,staged:false,rollbackRequested:nil,snapshot:entry.snapshot,modelsIdentity:entry.modelsIdentity,parentIdentity:entry.parentIdentity)
+        let parent = try assetParent(asset,models:models)
+        defer { close(parent) }
+        let source = try ModelDirectoryAccess.descriptor(entry.key,from:parent,directory:assetIsDirectory(entry.kind,entry.key))
+        defer { close(source) }
+        guard try assetSnapshot(source,isDirectory:assetIsDirectory(entry.kind,entry.key)) == entry.snapshot else { throw ExchangeError.invalid("一覧の取得後にモデル資産が変わりました") }
+        let current = try ModelDirectoryAccess.descriptor(entry.key,from:parent,directory:assetIsDirectory(entry.kind,entry.key))
+        defer { close(current) }
+        guard try ModelFileRevision(current) == entry.snapshot.revisions[""] else { throw ExchangeError.invalid("一覧の取得後にモデル資産が置き換わりました") }
+        let quarantines = try ModelDirectoryAccess.openOrCreateDirectory(".model-removals",from:models)
+        defer { close(quarantines) }
+        let name = UUID().uuidString.lowercased()
+        guard mkdirat(quarantines,name,0o700) == 0 else { throw modelFilePOSIXError() }
+        let record = ModelRemovalRecord(id:"",quarantine:name,entries:paths ?? [entry.key],asset:asset)
+        do { try saveRemovalRecords(try removalRecords(models) + [record],models:models) }
+        catch { _ = unlinkat(quarantines,name,AT_REMOVEDIR); throw error }
+        do {
+            try stageAssetEntries(record,models:models)
+            let staged = try markAssetStaged(record,models:models)
+            return ModelRemoval(owner:self,record:staged)
+        } catch {
+            let original = error
+            do { try rollbackAssetRemoval(record,models:models) }
+            catch { throw ModelRemovalRecoveryError.incompleteRollback }
+            throw original
+        }
+    }
+    private func sameMovedGeneration(_ current: ModelFileRevision, _ original: ModelFileRevision) -> Bool {
+        current.identity == original.identity && current.size == original.size && current.modifiedSeconds == original.modifiedSeconds && current.modifiedNanoseconds == original.modifiedNanoseconds
+    }
+    private func assetNodeRevision(_ name: String, parent: Int32, directory: Bool) throws -> ModelFileRevision? {
+        if !(try removalExists(name,in:parent)) { return nil }
+        let descriptor = try ModelDirectoryAccess.descriptor(name,from:parent,directory:directory)
+        defer { close(descriptor) }
+        var info = stat()
+        guard fstat(descriptor,&info) == 0, info.st_mode & S_IFMT == (directory ? S_IFDIR : S_IFREG) else { throw ExchangeError.invalid("モデル資産の形式が不正です") }
+        return try ModelFileRevision(descriptor)
+    }
+    private func withAssetEntryParent(_ path: String, root: Int32, snapshot: AssetSnapshot?, _ body: (Int32, String) throws -> Void) throws {
+        let parts = path.split(separator:"/").map(String.init)
+        guard let name = parts.last else { throw ExchangeError.invalid("モデル資産の相対パスが不正です") }
+        var parent = dup(root)
+        guard parent >= 0 else { throw modelFilePOSIXError() }
+        defer { close(parent) }
+        var prefix: [String] = []
+        for component in parts.dropLast() {
+            prefix.append(component)
+            let next = try ModelDirectoryAccess.descriptor(component,from:parent,directory:true)
+            close(parent); parent = next
+            guard let expected = snapshot?.revisions[prefix.joined(separator:"/")],
+                  try ModelFileRevision(parent).identity == expected.identity else { throw ExchangeError.invalid("モデル資産の親ディレクトリが置き換わりました") }
+        }
+        try body(parent,name)
+    }
+    private func stageAssetEntries(_ record: ModelRemovalRecord, models: Int32) throws {
+        guard let asset = record.asset else { return }
+        let source = try assetSource(asset,models:models)
+        defer { close(source) }
+        let quarantine = try ModelDirectoryAccess.descriptor(".model-removals/" + record.quarantine,from:models,directory:true)
+        defer { close(quarantine) }
+        for (index,path) in record.entries.enumerated() {
+            let expected = asset.snapshot.revisions[asset.subset ? path : ""]!
+            let isDirectory = !asset.subset && assetIsDirectory(asset.kind,asset.key)
+            try withAssetEntryParent(path,root:source,snapshot:asset.subset ? asset.snapshot : nil) { parent,name in
+                let existing = try assetNodeRevision(name,parent:parent,directory:isDirectory)
+                let staged = try assetNodeRevision(String(index),parent:quarantine,directory:isDirectory)
+                guard !(existing != nil && staged != nil), existing != nil || staged != nil else { throw ExchangeError.invalid("削除するモデル資産が見つかりません") }
+                if let staged {
+                    guard sameMovedGeneration(staged,expected) else { throw ExchangeError.invalid("退避したモデル資産が変わりました") }
+                } else if let existing {
+                    guard sameMovedGeneration(existing,expected) else { throw ExchangeError.invalid("削除するモデル資産が変わりました") }
+                    guard renameatx_np(parent,name,quarantine,String(index),UInt32(RENAME_EXCL)) == 0 else { throw modelFilePOSIXError() }
+                }
+            }
+        }
+        // No unlink occurs until every selected entry has reached quarantine.
+        try validateQuarantinedAsset(record,quarantine:quarantine,completeTree:true,requireAllSlots:true)
+    }
+    private func markAssetStaged(_ record: ModelRemovalRecord, models: Int32) throws -> ModelRemovalRecord {
+        guard let asset = record.asset else { return record }
+        let staged = AssetRemoval(kind:asset.kind,key:asset.key,subset:asset.subset,staged:true,rollbackRequested:asset.rollbackRequested,snapshot:asset.snapshot,modelsIdentity:asset.modelsIdentity,parentIdentity:asset.parentIdentity)
+        let result = ModelRemovalRecord(id:record.id,quarantine:record.quarantine,entries:record.entries,asset:staged)
+        try saveRemovalRecords(try removalRecords(models).map { $0.quarantine == record.quarantine ? result : $0 },models:models)
+        return result
+    }
+    private func markAssetRollback(_ record: ModelRemovalRecord, models: Int32) throws -> ModelRemovalRecord {
+        guard let asset = record.asset else { return record }
+        let rollback = AssetRemoval(kind:asset.kind,key:asset.key,subset:asset.subset,staged:asset.staged,rollbackRequested:true,snapshot:asset.snapshot,modelsIdentity:asset.modelsIdentity,parentIdentity:asset.parentIdentity)
+        let result = ModelRemovalRecord(id:record.id,quarantine:record.quarantine,entries:record.entries,asset:rollback)
+        try saveRemovalRecords(try removalRecords(models).map { $0.quarantine == record.quarantine ? result : $0 },models:models)
+        return result
+    }
+    private func validateQuarantinedAsset(_ record: ModelRemovalRecord, quarantine: Int32, completeTree: Bool = false, requireAllSlots: Bool = false) throws {
+        guard let asset = record.asset else { return }
+        let slots = Set(record.entries.indices.map { String($0) })
+        let actualSlots = Set(try inventoryNames(quarantine))
+        guard actualSlots.isSubset(of:slots), !requireAllSlots || actualSlots == slots else { throw ExchangeError.invalid("退避先に不明なモデル資産があります") }
+        for (index,path) in record.entries.enumerated() where try removalExists(String(index),in:quarantine) {
+            let isDirectory = !asset.subset && assetIsDirectory(asset.kind,asset.key)
+            let child = try ModelDirectoryAccess.descriptor(String(index),from:quarantine,directory:isDirectory)
+            defer { close(child) }
+            let current = try assetSnapshot(child,isDirectory:isDirectory)
+            if completeTree && !asset.subset {
+                guard Set(current.revisions.keys) == Set(asset.snapshot.revisions.keys) else { throw ExchangeError.invalid("退避したモデル資産の内容が変わりました") }
+            }
+            for (name,revision) in current.revisions {
+                let originalPath = asset.subset ? path : name
+                guard let expected = asset.snapshot.revisions[originalPath],
+                      current.directories.contains(name) == (!asset.subset && asset.snapshot.directories.contains(originalPath)),
+                      (current.directories.contains(name) && !completeTree ? revision.identity == expected.identity : sameMovedGeneration(revision,expected)) else {
+                    throw ExchangeError.invalid("退避したモデル資産が変わりました")
+                }
+            }
+        }
+    }
+    private func rollbackAssetRemoval(_ record: ModelRemovalRecord, models: Int32) throws {
+        var record = record
+        guard let asset = record.asset else { return }
+        let source = try assetSource(asset,models:models)
+        defer { close(source) }
+        let quarantines = try ModelDirectoryAccess.descriptor(".model-removals",from:models,directory:true)
+        defer { close(quarantines) }
+        let quarantine: Int32
+        do { quarantine = try ModelDirectoryAccess.descriptor(record.quarantine,from:quarantines,directory:true) }
+        catch let error as POSIXError where error.code == .ENOENT { quarantine = -1 }
+        defer { if quarantine >= 0 { close(quarantine) } }
+        if quarantine >= 0 { try validateQuarantinedAsset(record,quarantine:quarantine,completeTree:true) }
+        // Validate every destination before restoring any bytes, and never replace a collision.
+        for (index,path) in record.entries.enumerated() {
+            let isDirectory = !asset.subset && assetIsDirectory(asset.kind,asset.key)
+            let expected = asset.snapshot.revisions[asset.subset ? path : ""]!
+            try withAssetEntryParent(path,root:source,snapshot:asset.subset ? asset.snapshot : nil) { parent,name in
+                let target = try assetNodeRevision(name,parent:parent,directory:isDirectory)
+                let staged = quarantine >= 0 ? try assetNodeRevision(String(index),parent:quarantine,directory:isDirectory) : nil
+                guard !(target != nil && staged != nil), target != nil || staged != nil else { throw ExchangeError.invalid("復旧するモデル資産が見つかりません") }
+                if let target { guard sameMovedGeneration(target,expected) else { throw ExchangeError.invalid("復旧先に別のモデル資産があります") } }
+                if let staged { guard sameMovedGeneration(staged,expected) else { throw ExchangeError.invalid("退避したモデル資産が変わりました") } }
+            }
+        }
+        if quarantine >= 0 {
+            // Once restoration starts, a restart must restore the remaining marker too.
+            if asset.rollbackRequested != true { record = try markAssetRollback(record,models:models) }
+            for (index,path) in record.entries.enumerated() where try removalExists(String(index),in:quarantine) {
+                try withAssetEntryParent(path,root:source,snapshot:asset.subset ? asset.snapshot : nil) { parent,name in
+                    guard renameatx_np(quarantine,String(index),parent,name,UInt32(RENAME_EXCL)) == 0 else { throw modelFilePOSIXError() }
+                }
+            }
+            guard unlinkat(quarantines,record.quarantine,AT_REMOVEDIR) == 0 else { throw modelFilePOSIXError() }
+        }
+        try removeRemovalRecord(record,models:models)
+    }
+    private func commitAssetRemoval(_ record: ModelRemovalRecord, models: Int32) throws {
+        var record = record
+        if record.asset?.staged == false {
+            do { try stageAssetEntries(record,models:models); record = try markAssetStaged(record,models:models) }
+            catch {
+                do { try rollbackAssetRemoval(record,models:models) }
+                catch { throw ModelRemovalRecoveryError.incompleteRollback }
+                throw error
+            }
+        }
+        let quarantines = try ModelDirectoryAccess.descriptor(".model-removals",from:models,directory:true)
+        defer { close(quarantines) }
+        let quarantine: Int32
+        do { quarantine = try ModelDirectoryAccess.descriptor(record.quarantine,from:quarantines,directory:true) }
+        catch let error as POSIXError where error.code == .ENOENT { try removeRemovalRecord(record,models:models); return }
+        defer { close(quarantine) }
+        try validateQuarantinedAsset(record,quarantine:quarantine)
+        for index in record.entries.indices {
+            let name = String(index)
+            if !(try removalExists(name,in:quarantine)) { continue }
+            if let asset = record.asset, !asset.subset && assetIsDirectory(asset.kind,asset.key) {
+                let child = try ModelDirectoryAccess.descriptor(name,from:quarantine,directory:true)
+                defer { close(child) }
+                try ModelDirectoryAccess.removeContents(child)
+                guard unlinkat(quarantine,name,AT_REMOVEDIR) == 0 else { throw modelFilePOSIXError() }
+            } else { guard unlinkat(quarantine,name,0) == 0 else { throw modelFilePOSIXError() } }
+        }
+        guard unlinkat(quarantines,record.quarantine,AT_REMOVEDIR) == 0 else { throw modelFilePOSIXError() }
+        try removeRemovalRecord(record,models:models)
+    }
+
     func recoverModelRemovals(registeredIDs: [String]) throws {
         Self.directoryLock.lock(); defer { Self.directoryLock.unlock() }
         var info = stat()
@@ -255,7 +618,12 @@ extension LocalModelFiles {
         defer { close(models) }
         let registered = Set(registeredIDs.map { Data($0.utf8) })
         for record in try removalRecords(models) {
-            if registered.contains(Data(record.id.utf8)) { try rollbackModelRemoval(record,models:models) }
+            if let asset = record.asset {
+                let isModel = asset.kind == .modelFile || asset.kind == .modelDirectory
+                let names = isModel && !asset.subset ? try registeredIDs.flatMap { try removalEntryNames(modelID:$0) } : []
+                if asset.rollbackRequested == true || names.contains(where:{ $0.utf8.elementsEqual(asset.key.utf8) }) { try rollbackModelRemoval(record,models:models) }
+                else { try commitAssetRemoval(record,models:models) }
+            } else if registered.contains(Data(record.id.utf8)) { try rollbackModelRemoval(record,models:models) }
             else { try commitModelRemoval(record,models:models) }
         }
     }
@@ -330,27 +698,50 @@ extension LocalModelFiles {
         }
         let root = try OrderedJSON.decode(data)
         guard root["version"] == .number("1") else { throw ExchangeError.invalid("モデル削除記録の形式が不正です") }
-        return try root.required("records").array("removal records").map { row in
+        let records = try root.required("records").array("removal records").map { row -> ModelRemovalRecord in
             let id = try row.required("id").string("model id")
             let quarantine = try row.required("quarantine").string("quarantine")
             let entries = try row.required("entries").array("entries").map { try $0.string("entry") }
-            let expected = try removalEntryNames(modelID:id)
-            let entryBytes = Set(entries.map { Data($0.utf8) })
-            try ModelDirectoryAccess.validatePaths([quarantine] + entries)
-            guard UUID(uuidString:quarantine)?.uuidString.lowercased() == quarantine,
-                  !entries.isEmpty, entryBytes.count == entries.count,
-                  entries.allSatisfy({ entry in expected.contains { Data($0.utf8) == Data(entry.utf8) } }) else {
+            try ModelDirectoryAccess.validatePaths(entries)
+            guard UUID(uuidString:quarantine)?.uuidString.lowercased() == quarantine, !entries.isEmpty else {
                 throw ExchangeError.invalid("モデル削除記録の形式が不正です")
             }
-            return .init(id:id,quarantine:quarantine,entries:entries)
+            let asset: AssetRemoval?
+            if let value = row["asset"] {
+                let decoded = try JSONDecoder().decode(AssetRemoval.self,from:value.encoded())
+                let snapshot = decoded.snapshot
+                try ModelDirectoryAccess.validatePaths(snapshot.revisions.keys.filter { !$0.isEmpty })
+                guard validAssetName(decoded.kind,decoded.key), snapshot.revisions[""] != nil,
+                      Set(snapshot.directories).count == snapshot.directories.count,
+                      snapshot.directories.allSatisfy({ snapshot.revisions[$0] != nil }),
+                      (assetIsDirectory(decoded.kind,decoded.key) ? snapshot.directories.contains("") : snapshot.directories.isEmpty && snapshot.revisions.count == 1),
+                      snapshot.revisions.keys.allSatisfy({ path in
+                          path.isEmpty || path.split(separator:"/").dropLast().isEmpty || snapshot.directories.contains(path.split(separator:"/").dropLast().joined(separator:"/"))
+                      }),
+                      (decoded.subset ? assetIsDirectory(decoded.kind,decoded.key) && entries.allSatisfy({ snapshot.revisions[$0] != nil && !snapshot.directories.contains($0) }) : entries == [decoded.key]) else {
+                    throw ExchangeError.invalid("モデル削除記録の資産が不正です")
+                }
+                asset = decoded
+            } else {
+                let expected = try removalEntryNames(modelID:id)
+                guard entries.allSatisfy({ entry in expected.contains { $0.utf8.elementsEqual(entry.utf8) } }) else { throw ExchangeError.invalid("モデル削除記録の形式が不正です") }
+                asset = nil
+            }
+            return .init(id:id,quarantine:quarantine,entries:entries,asset:asset)
         }
+        guard Set(records.map(\.quarantine)).count == records.count else { throw ExchangeError.invalid("モデル削除記録が重複しています") }
+        return records
     }
     private func saveRemovalRecords(_ records: [ModelRemovalRecord], models: Int32) throws {
+        let rows = try records.map { record -> OrderedJSON in
+            var fields: [JSONField] = [.init(key:"id",value:.string(record.id)),.init(key:"quarantine",value:.string(record.quarantine)),.init(key:"entries",value:.array(record.entries.map(OrderedJSON.string)))]
+            if let asset = record.asset { fields.append(.init(key:"asset",value:try OrderedJSON.decode(JSONEncoder().encode(asset)))) }
+            return .object(fields)
+        }
         let bytes = try OrderedJSON.object([
-            .init(key:"version",value:.number("1")),.init(key:"records",value:.array(records.map { record in
-                .object([.init(key:"id",value:.string(record.id)),.init(key:"quarantine",value:.string(record.quarantine)),.init(key:"entries",value:.array(record.entries.map(OrderedJSON.string)))])
-            }))
+            .init(key:"version",value:.number("1")),.init(key:"records",value:.array(rows))
         ]).encoded()
+        guard bytes.count <= 1024 * 1024 else { throw ExchangeError.invalid("モデル削除記録が大きすぎます") }
         let temporary = ".model-removals-\(UUID().uuidString).part"
         let descriptor = openat(models,temporary,O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW,0o600)
         guard descriptor >= 0 else { throw modelFilePOSIXError() }
@@ -388,6 +779,11 @@ extension LocalModelFiles {
         try rollbackModelRemoval(record,models:models)
     }
     private func rollbackModelRemoval(_ record: ModelRemovalRecord, models: Int32) throws {
+        if record.asset != nil {
+            do { try rollbackAssetRemoval(record,models:models) }
+            catch { throw ModelRemovalRecoveryError.incompleteRollback }
+            return
+        }
         let quarantines: Int32
         do { quarantines = try ModelDirectoryAccess.descriptor(".model-removals",from:models,directory:true) }
         catch let error as POSIXError where error.code == .ENOENT {
@@ -418,7 +814,7 @@ extension LocalModelFiles {
             }
         }
         for entry in record.entries where try removalExists(entry,in:quarantine) {
-            guard renameat(quarantine,entry,models,entry) == 0 else { throw modelFilePOSIXError() }
+            guard renameatx_np(quarantine,entry,models,entry,UInt32(RENAME_EXCL)) == 0 else { throw modelFilePOSIXError() }
         }
         guard unlinkat(quarantines,record.quarantine,AT_REMOVEDIR) == 0 else { throw modelFilePOSIXError() }
         try removeRemovalRecord(record,models:models)
@@ -430,6 +826,7 @@ extension LocalModelFiles {
         try commitModelRemoval(record,models:models)
     }
     private func commitModelRemoval(_ record: ModelRemovalRecord, models: Int32) throws {
+        if record.asset != nil { try commitAssetRemoval(record,models:models); return }
         let quarantines: Int32
         do { quarantines = try ModelDirectoryAccess.descriptor(".model-removals",from:models,directory:true) }
         catch let error as POSIXError where error.code == .ENOENT {
@@ -872,8 +1269,8 @@ extension LocalModelFiles {
 }
 
 private func modelFilePOSIXError() -> POSIXError { POSIXError(POSIXErrorCode(rawValue:errno) ?? .EIO) }
-fileprivate struct ModelFileIdentity: Hashable { let device: Int32; let inode: UInt64 }
-fileprivate struct ModelFileRevision: Equatable {
+fileprivate struct ModelFileIdentity: Hashable, Codable { let device: Int32; let inode: UInt64 }
+fileprivate struct ModelFileRevision: Equatable, Codable {
     let identity: ModelFileIdentity
     let size: UInt64
     let modifiedSeconds: Int

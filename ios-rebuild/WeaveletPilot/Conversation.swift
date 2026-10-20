@@ -401,9 +401,10 @@ final class ChatState: ObservableObject {
     private var catalogDownloadEpochs: [Data: UUID] = [:]
     private var catalogShardCaches: Set<Data> = []
     @Published private(set) var modelAssetRecoveryError: String?
+    @Published private(set) var isManagingModelStorage = false
     private var catalogResumeData: [Data: Data] = [:]
     private var catalogResumePlans: [Data: (url: String, revision: String)] = [:]
-    private var catalogInstallations: Set<Data> = []
+    @Published private var catalogInstallations: Set<Data> = []
     private let catalogTransport: CatalogDownloadTransport
     private var branchPreviewCache: [UUID: (parts: OrderedJSON, preview: String)] = [:]
     @Published private(set) var remoteSettings = RemoteSettings()
@@ -2041,10 +2042,86 @@ final class ChatState: ObservableObject {
     }
 
     func requireLocalModelAssetAccess(id: String) throws {
+        guard !isManagingModelStorage else { throw ExchangeError.invalid("ストレージの処理が終了してから操作してください") }
         guard modelAssetRecoveryError == nil else { throw ExchangeError.invalid("モデル削除の復旧を完了してからファイルを変更してください") }
         let key = Data(id.utf8)
         guard catalogDownloadTasks[key] == nil, !catalogInstallations.contains(key) else {
             throw ExchangeError.invalid("このモデルのファイル処理が終了してから操作してください")
+        }
+    }
+
+    @MainActor func reserveLocalModelAssets(id: String) throws {
+        try requireLocalModelAssetAccess(id:id)
+        catalogInstallations.insert(Data(id.utf8))
+    }
+    @MainActor func releaseLocalModelAssets(id: String) { catalogInstallations.remove(Data(id.utf8)) }
+
+    var modelStorageBusy: Bool {
+        isManagingModelStorage || hasGenerations || evaluationJobs.values.contains(where:{ $0.busy }) ||
+            !catalogDownloadTasks.isEmpty || !catalogInstallations.isEmpty
+    }
+
+    @MainActor func modelStorageInventory() async throws -> [LocalModelFiles.ModelAssetInventoryEntry] {
+        let files = localModelFiles, worker = Task.detached { try files.modelAssetInventory() }
+        return try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
+    }
+
+    func registeredModel(for entry: LocalModelFiles.ModelAssetInventoryEntry) throws -> OrderedJSON? {
+        guard entry.kind == .modelFile || entry.kind == .modelDirectory else { return nil }
+        return try localModelDefinitions().first { model in
+            guard let id = try? model.required("id").string("model ID") else { return false }
+            let file = try localModelFiles.url(modelID:id)
+            let name = entry.kind == .modelFile ? file.lastPathComponent : file.deletingPathExtension().lastPathComponent
+            return name.utf8.elementsEqual(entry.key.utf8)
+        }
+    }
+
+    @MainActor func removeModelStorageEntry(_ entry: LocalModelFiles.ModelAssetInventoryEntry, fileName: String? = nil) async throws {
+        guard !modelStorageBusy, modelAssetRecoveryError == nil else { throw ExchangeError.invalid("取得・保存・生成・評価の終了後に操作してください。復旧待ちの場合は再起動してください") }
+        if fileName == nil, let model = try registeredModel(for:entry) {
+            try await removeLocalModel(model,expectedStorageEntry:entry)
+            return
+        }
+        let paths: [String]?
+        if let fileName {
+            guard entry.files.contains(where:{ $0.name.utf8.elementsEqual(fileName.utf8) && $0.isTemp }) else { throw ExchangeError.invalid("未完了ファイルを選び直してください") }
+            paths = try SharedWebOperations.call("localModelRegistry",.object([.init(key:"operation",value:.string("fileRemovalPaths")),.init(key:"fileName",value:.string(fileName))])).array("removal paths").map { try $0.string("file path") }
+        } else { paths = nil }
+        let original = try publicationSnapshot().required("state")
+        let ids = try localModelDefinitions().map { try $0.required("id").string("model ID") }
+        let files = localModelFiles
+        isManagingModelStorage = true
+        defer { isManagingModelStorage = false }
+        let staged: LocalModelFiles.ModelRemoval
+        do {
+            let worker = Task.detached {
+                if let paths { return try files.stageAssetFileRemoval(entry,paths:paths) }
+                return try files.stageUnregisteredAssetRemoval(entry,registeredIDs:ids)
+            }
+            staged = try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
+        } catch let error as LocalModelFiles.ModelRemovalRecoveryError {
+            modelAssetRecoveryError = error.localizedDescription
+            throw ExchangeError.invalid("ファイルの復旧を完了できませんでした。再起動して復旧を再試行してください")
+        }
+        do {
+            try Task.checkCancellation()
+            let current = try publicationSnapshot().required("state")
+            for key in ["localModels","activeLocalModels","favoriteLocalModelIds","savedModelMeta"] {
+                guard current[key] == original[key] else { throw ExchangeError.invalid("モデル設定が変更されました。一覧を更新してください") }
+            }
+        } catch {
+            let failure = error
+            do { try await Task.detached { try staged.rollback() }.value }
+            catch {
+                modelAssetRecoveryError = error.localizedDescription
+                throw ExchangeError.invalid("ファイルの復旧を完了できませんでした。残存ファイルを保持しています。再起動して復旧を再試行してください")
+            }
+            throw failure
+        }
+        do { try await Task.detached { try staged.commit() }.value }
+        catch {
+            modelAssetRecoveryError = error.localizedDescription
+            throw ExchangeError.invalid("ファイルの削除を完了できませんでした。再起動して残りの削除を再試行してください")
         }
     }
 
@@ -2087,7 +2164,7 @@ final class ChatState: ObservableObject {
         try saveLayoutSetting("favoriteLocalModelIds",value:updated.required("favoriteLocalModelIds"))
     }
 
-    @MainActor func removeLocalModel(_ model: OrderedJSON) async throws {
+    @MainActor func removeLocalModel(_ model: OrderedJSON, expectedStorageEntry: LocalModelFiles.ModelAssetInventoryEntry? = nil) async throws {
         let id = try model.required("id").string("model ID"), key = Data(id.utf8)
         try requireLocalModelAssetAccess(id:id)
         guard !hasGenerations, !evaluationJobs.values.contains(where:{ $0.busy }) else {
@@ -2102,7 +2179,7 @@ final class ChatState: ObservableObject {
         defer { catalogInstallations.remove(key) }
         let files = localModelFiles
         let staged: LocalModelFiles.ModelRemoval
-        do { staged = try await Task.detached { try files.stageModelRemoval(modelID:id) }.value }
+        do { staged = try await Task.detached { try files.stageModelRemoval(modelID:id,expectedEntry:expectedStorageEntry) }.value }
         catch let error as LocalModelFiles.ModelRemovalRecoveryError {
             modelAssetRecoveryError = error.localizedDescription
             throw ExchangeError.invalid("ファイルの復旧を完了できなかったため、残存ファイルを保持しています。再起動して復旧を再試行してください。")

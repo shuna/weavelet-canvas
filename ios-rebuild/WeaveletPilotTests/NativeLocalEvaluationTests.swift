@@ -401,6 +401,94 @@ final class NativeLocalEvaluationTests: XCTestCase {
         }
     }
 
+    func testModelStorageInventoryRemovesUnregisteredAssetsAndCachePartPairs() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("model-storage-inventory-\(UUID())")
+        defer { try? FileManager.default.removeItem(at:directory) }
+        let store = LocalStateStore(fileURL:directory.appendingPathComponent("state.json")), app = try registryState(store)
+        let registeredSource = directory.appendingPathComponent("remove.gguf")
+        try Data("GGUF registered".utf8).write(to:registeredSource)
+        try app.localModelFiles.install(registeredSource,modelID:"remove")
+        let orphanURL = try app.localModelFiles.url(modelID:"unregistered-hash")
+        try Data("GGUF orphan".utf8).write(to:orphanURL)
+        let cacheName = String(repeating:"a",count:64)
+        let cache = try app.localModelFiles.openDownloadCache(name:cacheName)
+        let body = cache.url.appendingPathComponent("weights.gguf")
+        let marker = cache.url.appendingPathComponent("weights.gguf.part")
+        let keep = cache.url.appendingPathComponent("keep.gguf")
+        try Data("GGUF body".utf8).write(to:body)
+        try Data("partial".utf8).write(to:marker)
+        try Data("GGUF keep".utf8).write(to:keep)
+        let before = try app.publicationSnapshot(), disk = try Data(contentsOf:store.fileURL)
+
+        let inventory = try await app.modelStorageInventory()
+        let registered = try XCTUnwrap(inventory.first { entry in
+            (try? app.registeredModel(for:entry)?["id"]) == .string("remove")
+        })
+        XCTAssertEqual(registered.kind,.modelFile)
+        let orphan = try XCTUnwrap(inventory.first { entry in
+            entry.kind == .modelFile && (try? app.registeredModel(for:entry)) == nil
+        })
+        let pending = try XCTUnwrap(inventory.first { $0.kind == .downloadCache && $0.key == cacheName })
+        XCTAssertTrue(pending.files.contains { $0.name == "parts/weights.gguf.part" && $0.isTemp })
+
+        try await app.removeModelStorageEntry(orphan)
+        XCTAssertFalse(FileManager.default.fileExists(atPath:orphanURL.path))
+        XCTAssertEqual(try Data(contentsOf:app.localModelFiles.installed(modelID:"remove")),Data("GGUF registered".utf8))
+        XCTAssertEqual(try app.publicationSnapshot(),before)
+        XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+
+        try await app.removeModelStorageEntry(pending,fileName:"parts/weights.gguf.part")
+        XCTAssertFalse(FileManager.default.fileExists(atPath:body.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath:marker.path))
+        XCTAssertEqual(try Data(contentsOf:keep),Data("GGUF keep".utf8))
+        XCTAssertEqual(try app.publicationSnapshot(),before)
+        XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+    }
+
+    func testModelStorageRegisteredEntryRejectsReplacementAndRollsBackFailedSave() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("model-storage-registered-\(UUID())")
+        defer { try? FileManager.default.removeItem(at:directory) }
+        var reject = false
+        let store = LocalStateStore(fileURL:directory.appendingPathComponent("state.json"),write:{ bytes,url in
+            if reject { throw CocoaError(.fileWriteNoPermission) }
+            try bytes.write(to:url,options:.atomic)
+        })
+        let app = try registryState(store)
+        let source = directory.appendingPathComponent("remove.gguf")
+        try Data("GGUF original".utf8).write(to:source)
+        try app.localModelFiles.install(source,modelID:"remove")
+        let capturedInventory = try await app.modelStorageInventory()
+        let captured = try XCTUnwrap(capturedInventory.first { entry in
+            (try? app.registeredModel(for:entry)?["id"]) == .string("remove")
+        })
+        let installed = try app.localModelFiles.installed(modelID:"remove")
+        try FileManager.default.removeItem(at:installed)
+        try Data("GGUF replacement".utf8).write(to:installed)
+        do { try await app.removeModelStorageEntry(captured); XCTFail("replaced inventory entry should be rejected") } catch { }
+        XCTAssertEqual(try Data(contentsOf:installed),Data("GGUF replacement".utf8))
+
+        let freshInventory = try await app.modelStorageInventory()
+        let fresh = try XCTUnwrap(freshInventory.first { entry in
+            (try? app.registeredModel(for:entry)?["id"]) == .string("remove")
+        })
+        let before = try app.publicationSnapshot(), disk = try Data(contentsOf:store.fileURL)
+        reject = true
+        do { try await app.removeModelStorageEntry(fresh); XCTFail("save should fail") } catch { }
+        XCTAssertEqual(try app.publicationSnapshot(),before)
+        XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+        XCTAssertEqual(try Data(contentsOf:app.localModelFiles.installed(modelID:"remove")),Data("GGUF replacement".utf8))
+
+        reject = false
+        let retryInventory = try await app.modelStorageInventory()
+        let retry = try XCTUnwrap(retryInventory.first { entry in
+            (try? app.registeredModel(for:entry)?["id"]) == .string("remove")
+        })
+        try await app.removeModelStorageEntry(retry)
+        XCTAssertThrowsError(try app.localModelFiles.installed(modelID:"remove"))
+        XCTAssertNil(try app.publicationSnapshot().required("state")["savedModelMeta"]?["remove"])
+        XCTAssertEqual(try ChatState(store:store).publicationSnapshot(),try app.publicationSnapshot())
+    }
+
     func testLocalModelRegistryRestartRecoversStagedRemovalByRegistration() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("local-model-registry-recovery-\(UUID())")
         defer { try? FileManager.default.removeItem(at:directory) }

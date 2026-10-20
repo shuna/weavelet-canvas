@@ -1,13 +1,13 @@
 import Foundation
 
 extension ChatState {
-    @MainActor private func requireDirectoryImport(_ model: OrderedJSON) throws {
+    @MainActor private func requireDirectoryImport(_ model: OrderedJSON, assetReservationHeld: Bool = false) throws {
         try Task.checkCancellation()
         guard !hasGenerations, !evaluationJobs.values.contains(where: { $0.busy }) else {
             throw ExchangeError.invalid("生成・評価の終了後にモデルフォルダーを選択してください")
         }
         let id = try model.required("id").string("model id")
-        try requireLocalModelAssetAccess(id:id)
+        if !assetReservationHeld { try requireLocalModelAssetAccess(id:id) }
         let matches = try localModelDefinitions().filter { definition in
             (try? definition.required("id").string("id"))?.utf8.elementsEqual(id.utf8) == true
         }
@@ -23,6 +23,9 @@ extension ChatState {
 
     @MainActor func importModelDirectory(_ source: URL, model: OrderedJSON) async throws -> String {
         try requireDirectoryImport(model)
+        let id = try model.required("id").string("model id")
+        try reserveLocalModelAssets(id:id)
+        defer { releaseLocalModelAssets(id:id) }
         let files = localModelFiles
         let worker = Task.detached {
             let inspection = try files.inspectDirectory(source,model:model)
@@ -32,7 +35,8 @@ extension ChatState {
             try await worker.value
         } onCancel: { worker.cancel() }
         defer { Task.detached { staged.discard() } }
-        try publishModelDirectory(staged,model:model)
-        return try model.required("id").string("model id")
+        try requireDirectoryImport(model,assetReservationHeld:true)
+        try files.publishDirectory(staged,model:model)
+        return id
     }
 }

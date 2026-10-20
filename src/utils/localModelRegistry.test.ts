@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { localModelRegistry } from '../../shared/google-sync/localModelRegistry';
-import { removeRegisteredLocalModel, toggleRegisteredLocalModelFavorite } from './localModelRegistry';
+import { modelFileRemovalPaths, removeRegisteredLocalModel, toggleRegisteredLocalModelFavorite } from './localModelRegistry';
 
 describe('local model registry', () => {
   it('removes a registered model from every registry root while preserving unrelated values', () => {
@@ -27,6 +27,13 @@ describe('local model registry', () => {
 
     expect(toggleRegisteredLocalModelFavorite(state, 'third').favoriteLocalModelIds).toEqual(['first', 'second', 'third']);
     expect(toggleRegisteredLocalModelFavorite(state, 'second').favoriteLocalModelIds).toEqual(['first']);
+  });
+
+  it('removes an incomplete file body and marker together', () => {
+    expect(modelFileRemovalPaths('weights.gguf.part')).toEqual(['weights.gguf', 'weights.gguf.part']);
+    expect(modelFileRemovalPaths('weights.gguf')).toEqual(['weights.gguf']);
+    expect(JSON.parse(localModelRegistry(JSON.stringify({operation:'fileRemovalPaths',fileName:'nested/weights.gguf.part'}))))
+      .toEqual(['nested/weights.gguf', 'nested/weights.gguf.part']);
   });
 
   it('preserves opaque native model fields while removing by the projected ID', () => {

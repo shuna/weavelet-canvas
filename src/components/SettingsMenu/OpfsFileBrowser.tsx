@@ -8,6 +8,7 @@ import { removeAssets } from '@src/local-llm/assetRemoval';
 import type { OpfsModelEntry } from '@src/local-llm/storage';
 import { formatBytes } from '@src/local-llm/device';
 import useStore from '@store/store';
+import { modelFileRemovalPaths } from '@utils/localModelRegistry';
 
 // ---------------------------------------------------------------------------
 // OpfsFileBrowser — visual file browser for OPFS model storage
@@ -40,10 +41,8 @@ const OpfsFileBrowser = ({
       ]);
       setEntries(list);
       setTotalSize(total);
-    } catch {
-      // OPFS unavailable
-      setEntries([]);
-      setTotalSize(0);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : String(error));
     }
     setLoading(false);
   }, []);
@@ -98,9 +97,7 @@ const OpfsFileBrowser = ({
     setDeleteError(null);
     try {
       // Keep the marker if removing the incomplete body fails.
-      const files = fileName.endsWith('.part')
-        ? [fileName.slice(0, -'.part'.length), fileName]
-        : [fileName];
+      const files = modelFileRemovalPaths(fileName);
       const removal = await removeAssets(modelId, { files });
       if (removal.status !== 'removed') {
         setDeleteError(removal.error ?? `削除できませんでした (${removal.status})`);

@@ -28503,6 +28503,9 @@ ${text}`;
   }
 
   // src/utils/localModelRegistry.ts
+  function modelFileRemovalPaths(fileName) {
+    return fileName.endsWith(".part") ? [fileName.slice(0, -".part".length), fileName] : [fileName];
+  }
   function registeredModelID(model) {
     if (model && typeof model === "object" && "id" in model)
       return model.id;
@@ -28533,6 +28536,8 @@ ${text}`;
   // shared/google-sync/localModelRegistry.ts
   function localModelRegistry(json) {
     const input = JSON.parse(json);
+    if (input.operation === "fileRemovalPaths")
+      return JSON.stringify(modelFileRemovalPaths(input.fileName));
     const next = input.operation === "remove" ? removeRegisteredLocalModel(input.state, input.id) : toggleRegisteredLocalModelFavorite(input.state, input.id);
     return JSON.stringify({ changes: diffJSONChanges(input.state, next) });
   }

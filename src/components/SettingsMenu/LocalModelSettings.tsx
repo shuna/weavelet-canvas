@@ -323,63 +323,11 @@ const LocalModelSettings = () => {
     for (const task of tasks) if (next[task] !== store.activeLocalModels[task]) store.setActiveLocalModel(task, modelId);
   }, []);
 
-  const findStoredModelWithHash = useCallback(async (fileHash: string, fileSize: number, excludeModelId?: string): Promise<LocalModelDefinition | null> => {
-    const store = useStore.getState();
-    const candidates = [
-      ...CURATED_MODELS.map((model) => ({
-        id: model.id,
-        engine: model.engine,
-        tasks: model.tasks,
-        label: model.label,
-        origin: model.huggingFaceRepo,
-        source: 'opfs' as const,
-        manifest: model.manifest,
-        fileSize: model.expectedDownloadSize,
-        displayMeta: model.displayMeta,
-      })),
-      ...store.localModels,
-    ];
-
-    for (const model of candidates) {
-      if (model.id === excludeModelId) continue;
-      if (model.engine !== 'wllama') continue;
-      // Only support single-file and gguf-sharded for hash-based duplicate detection
-      if (model.manifest.kind !== 'single-file' && model.manifest.kind !== 'gguf-sharded') continue;
-      const meta = store.savedModelMeta[model.id];
-      if (meta?.storageState !== 'saved') continue;
-      if (meta.storedBytes && meta.storedBytes !== fileSize) continue;
-
-      const entrypoint = model.manifest.entrypoint;
-      let storedHash = meta.fileHashes?.[entrypoint];
-      if (!storedHash) {
-        try {
-          const storedFile = await readFile(model.id, entrypoint);
-          storedHash = await sha256Blob(storedFile);
-          store.updateSavedModelMeta(model.id, {
-            fileHashes: { ...(meta.fileHashes ?? {}), [entrypoint]: storedHash },
-          });
-        } catch {
-          continue;
-        }
-      }
-      // For sharded models: composite key check (entrypoint hash + totalSize + shardCount)
-      // This avoids false positives where only later shards differ.
-      if (model.manifest.kind === 'gguf-sharded') {
-        const shardCount = model.manifest.shards.length;
-        const totalSize = model.manifest.totalSize;
-        if (storedHash === fileHash && totalSize === fileSize && shardCount > 0) return model;
-      } else {
-        if (storedHash === fileHash) return model;
-      }
-    }
-
-    return null;
-  }, []);
-
   const findStoredSelectedGGUF = useCallback(async (
     selection: ReturnType<typeof inspectSelectedGGUFs>,
     files: Array<{name: string; size: number; hash: string}>,
     incomingFiles: Blob[],
+    excludeModelId?: string,
   ): Promise<LocalModelDefinition | null> => {
     const store = useStore.getState();
     const candidates = [
@@ -392,6 +340,7 @@ const LocalModelSettings = () => {
     ];
     const inspected: Array<{model: LocalModelDefinition; kind: 'single-file' | 'gguf-sharded'; hashes: string[]; size?: number}> = [];
     for (const model of candidates) {
+      if (model.id === excludeModelId) continue;
       const kind = model.manifest.kind;
       if (model.engine !== 'wllama' || (kind !== 'single-file' && kind !== 'gguf-sharded')) continue;
       const metadata = store.savedModelMeta[model.id];
@@ -425,7 +374,7 @@ const LocalModelSettings = () => {
     return null;
   }, []);
 
-  const registerDownloadedOrUseDuplicate = useCallback(async (model: LocalModelDefinition, totalBytes: number) => {
+  const registerDownloadedOrUseDuplicate = useCallback(async (model: LocalModelDefinition, _totalBytes: number) => {
     if (model.engine !== 'wllama'
       || (model.manifest.kind !== 'single-file' && model.manifest.kind !== 'gguf-sharded')) {
       useStore.getState().addLocalModel(model);
@@ -433,14 +382,19 @@ const LocalModelSettings = () => {
     }
 
     const store = useStore.getState();
-    const entrypoint = model.manifest.entrypoint;
     try {
-      const storedFile = await readFile(model.id, entrypoint);
-      const fileHash = await sha256Blob(storedFile);
+      const files: Blob[] = [];
+      const inspectedFiles: Array<{name: string; size: number; hash: string}> = [];
+      for (const path of getManifestFiles(model.manifest)) {
+        const file = await readFile(model.id,path);
+        files.push(file);
+        inspectedFiles.push({name:path,size:file.size,hash:await sha256Blob(file)});
+      }
+      const selection = inspectSelectedGGUFs(inspectedFiles.map(({name,size}) => ({name,size})));
       store.updateSavedModelMeta(model.id, {
-        fileHashes: { ...(store.savedModelMeta[model.id]?.fileHashes ?? {}), [entrypoint]: fileHash },
+        fileHashes: Object.fromEntries(inspectedFiles.map((file) => [file.name,file.hash])),
       });
-      const duplicate = await findStoredModelWithHash(fileHash, totalBytes, model.id);
+      const duplicate = await findStoredSelectedGGUF(selection,inspectedFiles,files,model.id);
       if (duplicate) {
         const removal = await removeAssets(model.id);
         if (removal.status !== 'removed') return;
@@ -459,7 +413,7 @@ const LocalModelSettings = () => {
     }
 
     store.addLocalModel(model);
-  }, [autoAssignIfUnset, bumpOpfsBrowser, findStoredModelWithHash]);
+  }, [bumpOpfsBrowser, findStoredSelectedGGUF]);
 
   // ----- Catalog download handlers (thin wrappers using useModelDownload) -----
   const handleDownload = useCallback((model: CatalogModel) => {

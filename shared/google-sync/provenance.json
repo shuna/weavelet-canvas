@@ -117,7 +117,7 @@
     "src/store/evaluation-slice.ts": "17ea8dac39f8f06cb02f1fbf1f6056cc96d4672256b80b42afb90f4443739ec8",
     "src/utils/localModelRole.ts": "29491f084ef6ce804a416749b115e6b63a772a735ec2d4fbea21c42e75367816",
     "src/utils/localModelImport.ts": "fb4051982d234b284c245113a618c894f22be7afc19c9da6d770b9f4adc9b155",
-    "src/utils/localModelRegistry.ts": "b4f9a839dd1287d6f9b8ca41c6e459bcb5bd75709f1f4a534e838fdb86aa2a93",
+    "src/utils/localModelRegistry.ts": "406994c2080871091363f5f0f4d36f6a41a49a9f97e658ae6839efc8cd0328f4",
     "src/store/local-model-slice.ts": "a7e5e3dbbaca2d6cc26597e6e9fd656c16e9549d14b10674694494e49d7d1eae",
     "src/store/store.ts": "debe9137fec89588382491a3a50673ae8a0635618b10a28103c7e8c26d497176",
     "src/components/Chat/ChatContent/Message/CommandPrompt/CommandPrompt.tsx": "f263bcba31adf57b468d45903916a7dd6c9edff203b5b6a911337afd089b1535",
@@ -384,8 +384,8 @@
     "src/utils/localModelImport.ts": "fb4051982d234b284c245113a618c894f22be7afc19c9da6d770b9f4adc9b155",
     "src/local-llm/catalogPlan.ts": "b667fb74381650ec9df8ed01739ed547ab78dc49f91312e562fa6a68ef880cf8",
     "shared/google-sync/localModelImport.ts": "a39135cdd406d0fd692b74ea5410337bb5a997e47844d221031719c591108c9e",
-    "src/utils/localModelRegistry.ts": "b4f9a839dd1287d6f9b8ca41c6e459bcb5bd75709f1f4a534e838fdb86aa2a93",
-    "shared/google-sync/localModelRegistry.ts": "4d4aa70ed998addbd0a688be3957659aa470ce19fe83c07ed7b65e66c37b426c",
+    "src/utils/localModelRegistry.ts": "406994c2080871091363f5f0f4d36f6a41a49a9f97e658ae6839efc8cd0328f4",
+    "shared/google-sync/localModelRegistry.ts": "35e8ac4360d104a8d2d92c1cd2b3db024946bb4754baf7aa78833d05bb40ad2a",
     "src/local-llm/fileProvider.ts": "4046bf8b8036f227ee000132a829adfd95100e83826319dce5fadb840427d121",
     "shared/google-sync/localModelFiles.ts": "1dd753d43e248ef74320cebac1f305bb2dcaf8465a129bba990d0e02560a82d0",
     "src/utils/debugState.ts": "fc315634962591e9e64ccd42e92b08e37bc4b6c597d887c5760ac30b06adc535",
@@ -445,5 +445,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "79c1eb342e28341b1fb861e3a3987f5aab1d15b51e9e40cf716101da2e56b51b"
+  "bundleSHA256": "60069e3d5c3208992fb53c5cfa274039b7d7e4e77678c7454a358b7388a536de"
 }
