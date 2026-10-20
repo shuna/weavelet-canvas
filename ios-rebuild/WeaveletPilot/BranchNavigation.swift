@@ -33,7 +33,7 @@ enum BranchNavigation {
             .init(key: "preference", value: .string(preference))
         ])).string("swipe direction")
     }
-    enum HistoryAction: String { case initialize, push, back, forward, capture }
+    enum HistoryAction: String { case initialize, push, viewSwitch, back, forward, capture }
     struct HistoryResult {
         let history: OrderedJSON
         let entry: OrderedJSON?

@@ -1355,3 +1355,10 @@ Catalyst固有7件の成功範囲を確認（最終一括runではない）。�
 詳細内の画像拡大sheetはdetached presenterを記録して閉じるため、Webと同じ直接表示にした。AttachmentImageViewのallowsExpansion既定trueを保ち、新detailだけfalseで384pt上限の非Button画像を使う。既存chatの拡大経路とloaderは未変更。暗背景のclose textを標準toolbarの44pt xmarkへ変更し、白いiconとdismissを実画面で確認した。最終Catalyst build成功。独立Astraの機能群と画像/close境界の限定監査は新規P1/P2なし。描画修正後は影響UI/buildだけ再確認した。
 
 別会話Copyを選択したまま元会話の生成node詳細を開き、FAKE partial→complete更新、生成中star/pin disabled→完了後enabled、starの元会話への保存とCopy選択保持を確認した。選択modeの一node押下→1件表示も確認。終了後process不在・built Info byte一致復元済み。共有Web/bundleと保存/sync基盤は未変更で、全項目I/O・実Web→native→Web暗号化wire・bundle鮮度の既存成功を再利用した。実cloud、実touch/狭幅/文字拡大/VoiceOver全経路、前節dragと全機能/UIの最終受入は未完了。iPhone照会/導入・push・main統合はしていない。
+## 生成中の表示切替と表示履歴の共有（2026-10-21）
+
+Web Chat.tsxの実effectからviewSwitchNavigationEntryを抽出し、Web実callerとnativeの既存navigation bridgeが同じraw activePath・同chat/viewの重複抑止を使用する。nativeは表示形式と履歴をapplyLibraryで一回保存してから公開する。表示metadataは生成中も変更でき、既存treeへの表示接続はno-op、tree変換が必要な場合だけ対象chatの生成を拒否する。ツールバーは表示操作を有効にし、生成設定・本文変更等の従来の抑止を個別に維持した。
+
+Web関連18件・型検査・Vite build・bundle鮮度、Catalyst BranchNavigation9＋ParallelGeneration6の15件が成功。新ケースは生成request/plan保持、別会話tree作成、保存失敗時のsource/disk/表示保持、再試行、履歴の戻る/進む、生成完了後の本文保存と再起動I/Oを確認する。初回compileのtry不足2箇所を修正した。最初の実行は14成功/1失敗で、会話切替履歴のviewがnativeではchat固定、Webでは現在のchatActiveViewという接続差を検出した。期待値は変えずnavigate(.chatSwitch)とhistorySelectingを修正し、影響する15件を再確認した。独立Astraの機能一式監査とこの2箇所の限定再監査は新規P1/P2なし。ログは /private/tmp/weavelet-view-switch-{web-test,types,build,freshness,native-test,native-final-test,native-retry-test,native-history-test}.log。
+
+隔離FAKE Catalystの最終buildで、同じ会話の生成中にchatからgraphへ切り替え、FAKE partial表示、表示layout menuの有効化と本文操作のdisabled、左右分割への切替後の完了本文、戻る操作でgraph復元を確認した。隔離保存sourceの最終assistant本文FAKE partial completeも確認。途中buildの最初の試行は生成途中で終了したため中断扱いであり、完了成功に含めない。終了後process不在とbuilt Info.plistのbyte一致復元を確認。保存/同期schemaは未変更で、全項目I/O・実Web→native→Web暗号化wireの既存成功を再利用する。実cloud、実touch/文字拡大/VoiceOver全経路、前節dragと全機能/UI最終受入は未完了。iPhone照会/導入・push・main統合は行っていない。

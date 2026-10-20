@@ -8819,7 +8819,7 @@ var WeaveletGoogleSync = (() => {
   }
 
   // src/utils/branchUtils.ts
-  var import_lodash = __toESM(require_lodash());
+  var import_lodash = __toESM(require_lodash(), 1);
 
   // src/utils/contentValidation.ts
   var hasMeaningfulContent = (content) => content.some((part) => {
@@ -19059,6 +19059,11 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   function navigationEntry(target, viewContext, source) {
     return { chatId: target.chatId, activePath: target.path, focusedNodeId: target.focusedNodeId, viewContext, source };
   }
+  function viewSwitchNavigationEntry(current, chat, viewContext) {
+    if (!chat || current?.chatId === chat.id && current.viewContext === viewContext)
+      return;
+    return { chatId: chat.id, activePath: [...chat.branchTree?.activePath ?? []], viewContext, source: "view-switch" };
+  }
   function entryWithNavigationKey(entry, key) {
     return { ...entry, key };
   }
@@ -19168,6 +19173,11 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         } else if (input.action === "push") {
           const partial = input.target ? navigationEntry(input.target, input.view, input.navigationSource) : input.entry;
           next = pushNavigationHistory(history, entryWithNavigationKey(partial, input.key));
+        } else if (input.action === "viewSwitch") {
+          const chat = source.chats.find((chat2) => chat2.id === input.chatId);
+          const partial = viewSwitchNavigationEntry(history.navHistoryCurrent, chat, input.view);
+          if (partial)
+            next = pushNavigationHistory(history, entryWithNavigationKey(partial, input.key));
         } else if (input.action === "capture") {
           next = captureNavigationHistory(history, history.navHistoryCurrent && navigationEntryWithAnchor(history.navHistoryCurrent, input.scrollAnchor));
         } else

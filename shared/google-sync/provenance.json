@@ -104,7 +104,7 @@
     "src/utils/branchSearch.ts": "bc8e0483f624ac6bee834f696c99b13345965c601903650238ef32ad22509962",
     "src/utils/chatSearch.ts": "ab0cec09d902d6527236c20a729ba4cb963a67c2485c640e7c5d4109cfef316a",
     "src/store/grep-slice.ts": "8a317ed6f318f10d0ea902afe56f88dce143b63944c23f3a732725d3d03d53ea",
-    "src/utils/branchNavigation.ts": "9d2929d918ddb5645e278989c809bbd6a89f00456f888f3d669a73fb8db904a6",
+    "src/utils/branchNavigation.ts": "945063544987ebbe2d829d3c19ab18e16af7b33adc5bf83ee6146a8fbcdd213e",
     "src/utils/bubbleScroll.ts": "bf3fbbf327cc87c92d57cafda88b8888c155f001a7e04a66978360fb6688c380",
     "src/store/navigation-slice.ts": "0b688c1735df92dbdb2d820bd10bc3115126db90344d476c3a8d317c9479cf17",
     "src/types/evaluation.ts": "4003aabc888d815667259dd49d9efb74a599281e9970841782893d2307eb415c",
@@ -273,8 +273,8 @@
     "src/utils/chatSearch.ts": "ab0cec09d902d6527236c20a729ba4cb963a67c2485c640e7c5d4109cfef316a",
     "src/utils/searchState.ts": "1ae8c5b8276a6f349fff94eec08c85fa7d9691e8036d64d0dc321c0957ff3b77",
     "shared/google-sync/search.ts": "348d7496a202a4a7011547e951cef89164a11036ca2e0f4bd94a4df3045d3c49",
-    "src/utils/branchNavigation.ts": "9d2929d918ddb5645e278989c809bbd6a89f00456f888f3d669a73fb8db904a6",
-    "shared/google-sync/navigation.ts": "e998593c759d3de37f1df3c0f90ee0b109d38cdfc0916e6b1138c8ba7c072261",
+    "src/utils/branchNavigation.ts": "945063544987ebbe2d829d3c19ab18e16af7b33adc5bf83ee6146a8fbcdd213e",
+    "shared/google-sync/navigation.ts": "051703e002f55ff63f5338937c1aa90dc495ee8f3b830caaba845fead6d5e44b",
     "src/api/helper.ts": "efff4e27b984f4382a536ea95a0a42d09ac6f00dc818efdfded771070bfad15a",
     "src/utils/proxyProtocol.ts": "1eec9e5c3fe646a189854160ff97afd933b56fb13f3961ae9a4f8f3b4665a6a2",
     "src/utils/streamRecovery.ts": "10ec126041618c3e3ba7328c9704154ddeab2caf8681d722e46ff73efc7bdcf0",
@@ -424,5 +424,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "def26073d19d55ead929cb740346ca478646b72e9ee6732b06ddd6fc1a3f0201"
+  "bundleSHA256": "6943432abbb247f41a6d227a2af63f14eb9da19787dd7366f7562f67148c5f20"
 }

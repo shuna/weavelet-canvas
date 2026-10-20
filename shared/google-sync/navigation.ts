@@ -1,7 +1,7 @@
 import { getSiblingGroups, resolveBranchSwipeDirection } from '../../src/utils/branchUtils';
 import { switchActivePathState } from '../../src/store/branch-domain';
 import { diffJSONChanges } from '../../src/utils/jsonChanges';
-import { resolveNavigationTarget, navigationEntry, entryWithNavigationKey, navigationEntryWithAnchor, captureNavigationHistory, restoredNavigationPath, emptyNavigationHistory, initializeNavigationHistory, pushNavigationHistory, moveNavigationHistory, canMoveNavigationHistory } from '../../src/utils/branchNavigation';
+import { resolveNavigationTarget, navigationEntry, viewSwitchNavigationEntry, entryWithNavigationKey, navigationEntryWithAnchor, captureNavigationHistory, restoredNavigationPath, emptyNavigationHistory, initializeNavigationHistory, pushNavigationHistory, moveNavigationHistory, canMoveNavigationHistory } from '../../src/utils/branchNavigation';
 
 const decodeHistory = (value:any) => ({...value,navEntryMap:new Map(value.navEntryMap)});
 const encodeHistory = (value:any) => ({...value,navEntryMap:[...value.navEntryMap.entries()]});
@@ -46,6 +46,10 @@ export function navigationOperation(json: string): string {
       else if (input.action === 'push') {
         const partial = input.target ? navigationEntry(input.target,input.view,input.navigationSource) : input.entry;
         next = pushNavigationHistory(history,entryWithNavigationKey(partial,input.key));
+      } else if (input.action === 'viewSwitch') {
+        const chat = source.chats.find((chat:any) => chat.id === input.chatId);
+        const partial = viewSwitchNavigationEntry(history.navHistoryCurrent,chat,input.view);
+        if (partial) next = pushNavigationHistory(history,entryWithNavigationKey(partial,input.key));
       } else if (input.action === 'capture') {
         next = captureNavigationHistory(history,history.navHistoryCurrent && navigationEntryWithAnchor(history.navHistoryCurrent,input.scrollAnchor));
       }

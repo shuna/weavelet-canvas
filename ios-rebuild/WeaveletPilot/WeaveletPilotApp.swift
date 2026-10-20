@@ -511,6 +511,7 @@ struct ChatView: View {
                 .contentShape(Rectangle())
             }
             .accessibilityLabel("会話のモデルと生成設定：\(model)")
+            .disabled(state.generation != nil)
             Spacer(minLength: 0)
             HStack(spacing: 0) {
                 conversationViewButton(.chat, icon: "bubble.left.and.bubble.right")
@@ -518,6 +519,7 @@ struct ChatView: View {
                 Menu("表示レイアウト", systemImage: "line.3.horizontal") {
                     Toggle("吹き出し表示", isOn: Binding(get: { state.style == .bubbles },
                         set: { state.style = $0 ? .bubbles : .stream }))
+                        .disabled(state.generation != nil)
                     Divider()
                     ForEach(ChatActiveView.allCases) { mode in
                         Button(mode.title, systemImage: state.chatActiveView == mode ? "checkmark" : "rectangle.split.2x1") {
@@ -542,14 +544,14 @@ struct ChatView: View {
                     if advancedMode {
                         Button("本文を追加",systemImage:"plus.bubble") {
                             do { draft = try state.messageDraft(nodeID:nil) } catch { errorMessage = error.localizedDescription }
-                        }
+                        }.disabled(state.generation != nil)
                     }
                     Button("非表示の枝を整理",systemImage:"line.3.horizontal.decrease") {
                         do { removalDraft = try state.pruneHiddenDraft(); showsRemoval = true } catch { errorMessage = error.localizedDescription }
-                    }
+                    }.disabled(state.generation != nil)
                     Divider()
-                    fileMenu
-                    Button("設定",systemImage:"slider.horizontal.3") { showsSettings = true }
+                    fileMenu.disabled(state.generation != nil)
+                    Button("設定",systemImage:"slider.horizontal.3") { showsSettings = true }.disabled(state.generation != nil)
 
                 }
                 .labelStyle(.iconOnly)
@@ -559,7 +561,7 @@ struct ChatView: View {
         .buttonStyle(.plain)
         .font(.subheadline)
         .padding(.horizontal, horizontalSizeClass == .compact ? 12 : 20)
-        .disabled(state.exchange == nil || state.generation != nil)
+        .disabled(state.exchange == nil)
         if openRouter {
             HStack(spacing: 6) {
                 Text("OpenRouter残高").font(.caption).foregroundStyle(.secondary)

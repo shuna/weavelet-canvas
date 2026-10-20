@@ -322,10 +322,17 @@ final class ChatState: ObservableObject {
     }
     func setChatActiveView(_ view: ChatActiveView) throws {
         guard chatActiveView != view else { return }
-        try saveLayoutSetting("chatActiveView", value:.string(view.rawValue))
+        guard let exchange, let conversation else {
+            try saveLayoutSetting("chatActiveView", value:.string(view.rawValue))
+            return
+        }
+        let current = try captureNavigationScroll(try currentNavigationHistory(in: exchange.source), in: exchange.source)
+        let next = try BranchNavigation.history(current.history, action:.viewSwitch, in:exchange.source,
+                                                chatID:conversation.id, view:view.rawValue)
+        try applyLibrary(exchange.source, selectedID:selectedID, navigation:next, activeView:view)
     }
     func saveLayoutSetting(_ key: String, value: OrderedJSON) throws {
-        guard generation == nil, !initialLoadFailed, let document, let exchange else { throw ExchangeError.invalid("表示を切り替えられません") }
+        guard !initialLoadFailed, let document, let exchange else { throw ExchangeError.invalid("表示を切り替えられません") }
         guard document.snapshot["state"]?[key] != value else { return }
         let candidate = try SyncDocument(snapshot: document.snapshot.replacing("state", with: document.snapshot.required("state").replacing(key, with: value)), v3Sidecar: document.v3Sidecar, v3RootOrder: document.v3RootOrder)
         let changed = try WebExchange(source: candidate.uiProjection())
@@ -335,11 +342,12 @@ final class ChatState: ObservableObject {
         persistenceError = nil
     }
     func ensureBranchTreeForEditor(chatID: String? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
-        guard generation == nil, let exchange, !initialLoadFailed else { throw ExchangeError.invalid("分岐を開けません") }
+        guard let exchange, !initialLoadFailed else { throw ExchangeError.invalid("分岐を開けません") }
         var chats = try exchange.source.required("chats").array("chats")
         let targetID = chatID ?? selectedID
-        guard let index = chats.firstIndex(where: { $0["id"] == .string(targetID) }) else { throw ExchangeError.invalid("会話がありません") }
+        guard let index = try chats.firstIndex(where: { try $0.required("id").string("chat ID").utf8.elementsEqual(targetID.utf8) }) else { throw ExchangeError.invalid("会話がありません") }
         guard chats[index]["branchTree"] == nil else { return }
+        guard generation(for: targetID) == nil else { throw ExchangeError.invalid("この会話の生成結果を保存してから分岐を開いてください") }
         let chat = chats[index], store = try exchange.source.required("contentStore")
         var boundary = SharedWebProjection()
         let projected = OrderedJSON.object([.init(key: "chat", value: try boundary.chat(chat)), .init(key: "contentStore", value: try boundary.store(store))])
@@ -564,7 +572,8 @@ final class ChatState: ObservableObject {
         let path = conversations.first { $0.id.utf8.elementsEqual(chatID.utf8) }?.visibleMessages.map(\.id)
         let target = try BranchNavigation.navigate(in: exchange.source, chatID: chatID, nodeID: nodeID, source: source, viewingPath: path)
         guard target.status == .reached else { throw ExchangeError.invalid("移動先の会話またはメッセージがありません") }
-        let next = try BranchNavigation.history(history.history, action: .push, in: target.source, target: target, view: "chat", navigationSource: source)
+        let view = source == .chatSwitch ? chatActiveView.rawValue : "chat"
+        let next = try BranchNavigation.history(history.history, action: .push, in: target.source, target: target, view: view, navigationSource: source)
         try applyLibrary(target.source, selectedID: chatID, resetViewFor: chatID, navigation: next)
         let focus = nodeID == nil ? nil : (target.focusedNodeID ?? target.path.last)
         let anchor = next.entry?["scrollAnchor"] ?? (nodeID == nil && source == .chatSwitch ? chatScrollAnchors[Data(chatID.utf8)] : nil)
@@ -611,7 +620,7 @@ final class ChatState: ObservableObject {
         let current = try captureNavigationScroll(try currentNavigationHistory(in: exchange.source), in: exchange.source)
         let target = try BranchNavigation.navigate(in: source, chatID: chatID, source: .chatSwitch)
         guard target.status == .reached else { return nil }
-        return try BranchNavigation.history(current.history, action: .push, in: source, target: target, view: "chat", navigationSource: .chatSwitch)
+        return try BranchNavigation.history(current.history, action: .push, in: source, target: target, view: chatActiveView.rawValue, navigationSource: .chatSwitch)
     }
 
     private func publishNavigation(_ next: BranchNavigation.HistoryResult, focus: String?) {

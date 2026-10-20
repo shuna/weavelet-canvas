@@ -156,6 +156,60 @@ final class ParallelGenerationTests: XCTestCase {
         XCTAssertEqual(restarted.exchange?.source["xString"],original?["xString"])
     }
 
+    func testRunningRemoteGenerationAllowsViewMetadataAndOtherFlatTreeWithAtomicRetry() async throws {
+        var reject = false
+        var savedURL: URL?
+        let app = try makeState { data, url in
+            savedURL = url
+            if reject { throw CocoaError(.fileWriteNoPermission) }
+            try data.write(to: url, options: .atomic)
+        }
+        let remote = client()
+        try app.startGeneration(input: "parallel-A", record: record(), client: remote)
+        try await wait { ParallelGenerationProtocol.labels.count == 1 }
+        let generation = try XCTUnwrap(app.generation(for: composedID))
+        let plan = generation.plan
+        try app.setChatActiveView(.branchEditor)
+        try app.setChatActiveView(.splitHorizontal)
+        try app.saveSplitPanelRatio(0.6)
+        try app.saveDisplaySetting(.splitPanelSwapped, value: .bool(true))
+        try app.createChat(id: "flat-other", now: 1)
+        try app.ensureBranchTreeForEditor(chatID: "flat-other", now: 2)
+        XCTAssertEqual(app.generation(for: composedID)?.id, generation.id)
+        XCTAssertEqual(app.generation(for: composedID)?.plan, plan)
+        XCTAssertNotNil(try app.exchange?.source.required("chats").array("chats").first { try $0.required("id").string("chat ID") == "flat-other" }?["branchTree"])
+        XCTAssertEqual(app.exchange?.source["xRoot"], .number("9007199254740993"))
+
+        app.selectedConversationID = composedID
+        let before = try app.publicationSnapshot(), source = app.exchange?.source
+        let disk = try Data(contentsOf: XCTUnwrap(savedURL))
+        reject = true
+        XCTAssertThrowsError(try app.setChatActiveView(.splitVertical))
+        XCTAssertEqual(app.chatActiveView, .splitHorizontal)
+        XCTAssertEqual(try app.publicationSnapshot().encoded(), try before.encoded())
+        XCTAssertEqual(app.exchange?.source, source)
+        XCTAssertEqual(try Data(contentsOf: XCTUnwrap(savedURL)), disk)
+        XCTAssertEqual(app.generation(for: composedID)?.id, generation.id)
+        XCTAssertEqual(app.generation(for: composedID)?.plan, plan)
+        reject = false
+        try app.setChatActiveView(.splitVertical)
+        XCTAssertEqual(app.chatActiveView, .splitVertical)
+        XCTAssertTrue(app.canNavigateBack)
+        try app.moveNavigation(.back)
+        XCTAssertEqual(app.chatActiveView, .splitHorizontal)
+        try app.moveNavigation(.forward)
+        XCTAssertEqual(app.chatActiveView, .splitVertical)
+        XCTAssertEqual(app.generation(for: composedID)?.id, generation.id)
+
+        ParallelGenerationProtocol.release("A")
+        try await wait { app.generation(for: self.composedID) == nil }
+        XCTAssertEqual(output(app, chatID: composedID), "reply-A")
+        let restarted = ChatState(store: LocalStateStore(fileURL: try XCTUnwrap(savedURL)))
+        XCTAssertEqual(try restarted.exportWebData(), try app.exportWebData())
+        XCTAssertEqual(restarted.chatActiveView, .splitVertical)
+        XCTAssertNotNil(try restarted.exchange?.source.required("chats").array("chats").first { try $0.required("id").string("chat ID") == "flat-other" }?["branchTree"])
+    }
+
     private func output(_ app: ChatState, chatID: String) -> String? {
         app.conversations.first { $0.id.utf8.elementsEqual(chatID.utf8) }?.visibleMessages.last.map {
             $0.parts.compactMap { if case .text(let value) = $0 { return value }; return nil }.joined()

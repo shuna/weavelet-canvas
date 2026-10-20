@@ -80,11 +80,28 @@ final class BranchNavigationTests: XCTestCase {
         let split = try state.publicationSnapshot(), splitDisk = try Data(contentsOf: local.fileURL)
         try state.focusBranchEditor(nodeID: "n-user")
         XCTAssertNil(state.branchEditorFocus)
-        XCTAssertFalse(state.canNavigateBack)
+        XCTAssertTrue(state.canNavigateBack)
         XCTAssertEqual(try state.publicationSnapshot().encoded(), try split.encoded())
         XCTAssertEqual(try Data(contentsOf: local.fileURL), splitDisk)
         XCTAssertTrue(ChatState(store: local).branchEditorSyncEnabled)
     }
+    func testViewSwitchesUseSharedBackForwardHistory() throws {
+        let state = ChatState()
+        try state.importWebData(fixture().encoded())
+        try state.setChatActiveView(.branchEditor)
+        try state.setChatActiveView(.splitHorizontal)
+        XCTAssertEqual(state.chatActiveView, .splitHorizontal)
+        XCTAssertTrue(state.canNavigateBack)
+        XCTAssertFalse(state.canNavigateForward)
+        try state.moveNavigation(.back)
+        XCTAssertEqual(state.chatActiveView, .branchEditor)
+        XCTAssertTrue(state.canNavigateForward)
+        try state.moveNavigation(.back)
+        XCTAssertEqual(state.chatActiveView, .chat)
+        try state.moveNavigation(.forward)
+        XCTAssertEqual(state.chatActiveView, .branchEditor)
+    }
+
     func testChatToBranchFocusUsesSharedHistoryWithoutSavingContent() throws {
         let local = try store(), state = ChatState(store: local)
         try state.importWebData(fixture().encoded())

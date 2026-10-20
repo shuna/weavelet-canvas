@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe,expect,it } from 'vitest';
 import { navigationOperation } from '../../shared/google-sync/navigation';
 import { recordChatEdits } from '@store/chat-edit-time';
-import { resolveNavigationTarget, restoredNavigationPath, emptyNavigationHistory, pushNavigationHistory, moveNavigationHistory } from './branchNavigation';
+import { resolveNavigationTarget, restoredNavigationPath, emptyNavigationHistory, pushNavigationHistory, moveNavigationHistory, viewSwitchNavigationEntry } from './branchNavigation';
 import { diffJSONChanges } from './jsonChanges';
 const fixture = () => JSON.parse(readFileSync(new URL('../../tests/fixtures/web-native/io-corpus.json',import.meta.url),'utf8')).exportV3;
 const call = (input:any) => JSON.parse(navigationOperation(JSON.stringify(input)));
@@ -89,6 +89,17 @@ describe('shared branch navigation',()=>{
     const pushed=call({operation:'history',action:'push',source,history:captured.history,target,key:'next',view:'chat',navigationSource:'branch-switch'});
     expect(pushed.entry).toMatchObject({key:'next',chatId:'chat-a',activePath:target.path,focusedNodeId:'n-assistant',source:'branch-switch'});
     expect(pushed.history.navHistoryPast[0].scrollAnchor).toEqual(anchor);
+  });
+  it('builds view-switch entries from the raw active path and skips the current chat/view',()=>{
+    const source=fixture(), chat=source.chats[0];
+    chat.branchTree.activePath=['n-system','n-user','n-inactive'];
+    expect(viewSwitchNavigationEntry({chatId:'chat-a',viewContext:'branch-editor'},chat,'branch-editor')).toBeUndefined();
+    expect(viewSwitchNavigationEntry(null,chat,'branch-editor')).toMatchObject({chatId:'chat-a',activePath:['n-system','n-user','n-inactive'],viewContext:'branch-editor',source:'view-switch'});
+    const initialized=call({operation:'history',action:'initialize',source,history:call({operation:'historyEmpty'}),chatId:'chat-a',key:'init',view:'chat',viewingPath:['n-system','n-user','n-assistant']});
+    const switched=call({operation:'history',action:'viewSwitch',source,history:initialized.history,chatId:'chat-a',key:'switch',view:'branch-editor'});
+    expect(switched.entry).toMatchObject({key:'switch',activePath:['n-system','n-user','n-inactive'],source:'view-switch'});
+    const duplicate=call({operation:'history',action:'viewSwitch',source,history:switched.history,chatId:'chat-a',key:'duplicate',view:'branch-editor'});
+    expect(duplicate.history).toEqual(switched.history);
   });
   it('restores only a valid saved parent path, keeps the current path for invalid or empty paths',()=>{
     const source=fixture(), chat=source.chats[0];

@@ -479,7 +479,7 @@ struct BranchEditorView: View {
                 .buttonStyle(.plain).font(.subheadline)
                 .foregroundStyle(Color(uiColor:.label))
                 .frame(minHeight:44)
-                .disabled(state.generation != nil)
+                .disabled(state.exchange == nil)
                 conversationEditMenu(key:key)
                 Spacer(minLength:4)
                 Button {

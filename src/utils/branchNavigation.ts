@@ -17,6 +17,10 @@ export function resolveNavigationTarget(chats: ChatInterface[] | null | undefine
 export function navigationEntry(target: {chatId:string;path:string[];focusedNodeId?:string}, viewContext: NavEntry['viewContext'], source: NavigationSource): Omit<NavEntry,'key'> {
   return {chatId:target.chatId,activePath:target.path,focusedNodeId:target.focusedNodeId,viewContext,source};
 }
+export function viewSwitchNavigationEntry(current: Pick<NavEntry,'chatId'|'viewContext'> | null, chat: Pick<ChatInterface,'id'|'branchTree'> | undefined, viewContext: NavEntry['viewContext']): Omit<NavEntry,'key'> | undefined {
+  if (!chat || (current?.chatId === chat.id && current.viewContext === viewContext)) return;
+  return {chatId:chat.id,activePath:[...(chat.branchTree?.activePath ?? [])],viewContext,source:'view-switch'};
+}
 export function entryWithNavigationKey(entry: Omit<NavEntry,'key'>, key: string): NavEntry { return {...entry,key}; }
 export function navigationEntryWithAnchor(entry: NavEntry, anchor: NavEntry['scrollAnchor']): NavEntry {
   return anchor ? {...entry,scrollAnchor:{...anchor}} : entry;

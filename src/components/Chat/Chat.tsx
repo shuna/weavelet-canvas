@@ -1,6 +1,7 @@
 import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { isSplitView } from '@type/chat';
+import { viewSwitchNavigationEntry } from '@utils/branchNavigation';
 
 import ChatContent from './ChatContent';
 import MobileBar from '../MobileBar';
@@ -38,14 +39,8 @@ const Chat = () => {
     if (previousViewRef.current === activeView) return;
     previousViewRef.current = activeView;
     if (isRestoringNavigation || !currentChat) return;
-    const currentEntry = useStore.getState().navHistoryCurrent;
-    if (currentEntry?.chatId === currentChat.id && currentEntry.viewContext === activeView) return;
-    pushNavigationEntry({
-      chatId: currentChat.id,
-      activePath: [...(currentChat.branchTree?.activePath ?? [])],
-      viewContext: activeView,
-      source: 'view-switch',
-    });
+    const entry = viewSwitchNavigationEntry(useStore.getState().navHistoryCurrent,currentChat,activeView);
+    if (entry) pushNavigationEntry(entry);
   }, [activeView, currentChat, isRestoringNavigation, pushNavigationEntry]);
 
   // Mobile fallback: split views degrade to chat view
