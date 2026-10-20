@@ -1,3 +1,4 @@
+import {normalizeLegacyIOSImport} from '../../src/utils/legacyIOSImport';
 import initialState from './importDefaults.generated.json';
 import {prepareImportData,buildPreviewAppendPatch,createImportPlan,validatePreviewSource,validateImportSelection,type ImportPreviewSource,type ImportDecisions,type Translator} from '../../src/utils/fileImport';
 import {importOpaquePaths} from '../../src/utils/fileImportProjection';
@@ -14,12 +15,12 @@ export function fileImport(json:string):string {
  if(input.operation==='defaults')return JSON.stringify(importDefaults());
  if(input.operation==='inspect'){
   if(!['data','state','source'].includes(input.kind))throw new Error('Invalid import projection kind.');
-  const data=input.data,contentStorePaths:(string|number)[][]=[];
+  const data=input.kind==='data'?normalizeLegacyIOSImport(input.data):input.data,contentStorePaths:(string|number)[][]=[];
   if(data&&typeof data==='object'&&!Array.isArray(data)){
    if(data.contentStore&&typeof data.contentStore==='object')contentStorePaths.push(['contentStore']);
    if(data.state?.contentStore&&typeof data.state.contentStore==='object')contentStorePaths.push(['state','contentStore']);
   }
-  return JSON.stringify({opaquePaths:importOpaquePaths(data),contentStorePaths});
+  return JSON.stringify({opaquePaths:importOpaquePaths(data),contentStorePaths,...(data!==input.data?{normalizationChanges:diffJSONChanges(input.data,data)}:{})});
  }
  const run=()=>{
   if(input.operation==='preview'){const source=input.source as ImportPreviewSource;return {...source.extensions,version:3,chats:source.chats,folders:source.folders,contentStore:source.contentStore,evaluationResults:source.evaluationResults,...(source.evaluationSettings?{evaluationSettings:source.evaluationSettings}:{})};}

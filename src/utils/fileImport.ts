@@ -1,3 +1,4 @@
+import { normalizeLegacyIOSImport } from './legacyIOSImport';
 import { v4 as uuidv4 } from 'uuid';
 
 import type { StoreState } from '@store/store';
@@ -681,7 +682,7 @@ export const validatePreviewSource = (source: ImportPreviewSource) => {
 
 /** Converts into a detached plan; no persistence, AI cancellation or live state changes. */
 export const prepareImportData = (data: unknown, base: StoreState, t: Translator, decisions: ImportDecisions = {}, resolveDecision?: (decision:ImportDecision)=>boolean, allowEmpty=false) => {
-  const raw = deepClone(data);
+  const raw = normalizeLegacyIOSImport(deepClone(data));
   const payload = isRecord(raw) && isRecord(raw.state) ? raw.state : raw;
   // Reject transient hashes before any converter can resolve the live streaming buffer.
   const rawChats = isRecord(payload) && Array.isArray(payload.chats) ? payload.chats

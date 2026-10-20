@@ -1,3 +1,6 @@
+import actualIOSState from '../../../tests/fixtures/web-native/legacy-ios-app-state.json';
+import actualIOSSnapshot from '../../../tests/fixtures/web-native/legacy-ios-sync-snapshot.json';
+import legacyIOSState from '../../utils/__fixtures__/legacy-ios-state.json';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@src/i18n', () => ({ default: { t: (key: string) => key } }));
@@ -165,6 +168,33 @@ const createBranchChat = (id: string, hashes: string[]): ChatInterface => ({
 });
 
 describe('importService', () => {
+  it.each([actualIOSState,actualIOSSnapshot])('imports unchanged old Swift writer JSON via both Web callers',async data=>{
+    const file=new File([JSON.stringify(data)],'actual-old-ios.json');
+    const preview=await prepareImportPreview(file,t);
+    expect(preview.chats).toHaveLength(2);expect(preview.contentStore).toMatchObject(data.contentStore);
+    expect((await importChatFromFile(file,t)).success).toBe(true);
+    expect(testContext.storeState.chats.slice(0,2).map(chat=>chat.title)).toEqual(data.chats.map(chat=>chat.title));
+    expect(testContext.storeState.contentStore.rich).toEqual(data.contentStore.rich);
+    expect(testContext.storeState.contentStore.inactive).toEqual(data.contentStore.inactive);
+    expect(testContext.resolveLegacyRemoteSnapshot).not.toHaveBeenCalled();
+  });
+
+  it.each(['state','snapshot'])('imports old iOS %s files through the Web immediate and preview paths', async kind => {
+    const data:any=structuredClone(legacyIOSState);
+    if(kind==='snapshot'){delete data.version;Object.assign(data,{snapshotVersion:1,updatedAt:1712345678901,deviceId:'old-device'});}
+    const file=new File([JSON.stringify(data)],'old-ios.json');
+    const preview=await prepareImportPreview(file,t);
+    expect(preview.contentStore).toEqual(data.contentStore);
+    expect(preview.extensions?.unknownRoot).toEqual(data.unknownRoot);
+    expect((await importChatFromFile(file,t)).success).toBe(true);
+    const imported=testContext.storeState.chats[0];
+    expect(imported.id).not.toBe('old-ios-chat');
+    expect(imported.branchTree!.nodes.inactive.contentHash).toBe('other');
+    expect(testContext.storeState.contentStore.body).toEqual(data.contentStore.body);
+    expect(testContext.resolveLegacyRemoteSnapshot).not.toHaveBeenCalled();
+    expect(testContext.refreshLegacyRemoteMigration).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     testContext.storeState.chats = [createChat('existing-chat', 'Existing')];
     testContext.storeState.folders = {};

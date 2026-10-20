@@ -1,3 +1,4 @@
+import { normalizeLegacyIOSImport } from '@utils/legacyIOSImport';
 import { v4 as uuidv4 } from 'uuid';
 import { showToast } from '@utils/showToast';
 
@@ -125,7 +126,7 @@ export const importChatFromFile = async (
     const raw = JSON.parse(data);
     const legacyRemote = isRecord(raw) && Object.hasOwn(raw, 'state') && typeof raw.version === 'number'
       ? raw as unknown as LegacyRemoteSnapshot : undefined;
-    const parsedData = legacyRemote ? decodeLegacyRemoteImport(legacyRemote) : raw;
+    const parsedData: typeof raw = legacyRemote ? decodeLegacyRemoteImport(legacyRemote) : normalizeLegacyIOSImport(raw);
     const originalImport = deepClone(parsedData);
     const extensions=importExtensions(parsedData);
     assertWebImportRoots(extensions);

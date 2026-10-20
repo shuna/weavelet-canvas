@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "chats": [{
+    "id": "old-ios-chat", "title": "Old iOS", "titleSet": false, "imageDetail": "auto",
+    "config": {"model": "", "max_tokens": 4000, "temperature": 1, "presence_penalty": 0, "top_p": 1, "frequency_penalty": 0},
+    "messages": [],
+    "branchTree": {
+      "rootId": "root", "activePath": ["root"],
+      "nodes": {
+        "root": {"id": "root", "role": "user", "contentHash": "body", "createdAt": 123, "unknownNode": {"count": 9007199254740992}},
+        "inactive": {"id": "inactive", "parentId": "root", "role": "assistant", "contentHash": "other", "createdAt": 124}
+      }
+    }
+  }],
+  "contentStore": {
+    "body": {"content": [{"type": "text", "text": "Hashed body", "unknownPart": {"enabled": true}}], "refCount": 1, "unknownEntry": "keep"},
+    "other": {"content": [{"type": "text", "text": "Inactive branch"}], "refCount": 1},
+    "unreferenced": {"content": [{"type": "text", "text": "Unreferenced"}], "refCount": 0}
+  },
+  "folders": {},
+  "unknownRoot": {"number": 9007199254740992, "nested": [null, false, "keep"]}
+}

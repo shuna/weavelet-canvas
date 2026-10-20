@@ -1,3 +1,7 @@
+import actualIOSState from '../../tests/fixtures/web-native/legacy-ios-app-state.json';
+import actualIOSSnapshot from '../../tests/fixtures/web-native/legacy-ios-sync-snapshot.json';
+import legacyIOSState from './__fixtures__/legacy-ios-state.json';
+import {normalizeLegacyIOSImport} from './legacyIOSImport';
 import {describe,expect,it,vi,afterEach} from 'vitest';
 vi.mock('uuid',()=>({v4:()=>editingUUID()}));
 import {editingUUID} from '../../shared/google-sync/editing';
@@ -14,7 +18,8 @@ function apply(source:any,changes:any[]){const root=JSON.parse(JSON.stringify(so
 afterEach(()=>vi.restoreAllMocks());
 describe('shared file import core',()=>{
  it.each(['LegacyImport','SingleChat','ExportV1','ExportV2','ExportV3'])('prepares %s via actual converters without mutating input',type=>{
-  const data:any=type==='LegacyImport'?[chat()]:type==='SingleChat'?chat():{...v3(),version:type==='ExportV1'?1:type==='ExportV2'?2:3};const before=structuredClone(data),result=prepare(data);
+  const data:any=type==='LegacyImport'?[chat()]:type==='SingleChat'?chat():{...v3(),version:type==='ExportV1'?1:type==='ExportV2'?2:3};// A real Web V1 has inline bodies, without the iOS hashed content-store root.
+  if(type==='ExportV1')delete data.contentStore;const before=structuredClone(data),result=prepare(data);
   expect(result.status).toBe('ready');expect(result.type).toBe(type);expect(result.source.chats).toHaveLength(1);expect(result.source.chats[0].branchTree.activePath).toHaveLength(1);expect(result.previewV3.chats[0].xChat).toEqual({opaqueRef:7});expect(result.previewV3.chats[0].branchTree.messageAttributesV1.byNode[result.source.chats[0].branchTree.rootId]).toEqual({xMessage:{opaqueRef:6}});expect(result.source.contentStore[result.source.chats[0].branchTree.nodes[result.source.chats[0].branchTree.rootId].contentHash].content).toEqual(chat().messages[0].content);expect(data).toEqual(before);
  });
  it('prepares inline V2 branch data and old remote backup without parallel format conversion',()=>{
@@ -66,5 +71,66 @@ describe('shared file import core',()=>{
  it('provides actual defaults and shared raw projection paths without including runtime actions',()=>{
   const defaults=call({operation:'defaults'});expect(defaults.chats).toEqual([]);expect(defaults.contentStore).toEqual({});expect(defaults.evaluationSettings.safetyPreSend).toBe('manual');expect(defaults).not.toHaveProperty('setChats');
   const data:any=v3();data.chats[0].config.max_tokens=9007199254740993;const inspected=call({operation:'inspect',kind:'data',data});expect(inspected.contentStorePaths).toEqual([['contentStore']]);expect(inspected.opaquePaths).toContainEqual(['xRoot']);expect(inspected.opaquePaths).toContainEqual(['chats',0,'config','max_tokens']);expect(inspected.opaquePaths).toContainEqual(['chats',0,'messages',0,'xMessage']);expect(inspected.opaquePaths).not.toContainEqual(['chats',0,'config','temperature']);
+ });
+});
+
+describe('old iOS JSON file import',()=>{
+ it.each([actualIOSState,actualIOSSnapshot])('accepts JSON produced by the unchanged old Swift writer',data=>{
+  const result=prepare(data);expect(result.status).toBe('ready');expect(result.type).toBe('ExportV3');
+  expect(result.source.chats).toHaveLength(2);
+  expect(result.source.contentStore).toMatchObject(data.contentStore);
+  const tree=result.source.chats[0].branchTree;
+  expect(tree.nodes.inactive.contentHash).toBe('inactive');
+  expect(tree.nodes.user.contentHash).toBe('rich');
+  expect(resolveContent(result.source.contentStore,'rich')).toEqual(data.contentStore.rich.content);
+  expect(result.source.extensions.currentChatID).toBe(data.currentChatID);
+  expect(result.source.folders).toMatchObject(data.folders);
+ });
+
+ it.each(['state','snapshot'])('prepares the actual old %s writer shape through V3 without changing its input',kind=>{
+  const data:any=structuredClone(legacyIOSState);
+  if(kind==='snapshot'){delete data.version;Object.assign(data,{snapshotVersion:1,updatedAt:1712345678901,deviceId:'old-ios-device',currentChatID:'old-ios-chat'});}
+  const before=structuredClone(data),inspected=call({operation:'inspect',kind:'data',data});
+  expect(inspected.normalizationChanges).toContainEqual({op:'set',path:['version'],value:3});
+  expect(inspected.normalizationChanges).toContainEqual({op:'set',path:['chats',0,'branchTree','nodes','root','parentId'],value:null});
+  const normalized=apply(data,inspected.normalizationChanges);
+  expect(normalized).toEqual(normalizeLegacyIOSImport(data));
+  expect(inspected.contentStorePaths).toEqual([['contentStore']]);expect(inspected.opaquePaths).toContainEqual(['unknownRoot']);
+  if(kind==='snapshot')expect(inspected.opaquePaths).toContainEqual(['snapshotVersion']);
+  const result=prepare(data),fromPatch=prepare(normalized);
+  expect(result.status).toBe('ready');expect(result.type).toBe('ExportV3');expect(fromPatch.source).toEqual(result.source);
+  expect(result.source.contentStore).toEqual(data.contentStore);
+  const tree=result.source.chats[0].branchTree;
+  expect(tree.activePath).toEqual(['root']);expect(Object.keys(tree.nodes)).toEqual(['root','inactive']);
+  expect(tree.nodes.root.unknownNode).toEqual(data.chats[0].branchTree.nodes.root.unknownNode);
+  expect(resolveContent(result.source.contentStore,tree.nodes.root.contentHash)[0]).toMatchObject({text:'Hashed body'});
+  expect(result.source.extensions.unknownRoot).toEqual(data.unknownRoot);
+  if(kind==='snapshot')expect(result.source.extensions).toMatchObject({snapshotVersion:1,updatedAt:1712345678901,deviceId:'old-ios-device',currentChatID:'old-ios-chat'});
+  expect(data).toEqual(before);
+  expect(call({operation:'inspect',kind:'state',data})).not.toHaveProperty('normalizationChanges');
+  expect(call({operation:'inspect',kind:'source',data})).not.toHaveProperty('normalizationChanges');
+ });
+ it('imports colliding old IDs and hashes through the existing append planner',()=>{
+  const source=prepare(legacyIOSState).source;
+  const base:any={chats:[{...chat('old-ios-chat'),title:'Existing'}],folders:{},contentStore:{body:{content:[{type:'text',text:'Existing body'}],refCount:1}},evaluationResults:{}};
+  const output=apply(base,call({operation:'plan',mode:'append',base,source,newIDs:ids().map(id=>`append-${id}`),now:10}).changes);
+  expect(output.chats[0].id).not.toBe(base.chats[0].id);expect(output.chats[1]).toEqual(base.chats[0]);
+  expect(output.chats[0].branchTree.nodes.root.contentHash).toBe('body_');
+  expect(output.contentStore.body).toEqual(base.contentStore.body);expect(output.contentStore.body_).toEqual(legacyIOSState.contentStore.body);
+  const replaced=apply(base,call({operation:'plan',mode:'replace',base,source,newIDs:[]}).changes);
+  expect(replaced.contentStore.unreferenced).toEqual(legacyIOSState.contentStore.unreferenced);
+ });
+ it('accepts flat chats and keeps normal inline Web V1 on its existing path',()=>{
+  const flat={...legacyIOSState,chats:[chat()]};expect(prepare(flat).type).toBe('ExportV3');
+  const inline={...flat,chats:[{...chat(),branchTree:{rootId:'n',activePath:['n'],nodes:{n:{id:'n',parentId:null,role:'user',content:chat().messages[0].content}}}}]};
+  expect(normalizeLegacyIOSImport(inline)).toBe(inline);expect(call({operation:'inspect',kind:'data',data:inline})).not.toHaveProperty('normalizationChanges');
+  expect(prepare({version:1,chats:[chat()],folders:{}}).type).toBe('ExportV1');
+ });
+ it('rejects unsupported versions and malformed old roots without changing them',()=>{
+  const snapshot:any={...legacyIOSState,snapshotVersion:1,updatedAt:1,deviceId:'device'};delete snapshot.version;
+  for(const data of [{...snapshot,snapshotVersion:2},{...snapshot,snapshotVersion:'1'},{...snapshot,deviceId:1},{...snapshot,folders:[]},{...legacyIOSState,contentStore:[]},{...legacyIOSState,chats:[{...chat(),branchTree:{nodes:{bad:{contentHash:1}}}}]}]){
+   const before=structuredClone(data);expect(()=>prepare(data)).toThrow();expect(data).toEqual(before);
+  }
+  for(const version of [0,4,99])expect(()=>prepare({...legacyIOSState,version})).toThrow();
  });
 });
