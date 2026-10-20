@@ -120,6 +120,26 @@ enum CloudKitSnapshots {
         try checkpoint(state.publicationSnapshot())
         record = remote; metrics = nextMetrics; status = "CloudKitから受信しました"; succeeded = true
     }
+    func prepareLegacyIOSImport() async throws -> ChatImportPreview {
+        try beginOperation(); defer { endOperation() }
+        let token = session, source = try ChatImport.call("legacyCloudKitSource")
+        let name = try source.required("recordName").string("legacy record name")
+        let type = try source.required("recordType").string("legacy record type")
+        guard let remote = try await requireTransport().read(recordName: name, recordType: type) else {
+            throw SyncSessionError.invalid("旧iOSのCloudKitデータがありません")
+        }
+        try check(token)
+        guard remote.recordName == name, remote.recordType == type else { throw CloudKitTransportError.invalidRecord }
+        // Preserve the original payload before interpreting its version or contents.
+        try syncStore.archiveLegacyRemote(remote)
+        legacyRemotes = try syncStore.load().legacyRemotes
+        guard remote.snapshotVersion == Int64(try source.required("snapshotVersion").number("legacy snapshot version")) else {
+            throw SyncSessionError.invalid("旧iOSデータの版に対応していません。隔離した原本を書き出せます")
+        }
+        let preview = try await state.prepareImport(data: remote.payload, filename: "weavelet-ios-snapshot")
+        try check(token)
+        return preview
+    }
     func upload() async throws {
         try beginOperation(); defer { endOperation() }
         let baseline = try state.syncInputSnapshot(), token = session, (name,type,version) = try names()
@@ -225,6 +245,15 @@ enum CloudKitSnapshots {
         guard let archive = try syncStore.load().legacyRemotes.first(where:{$0.id == id}) else { throw SyncSessionError.invalid("隔離データがありません") }
         return Data(try SyncCompression.decompressCloudKit(archive.payload).utf8)
     }
+    func archivedFile(_ id: String) throws -> ChatExport.Artifact {
+        guard let archive = try syncStore.load().legacyRemotes.first(where: { $0.id == id }) else { throw SyncSessionError.invalid("隔離データがありません") }
+        let source = try ChatImport.call("legacyCloudKitSource")
+        if archive.recordName == (try source.required("recordName").string("legacy record name")) {
+            let json = (try? OrderedJSON.decode(archive.payload)) != nil
+            return .init(data: archive.payload, filename: "weavelet-ios-snapshot-\(id.prefix(8)).\(json ? "json" : "wvlt")", contentType: json ? .json : .data)
+        }
+        return .init(data: try archivedJSON(id), filename: "weavelet-cloudkit-legacy-snapshot.json", contentType: .json)
+    }
     func disconnect() throws {
         automaticEnabled = false; automaticActive = false
         automaticQueue?.cancel(); session = UUID(); task?.cancel(); record = nil; metrics = nil; status = "未接続"
@@ -239,6 +268,9 @@ struct CloudKitSyncSettingsView: View {
     @State private var sending = false
     @State private var exportDocument: WebJSONDocument?
     @State private var exporting = false
+    @State private var exportType = UTType.json
+    @State private var exportName = "weavelet-cloudkit-legacy-snapshot"
+    @State private var importPreview: ChatImportPreview?
     var body: some View {
         NavigationStack {
             Form {
@@ -253,9 +285,17 @@ struct CloudKitSyncSettingsView: View {
                     Text("受信または送信を確認してから有効にできます。端末への保存後、操作が落ち着いてから自動送信します。バックグラウンド中の完了は保証されません。")
                         .font(.footnote).foregroundStyle(.secondary)
                     Button("接続を解除") { do { try connection.disconnect() } catch { connection.errorMessage = error.localizedDescription } }
+                    Button("旧iOSのCloudKitデータを確認") {
+                        connection.run { importPreview = try await connection.prepareLegacyIOSImport() }
+                    }.disabled(connection.working)
+                    Text("旧iOSの同期データを読み取り、選択して取り込みます。旧データは変更しません。")
+                        .font(.footnote).foregroundStyle(.secondary)
                     ForEach(connection.legacyRemotes,id:\.id) { archive in
                         Button("隔離した旧版データを書き出す（\(archive.id.prefix(8))）") {
-                            do { exportDocument = WebJSONDocument(data:try connection.archivedJSON(archive.id)); exporting = true }
+                            do {
+                                let file = try connection.archivedFile(archive.id)
+                                exportDocument = WebJSONDocument(data: file.data); exportType = file.contentType; exportName = file.filename; exporting = true
+                            }
                             catch { connection.errorMessage = error.localizedDescription }
                         }
                     }
@@ -268,7 +308,8 @@ struct CloudKitSyncSettingsView: View {
             .confirmationDialog("この端末のデータをCloudKitへ送信します",isPresented:$sending,titleVisibility:.visible) {
                 Button("送信",role:.destructive) { connection.run { try await connection.upload() } }
             } message: { Text("競合時はWeb版と同じ更新時刻の判定で採用する内容を決めます。") }
-            .fileExporter(isPresented:$exporting,document:exportDocument,contentType:.json,defaultFilename:"weavelet-cloudkit-legacy-snapshot") { result in
+            .sheet(item: $importPreview) { preview in FileImportView(state: connection.state, preview: preview) }
+            .fileExporter(isPresented:$exporting,document:exportDocument,contentType:exportType,defaultFilename:exportName) { result in
                 if case .failure(let error) = result { connection.errorMessage = error.localizedDescription }
             }
             .navigationTitle("CloudKit同期")

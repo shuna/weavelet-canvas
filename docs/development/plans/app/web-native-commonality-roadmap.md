@@ -1,6 +1,6 @@
 # Web版とネイティブ版の共通化に向けた段階的計画
 
-最新補足（2026-10-20）：旧AppState version1/SyncSnapshot version1のJSONと、旧Swift writerのTLVW/zstd圧縮ファイルを明示取込みで共有V3変換へ接続した。公式Zstandard decoderの同一CをWeb用WASM/nativeで共用し、サイズ・形式検査も共有する。旧CloudKit record移行、実オンライン相互運用は残件。将来AppState version2と既存WebV2の曖昧性を対応済みと扱わない。詳細は[検証台帳](web-native-completion-ledger.md)。
+最新補足（2026-10-20）：旧AppState version1/SyncSnapshot version1のJSON、旧Swift writerのTLVW/zstd圧縮ファイル、旧CloudKit recordからのreadonly取得を既存の確認・選択取込みへ接続した。公式decoder・形式検査・旧source locatorを共有し、通常同期のtarget/etag/baselineは変更しない。実オンライン相互運用と旧Google source移行は残件。最新main=a4d83db6で追加された同期wire差分・proxy復旧/管理の反映も次の機能群で必要となる。将来AppState version2と既存WebV2の曖昧性を対応済みと扱わない。詳細は[検証台帳](web-native-completion-ledger.md)。
 
 2026-10-12。状態は段階的に実行中。Web版の機能仕様を起点に、Web版とiOS版で共通仕様・内部APIの責務・必要な共通コードを育てる。iOS版はUI・ドメイン処理・保存・通信・ビルド構成を含めて全面的に作り直すことを許容し、旧実装の構造を維持する制約は置かない。目的は、同じ機能の修正で両版の意味がずれることを減らし、各環境に適した実装を保ちながら保守と移植の負担を下げること。
 

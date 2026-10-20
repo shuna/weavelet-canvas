@@ -1117,3 +1117,17 @@ binary圧縮containerと旧CloudKit record移行は未完了。旧writerのmagic
 担当のNode/実Chromiumの14 codecケース、入力上限・並行再利用、旧writer実payload、同Cのnative known/unknown-size展開とchecksum破損拒否の成功を回収した。親は関連Web92件、型検査、Vite build、bundle鮮度、実ChromeのreadImportFile→preview接続1件、Catalyst3件（圧縮旧writer/旧JSONwriter/既存gzip→append）を確認した。旧snapshot全項目のJSON一致、未参照store保持、破損/切詰/サイズ超過/複数frameでの未公開・disk不変、成功後の保存/再起動、入力bytes不変を確認する。app接続の独立Astra監査も新規なし。Chrome初回はheadless-shell未配置で起動失敗し、既存インストール済みChromeを使う隔離設定で成功した。WebKitの確認は行っていない。
 
 ログは /private/tmp/weavelet-zstd-{build,test}.log、/private/tmp/weavelet-legacy-container-{web-test,types,build,final-build,browser-test,native-test}.log。未変更の業務規則・全I/O・暗号化同期は既存成功を再利用した。旧CloudKit/Googleのrecord/file探索からの実移行、実オンライン互換性、UI手動・大規模性能、将来AppState版の識別とmain統合は残件。iPhone照会/導入は行っていない。
+
+## 旧CloudKit recordのreadonly取込み（2026-10-20）
+
+旧writerのweavelet-ios-snapshot/WeaveletSnapshotを、現canonicalのweavelet-default-snapshotとは別に読み取り、既存の確認・選択取込みへ渡す入口をWeb/iOSへ追加した。locatorと対応版1はlegacyIOSSyncで共有し、nativeは固定bundleから取得する。通常同期のtarget/etag/metrics/baseline/statusは変更しない。移行時にも旧recordへsave/deleteしない。
+
+nativeは原本payloadとrecord既知metadataを既存CloudKitSyncStoreへ原子的に保存してから版・内容を解釈する。保存失敗はpreview前に中断、破損や未来版でも原本を書き出せる。Webは既存fetchCloudKitRecord/cloudKitSessionGuardを使い、同じ接続のtoken回転だけ反映し、raw Fileを保持して原本保存と既存prepareImportPreview/useImportPreviewSessionへ接続する。接続変更・解除・unmount後の遅延結果は採用しない。データのdecodeに成功することを原本保存の条件にしない。
+
+独立AstraでWebの外側record.snapshotVersion確認不足を検出した。metadataをraw結果に保持し、preview開始前/完了後に数値1との厳密比較を追加した。未来版・欠落・文字列版でも原本保存を残し、previewだけを拒否する。指摘解消後の限定確認は新規なし。native接続・保全と下記mock修正にも新規指摘なし。
+
+担当の関連Web4files42件・型検査成功を回収し、親は統合後の型検査/Vite build/bundle鮮度とCatalyst3件を確認した。nativeは旧圧縮record→原本保存→preview/選択commit/再起動、既存canonicalの期待record保持、破損・未来版・不在・原本保存失敗・接続変更時の未公開/既存disk保持、raw原本の再起動後exportと既存full Web snapshot受信を確認した。Webは実API helperのlookup形とtoken/session境界、隔離hook hostによる多重操作/preview失敗/unmountを確認したもので、実ブラウザ画面・実CloudKitの確認とは区別する。
+
+以前baselineでも失敗していたexchangeRead.contractのmockへ、実importServiceが参照するgetInitialStateを補った。期待値・比較assertを変更せず既存10件が全成功し、従来6件のmock起因失敗を解消した。ログ /private/tmp/weavelet-exchange-read-mock-test.log、/private/tmp/weavelet-legacy-cloudkit-{native-test,types,build}.log。変更のないcodec/全I/O/暗号化同期の成功結果は再利用した。
+
+origin/mainをfetchしa4d83db6へ28commitの追加を確認した。指定範囲の差分棚卸しではweavelet-sync-delta(version1)、commit manifest3/pack2、WLCACHE、Google事前採番とproxyの永続復旧・status/storage管理等が増えている。現在の共有/native側では新wire識別子を確認できず、最新版とのオンライン互換性を完了扱いにしない。今回の成果を保存した上で次の機能群でmain→featureの取り込みと共有接続を扱う。mainへの統合・push・iPhone照会/導入は行っていない。

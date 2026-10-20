@@ -22,6 +22,76 @@ import XCTest
         record["deviceId"] = "FAKE test device" as NSString; record["unrelated"] = "retain" as NSString
         return try CloudKitSnapshotRecord(record)
     }
+    private func oldIOSRemote(_ payload: Data, version: Int64 = 1) throws -> CloudKitSnapshotRecord {
+        let source = try ChatImport.call("legacyCloudKitSource")
+        let record = CKRecord(recordType: try source.required("recordType").string("type"), recordID: .init(recordName: try source.required("recordName").string("name")))
+        record["payload"] = payload as NSData; record["snapshotVersion"] = NSNumber(value: version)
+        record["updatedAt"] = NSNumber(value: 1234567890123 as Int64); record["deviceId"] = "FAKE-OLD-IOS" as NSString
+        return try CloudKitSnapshotRecord(record)
+    }
+    func testOldIOSReadArchivesRawPayloadAndReusesPreviewWithoutChangingSyncTarget() async throws {
+        let dir = try directory(); defer { try? FileManager.default.removeItem(at: dir) }
+        let store = LocalStateStore(fileURL: dir.appendingPathComponent("local.json")), local = try state(store)
+        let payload = try Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/legacy-ios-sync-snapshot.wvlt"))
+        let canonical = try remote(local.publicationSnapshot())
+        let fake = FakeCloudKit(snapshot: canonical); fake.legacySnapshot = try oldIOSRemote(payload)
+        let syncStore = CloudKitSyncStore(fileURL: dir.appendingPathComponent("sync.json"))
+        let connection = CloudKitSyncConnection(state: local, transport: fake, syncStore: syncStore, deviceID: "FAKE")
+        try await connection.download()
+        let before = try local.publicationSnapshot(), disk = try Data(contentsOf: store.fileURL)
+        let baseline = try syncStore.load().baselineDigest, status = connection.status
+        let preview = try await connection.prepareLegacyIOSImport()
+        XCTAssertEqual(preview.conversations.count, 2)
+        XCTAssertEqual(fake.readNames, [canonical.recordName, "weavelet-ios-snapshot"])
+        XCTAssertTrue(fake.attempts.isEmpty)
+        XCTAssertEqual(connection.status, status)
+        XCTAssertEqual(try syncStore.load().baselineDigest, baseline)
+        XCTAssertEqual(try local.publicationSnapshot(), before)
+        XCTAssertEqual(try Data(contentsOf: store.fileURL), disk)
+        let archive = try XCTUnwrap(connection.legacyRemotes.first)
+        XCTAssertEqual(archive.payload, payload)
+        XCTAssertEqual(try connection.archivedFile(archive.id).data, payload)
+        XCTAssertTrue(try connection.archivedFile(archive.id).filename.hasSuffix(".wvlt"))
+        let restarted = CloudKitSyncConnection(state: local, transport: fake, syncStore: syncStore, deviceID: "FAKE")
+        XCTAssertEqual(try restarted.archivedFile(archive.id).data, payload)
+        try await connection.upload()
+        XCTAssertTrue(fake.attempts.first?.expected?.record === canonical.record)
+        XCTAssertEqual(fake.snapshot?.recordName, canonical.recordName)
+        XCTAssertEqual(fake.legacySnapshot?.payload, payload)
+        try await local.commitImport(preview, mode: .replace, selectedChatIDs: preview.conversations.map(\.id), selectedFolderIDs: preview.folderRows.map(\.id), includeSettings: false)
+        XCTAssertEqual(try ChatState(store: store).exportWebData(), try local.exportWebData())
+        XCTAssertEqual(fake.legacySnapshot?.payload, payload)
+    }
+    func testOldIOSReadFailuresNeverPublishAndRetainRecoverableOriginal() async throws {
+        let dir = try directory(); defer { try? FileManager.default.removeItem(at: dir) }
+        let store = LocalStateStore(fileURL: dir.appendingPathComponent("local.json")), local = try state(store)
+        let payload = try Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/legacy-ios-sync-snapshot.json"))
+        let fake = FakeCloudKit(snapshot: nil), syncStore = CloudKitSyncStore(fileURL: dir.appendingPathComponent("sync.json"))
+        let connection = CloudKitSyncConnection(state: local, transport: fake, syncStore: syncStore, deviceID: "FAKE")
+        let before = try local.publicationSnapshot(), disk = try Data(contentsOf: store.fileURL)
+        do { _ = try await connection.prepareLegacyIOSImport(); XCTFail("missing accepted") } catch {}
+        fake.legacySnapshot = try oldIOSRemote(payload, version: 2)
+        do { _ = try await connection.prepareLegacyIOSImport(); XCTFail("future record accepted") } catch {}
+        let archive = try XCTUnwrap(connection.legacyRemotes.first)
+        XCTAssertEqual(try connection.archivedFile(archive.id).data, payload)
+        XCTAssertTrue(try connection.archivedFile(archive.id).filename.hasSuffix(".json"))
+        fake.legacySnapshot = try oldIOSRemote(Data([0x54, 0x4c, 0x56, 0x57, 0]))
+        do { _ = try await connection.prepareLegacyIOSImport(); XCTFail("corrupt accepted") } catch {}
+        XCTAssertEqual(connection.legacyRemotes.count, 2)
+        let failing = CloudKitSyncStore(fileURL: syncStore.fileURL) { _, _ in throw CocoaError(.fileWriteNoPermission) }
+        fake.legacySnapshot = try oldIOSRemote(payload + Data([0]))
+        let failed = CloudKitSyncConnection(state: local, transport: fake, syncStore: failing, deviceID: "FAKE")
+        let archivedDisk = try Data(contentsOf: syncStore.fileURL)
+        do { _ = try await failed.prepareLegacyIOSImport(); XCTFail("archive failure ignored") } catch {}
+        XCTAssertEqual(try Data(contentsOf: syncStore.fileURL), archivedDisk)
+        fake.legacySnapshot = try oldIOSRemote(payload)
+        fake.onRead = { try connection.disconnect() }
+        do { _ = try await connection.prepareLegacyIOSImport(); XCTFail("disconnected read accepted") } catch {}
+        XCTAssertEqual(try local.publicationSnapshot(), before)
+        XCTAssertEqual(try Data(contentsOf: store.fileURL), disk)
+        XCTAssertTrue(fake.attempts.isEmpty)
+    }
+
     func testDownloadFullWebSnapshotPreservesRawRootsAndRestart() async throws {
         let dir = try directory(), store = LocalStateStore(fileURL:dir.appendingPathComponent("local.json")), local = try state(store)
         var snapshot = try corpus().required("syncSnapshot")
@@ -218,12 +288,14 @@ import XCTest
 @MainActor private final class FakeCloudKit: CloudKitTransporting {
     struct Attempt { let expected: CloudKitSnapshotRecord?; let time: Int64 }
     var snapshot: CloudKitSnapshotRecord?
+    var legacySnapshot: CloudKitSnapshotRecord?
+    var readNames: [String] = []
     var attempts: [Attempt] = []
     var onRead: (() throws -> Void)?
     var accountError: Error?
     init(snapshot: CloudKitSnapshotRecord?) { self.snapshot = snapshot }
     func accountStatus() async throws -> CKAccountStatus { if let accountError { throw accountError }; return .available }
-    func read(recordName: String, recordType: String) async throws -> CloudKitSnapshotRecord? { try onRead?(); return snapshot }
+    func read(recordName: String, recordType: String) async throws -> CloudKitSnapshotRecord? { readNames.append(recordName); try onRead?(); return recordName == "weavelet-ios-snapshot" ? legacySnapshot : snapshot }
     func save(recordName: String, recordType: String, payload: Data, snapshotVersion: Int64, updatedAt: Int64, deviceId: String, expected: CloudKitSnapshotRecord?) async throws -> CloudKitSnapshotRecord {
         attempts.append(.init(expected:expected,time:updatedAt))
         if snapshot != nil && expected?.record !== snapshot?.record { throw CloudKitSnapshotConflictError(serverRecord:snapshot) }

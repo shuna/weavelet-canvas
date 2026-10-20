@@ -1553,7 +1553,7 @@ struct MessagePartView: View {
 }
 
 struct WebJSONDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.json, .gzip, UTType(filenameExtension:"md") ?? .plainText] }
+    static var readableContentTypes: [UTType] { [.json, .gzip, .data, UTType(filenameExtension:"md") ?? .plainText] }
     let data: Data
     init(data: Data) { self.data = data }
     init(configuration: ReadConfiguration) throws {

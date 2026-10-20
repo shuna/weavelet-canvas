@@ -20,6 +20,7 @@ vi.mock('@store/store', () => {
   return ({
   default: {
     getState: () => context.state,
+    getInitialState: () => ({ chats: [], folders: {}, contentStore: {}, currentChatIndex: -1 }),
     setState: (patch: Partial<typeof context.state>) => {
       if (patch.chats !== undefined) context.state.chats = patch.chats;
       if (patch.folders !== undefined) context.state.folders = patch.folders;

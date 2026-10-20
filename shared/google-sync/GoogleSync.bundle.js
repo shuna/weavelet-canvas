@@ -15501,6 +15501,13 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     return { uncompressedSize, compressedSize };
   }
 
+  // src/utils/legacyIOSSync.ts
+  var LEGACY_IOS_CLOUDKIT_SOURCE = {
+    recordName: "weavelet-ios-snapshot",
+    recordType: "WeaveletSnapshot",
+    snapshotVersion: 1
+  };
+
   // shared/google-sync/importDefaults.generated.json
   var importDefaults_generated_default = {
     keys: [
@@ -17563,6 +17570,8 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   }
   function fileImport(json) {
     const input = JSON.parse(json);
+    if (input.operation === "legacyCloudKitSource")
+      return JSON.stringify(LEGACY_IOS_CLOUDKIT_SOURCE);
     if (input.operation === "container")
       return JSON.stringify(inspectLegacySnapshotContainer(input.header, input.totalLength));
     const t2 = (key, opts) => String(input.messages?.[key] ?? opts?.defaultValue ?? key).replace(/\{\{(\w+)\}\}/g, (_23, name) => String(opts?.[name] ?? ""));
