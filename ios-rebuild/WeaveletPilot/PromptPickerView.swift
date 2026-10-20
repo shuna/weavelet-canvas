@@ -38,7 +38,7 @@ struct PromptPickerView: View {
                 }
             }
             .searchable(text: $query, prompt: "名前を検索")
-            .navigationTitle("プロンプトを選択")
+            .nativeNavigationTitle("プロンプトを選択")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { selectionTask?.cancel(); dismiss() } } }
             .task(id: Data(query.utf8)) {

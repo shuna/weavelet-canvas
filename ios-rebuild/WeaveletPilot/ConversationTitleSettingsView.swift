@@ -39,7 +39,7 @@ struct ConversationTitleSettingsView: View {
             .sheet(isPresented:$selecting) {
                 ProviderModelsView(state:state,draft:$catalog) { row in model = row.modelID; provider = row.providerID }
             }
-            .navigationTitle("タイトルの自動生成")
+            .nativeNavigationTitle("タイトルの自動生成")
             .toolbar {
                 ToolbarItem(placement:.cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement:.confirmationAction) {

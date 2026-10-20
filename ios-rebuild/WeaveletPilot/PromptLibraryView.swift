@@ -166,7 +166,7 @@ struct PromptLibraryView: View {
             if busyOperation != nil { ProgressView("CSVを処理中…") }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red).textSelection(.enabled) }
         }
-        .navigationTitle("プロンプトライブラリ")
+        .nativeNavigationTitle("プロンプトライブラリ")
         .navigationBarTitleDisplayMode(.inline)
         .disabled(state.hasGenerations)
         .onAppear { isVisible = true }

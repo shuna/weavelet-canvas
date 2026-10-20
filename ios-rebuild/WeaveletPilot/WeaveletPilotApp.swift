@@ -134,7 +134,6 @@ private struct RuntimeDiagnosticsPanel: View {
 }
 
 struct ChatView: View {
-    @EnvironmentObject private var language: NativeLanguageSettings
     @ObservedObject var state: ChatState
     @State private var titleSettingsDraft: ConversationTitleSettingsDraft?
     @State private var defaultConfigDraft: ChatConfigDraft?
@@ -487,7 +486,7 @@ struct ChatView: View {
                 .alert("消去できませんでした",isPresented:Binding(get:{ clearConversationError != nil },set:{ if !$0 { clearConversationError = nil } })) {
                     Button("閉じる",role:.cancel) { clearConversationError = nil }
                 } message: { Text(clearConversationError ?? "") }
-                .navigationTitle(language.localized("設定"))
+                .nativeNavigationTitle("設定")
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完了") { showsSettings = false } } }
             }
         }
@@ -1829,7 +1828,7 @@ struct ConversationLibraryView<Footer: View>: View {
                 VStack(spacing: 0) { Divider(); footer().padding(.horizontal) }
                     .background(.bar)
             }
-            .navigationTitle("会話")
+            .nativeNavigationTitle("会話")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(removing:.sidebarToggle)
             .onAppear { revealSelectedConversation() }
@@ -1890,7 +1889,7 @@ struct ConversationLibraryView<Footer: View>: View {
                         TextField("名前", text: $renameTitle)
                         if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
                     }
-                    .navigationTitle("会話の名前")
+                    .nativeNavigationTitle("会話の名前")
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) { Button("取消") { showsRename = false } }
                         ToolbarItem(placement: .confirmationAction) {
@@ -1908,7 +1907,7 @@ struct ConversationLibraryView<Footer: View>: View {
             .sheet(isPresented: $showsFolderRename) {
                 NavigationStack {
                     Form { TextField("名前", text: $folderRenameTitle); if let errorMessage { Text(errorMessage).foregroundStyle(.red) } }
-                    .navigationTitle("フォルダの名前")
+                    .nativeNavigationTitle("フォルダの名前")
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) { Button("取消") { showsFolderRename = false } }
                         ToolbarItem(placement: .confirmationAction) {
@@ -2154,7 +2153,7 @@ struct FileImportView: View {
                 }
             }
             .disabled(isSaving)
-            .navigationTitle("取り込み内容を確認")
+            .nativeNavigationTitle("取り込み内容を確認")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(isSaving) } }
             .interactiveDismissDisabled(isSaving)
             .onAppear { if !initialized { selectAll(); initialized = true } }
@@ -2233,8 +2232,8 @@ struct ChatExportView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Picker("形式", selection: $format) { ForEach(ChatExport.Format.allCases) { Text($0.label).tag($0) } }
-                Picker("範囲", selection: $scope) { ForEach(format.scopes) { Text($0.label).tag($0) } }
+                Picker("形式", selection: $format) { ForEach(ChatExport.Format.allCases) { Text(LocalizedStringKey($0.label)).tag($0) } }
+                Picker("範囲", selection: $scope) { ForEach(format.scopes) { Text(LocalizedStringKey($0.label)).tag($0) } }
                 if scope != .all { Text(state.conversation?.title ?? "会話がありません") }
                 if format == .v3 { Toggle("gzipで圧縮", isOn: $compressed) }
                 switch format {
@@ -2280,7 +2279,7 @@ struct ChatExportView: View {
                 if exportTask != nil { ProgressView("画像を作成中") }
             }
             .disabled(exportTask != nil)
-            .navigationTitle("会話を書き出す")
+            .nativeNavigationTitle("会話を書き出す")
             .onChange(of: format) { _, next in if !next.scopes.contains(scope) { scope = next.scopes.first ?? .all } }
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { exportTask?.cancel(); dismiss() } } }
             .onDisappear { exportTask?.cancel() }
@@ -2338,7 +2337,7 @@ struct BranchClipboardView: View {
                 }
                 .disabled(state.branchClipboardIsBusy(draft) || (usesTarget && target?.nodes.isEmpty != false) || (draft.operation == .paste && !state.hasBranchClipboard))
             }
-            .navigationTitle("メッセージ範囲")
+            .nativeNavigationTitle("メッセージ範囲")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
             .onChange(of: Data(draft.sourceChatID.utf8)) { _, _ in
                 draft.fromNodeID = source?.nodes.first?.id ?? ""; draft.toNodeID = draft.fromNodeID
@@ -2509,7 +2508,7 @@ struct RemoteSettingsView: View {
                 }
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }
-            .navigationTitle("remote生成設定")
+            .nativeNavigationTitle("remote生成設定")
             .task {
                 guard !didLoad else { return }
                 do { record = try RemoteCredentials.load(); proxy = record.proxy ?? RemoteProxySettings(); didLoad = true }
@@ -2701,7 +2700,7 @@ private struct ProxyStatusView: View {
                 }
             }
         }
-        .navigationTitle("プロキシの状態")
+        .nativeNavigationTitle("プロキシの状態")
         .task(id:key) { await poll(key) }
         .onDisappear { action?.cancel() }
         .confirmationDialog(deletionID == nil ? "プロキシの全保存データを削除しますか？" : "この保存データを削除しますか？",isPresented:$confirmsDeletion,titleVisibility:.visible) {

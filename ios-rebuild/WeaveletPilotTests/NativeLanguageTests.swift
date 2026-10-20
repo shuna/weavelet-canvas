@@ -40,6 +40,16 @@ import XCTest
         XCTAssertEqual(restored.locale.language.languageCode?.identifier,"ja")
     }
 
+    func testNativeWarningUsesEnglishFallbackWithoutLosingDestructiveScope() {
+        let language = NativeLanguageSettings(defaults:preferences())
+        let warning = "会話とフォルダーを消去し、新しい会話を作成します。設定・モデル・クリップボードは保持します。この操作は元に戻せません。"
+        XCTAssertTrue(language.select("ja"))
+        XCTAssertEqual(language.localized(warning),warning)
+        XCTAssertTrue(language.select("de"))
+        XCTAssertEqual(language.localized(warning),"Erases conversations and folders and creates a new conversation. Settings, models, and the clipboard are retained. This cannot be undone.")
+        XCTAssertEqual(language.localized("パスフレーズ（12文字以上）"),"Passphrase (at least 12 characters)")
+    }
+
     func testCompiledNativeCatalogReusesWebTranslations() throws {
         for (code,expected) in [("en","Save"),("ja","保存"),("de","Speichern")] {
             let path = try XCTUnwrap(Bundle.main.path(forResource:code,ofType:"lproj"))

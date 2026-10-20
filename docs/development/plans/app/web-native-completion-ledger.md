@@ -1,6 +1,19 @@
 # Web / 新iOSの完成条件と証拠
 
 
+## 静的UI文言の共有翻訳・英語fallback拡張（2026-10-21・動的文言は継続）
+
+nativeの操作/設定/説明/警告・入力field・静的AX・alert/confirmation/titleを分割調査し、shared/localization/native-ui.jsonへ517件の意味対応を整理した。79件は実Webの同じ意味のkeyを参照し、438件はnative固有の英語copyを正本とする。元の52キーと合わせ569キーをApple catalogへ生成する。日本語では元のnative文言を保持し、他localeでWebに訳があれば再利用、ないnative文言は英語fallbackを明示する。英語fallbackを他言語の翻訳済みとは扱わずstringUnitをneeds_reviewにする。独自翻訳runtime/parserや依存は追加しない。対応key/英訳の存在、二重定義・空値、未処理format placeholderを検査した。
+
+前群の設定title修正を、locale environmentを読むnativeNavigationTitleへ移して静的production titleに適用した。OS標準Bundle検索を一か所で利用し、isolated hostへEnvironmentObjectを要求しない。dynamicな会話名/モデル名やmockは変更しない。ChatStyleとexport Format/Scopeの既知enumだけもLocalizedStringKeyとして表示し、rawValue/tag/書出し処理は不変。export範囲をラベル変更で拡大しない。Done/Compact等の多義語は同期debug状態の翻訳に誤結合せず、対応native文脈の英語を使う。
+
+Catalyst関連4件が初回・最終sourceで成功、失敗なし。compiled Web翻訳・日本語原文・ドイツ語選択時のnative英語fallback、消去対象/保持対象/取消不可の警告全文と12文字以上のpassphrase条件を確認した。最終buildと両generator --check/diff check成功。Web source/共有bundle/外部I/O/sync/暗号は未変更で、前群Web型/Viteと既存全項目I/O・暗号化wire成功を再利用した。業務ルール/全保存同期suiteは反復していない。独立Astraは意味保持・接続の機能一式と既知enum追加の限定確認で新規P1/P2なし。ログ/private/tmp/weavelet-language-copy-native{,-final}.log。
+
+隔離Catalyst実UIで英語のSettings/Chat display/Aligned stream/Chat bubbles/説明、Appearance and message displayへの遷移とtitle、同期入口、会話/フォルダー全消去の対象・設定/モデル/clipboard保持・取消不可の英語確認を確認し、Cancelで閉じた。実消去は行っていない。終了後process不在・fixture state/built Infoのbyte一致復元・元UserDefaults選択復元を確認した。
+
+これは多言語化全体の完成ではない。generatorの残り29静的literalはASCII技術語/mockが中心だが、この件数は検出対象関数だけのもの。実UIには、Menu/独自control helperのlabel、閉じたstatus mapping、補間AX/進捗などが日本語で残っている。次はその表示境界を対象にする。評価のreasoning/suggestionsや要約本文はモデル出力なので翻訳keyにしない。ExchangeError.invalidには外部JSON key/値が含まれ、LocalStateStoreの復旧exportにもerror文字列が出るため、error.localizedDescriptionや全catchを一括で言語変換しない。エラー表示/動的文言・全言語の文字幅/AX・実cloud互換性は引き続き未完了。iPhone照会/導入、push/main統合は行っていない。
+
+
 ## 表示言語の共有データとnative切替の初期接続（2026-10-21・多言語化全体は未完了）
 
 実Web LanguageSelector/SettingsMenu/i18nの選択集合16・locale資源20・名称・fallback enを確認し、値と順序を変えずlanguageData.jsonへ移した。Webのtyped exportとi18nが同じデータを使う。nativeは生成したWebLanguagesとApple標準xcstringsを同梱し、既存Web localeの文言を再利用する。native独自の翻訳parser/libraryは追加しない。標準Bundleの言語交渉とSwiftUI localeを使用し、端末内専用UserDefaultsのnative.displayLanguageへ選択だけを保存する。「自動」は端末言語、明示選択はWebと同じ16言語。会話/同期のrootや外部I/O形式には追加しない。View identityをリセットせず、モデル名・本文等の動的ユーザーデータを翻訳keyにしない。

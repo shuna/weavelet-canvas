@@ -26,7 +26,7 @@ struct ProviderModelsView: View {
                 rows("カスタムモデル",try? ProviderModels.rows(draft.modelState["providerCustomModels"]?[selectedProvider],providerID:selectedProvider))
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }
-            .navigationTitle("生成モデルを選択")
+            .nativeNavigationTitle("生成モデルを選択")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement:.cancellationAction) { Button("閉じる") { dismiss() } } }
             .task {
@@ -79,7 +79,7 @@ struct ProviderCredentialView: View {
                 Text("この端末のKeychainへprovider別に保存します。取り込んだAPI keyや他providerの鍵は自動使用しません。").font(.footnote)
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }
-            .navigationTitle("端末認証設定")
+            .nativeNavigationTitle("端末認証設定")
             .navigationBarTitleDisplayMode(.inline)
             .task {
                 record.settings.endpoint = provider.endpoint

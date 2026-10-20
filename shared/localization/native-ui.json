@@ -1,0 +1,1553 @@
+{
+  "1件削除": {
+    "en": "Delete one record"
+  },
+  "AI投入用の圧縮": {
+    "en": "Compress for AI input"
+  },
+  "CSVには名前と本文のみ含まれます。読み込み結果は「保存」まで確定しません。ラベルは分類用で、利用方法を制限しません。": {
+    "en": "CSV includes only names and content. Imported changes are not applied until you select Save. Labels are for classification and do not restrict how prompts can be used."
+  },
+  "CSVを処理中…": {
+    "en": "Processing CSV…"
+  },
+  "CSVを読み込む": {
+    "en": "Import CSV"
+  },
+  "CloudKitから受信": {
+    "webKey": "cloudkit.button.pull"
+  },
+  "CloudKit同期": {
+    "webKey": "cloudkit.name"
+  },
+  "Cohere固有の生成形式は未対応です。選択しても生成できません。": {
+    "en": "Cohere's proprietary generation format is not supported. Selecting it will not enable generation."
+  },
+  "GGUFファイルを登録": {
+    "en": "Register GGUF files"
+  },
+  "GGUF候補を取得できませんでした。": {
+    "en": "Could not fetch GGUF candidates."
+  },
+  "Googleからログアウト": {
+    "en": "Sign out of Google"
+  },
+  "Googleに接続・再認証": {
+    "en": "Connect to Google / Reauthenticate"
+  },
+  "Google同期": {
+    "webKey": "drive.name"
+  },
+  "Google接続": {
+    "en": "Google connection"
+  },
+  "Hugging Face を検索": {
+    "webKey": "main.localModel.hfSearch"
+  },
+  "Localで安全な場合もRemote判定": {
+    "en": "Run remote evaluation even when local evaluation finds it safe"
+  },
+  "Markdownで整形": {
+    "en": "Render Markdown"
+  },
+  "OpenRouterの使用量確認待ち": {
+    "webKey": "drive.settingsFields.pendingVerifications"
+  },
+  "OpenRouterの確定使用量": {
+    "webKey": "drive.settingsFields.verifiedStats"
+  },
+  "OpenRouter残高": {
+    "en": "OpenRouter balance"
+  },
+  "OpenRouter残高 ": {
+    "en": "OpenRouter balance "
+  },
+  "OpenRouter残高を取得中": {
+    "en": "Fetching OpenRouter balance"
+  },
+  "V3は分岐と属性を保持します。表示枝を指定すると、その枝だけを書き出します。": {
+    "en": "V3 preserves branches and attributes. Selecting the visible branch exports only that branch."
+  },
+  "Web版と同じCloudKitコンテナーのスナップショットを読み書きします。フォルダー同期とは別の同期先です。": {
+    "en": "Reads and writes snapshots in the same CloudKit container as the web app. This sync destination is separate from folder sync."
+  },
+  "endpointとAPI keyは端末に保存します。modelとstreamingは会話設定を優先し、モデル未設定の旧会話だけ予備値を使います。local生成・評価は未接続です。": {
+    "en": "The endpoint and API key are saved on this device. Conversation settings take precedence for model and streaming; fallback values are used only for older conversations without a model set. Local generation and evaluation are not connected."
+  },
+  "gzipで圧縮": {
+    "webKey": "main.gzCompression"
+  },
+  "gzipで書き出す": {
+    "en": "Export with gzip compression"
+  },
+  "iCloud Driveの他端末への配信はOSが行います。フォルダーへ保存できても、他端末へ到着するまで時間がかかる場合があります。履歴は自動削除しません。": {
+    "en": "The OS distributes iCloud Drive files to other devices. Even after files are saved to the folder, they may take time to reach other devices. History is not deleted automatically."
+  },
+  "iCloud接続を確認": {
+    "en": "Check iCloud connection"
+  },
+  "provider ID（任意）": {
+    "en": "provider ID (optional)"
+  },
+  "reasoning budget tokens（任意）": {
+    "en": "reasoning budget tokens (optional)"
+  },
+  "reasoning effort（任意）": {
+    "en": "reasoning effort (optional)"
+  },
+  "remote生成設定": {
+    "en": "Remote generation settings"
+  },
+  "temperature（空欄で解除）": {
+    "en": "temperature (leave blank to clear)"
+  },
+  "verbosity（任意）": {
+    "en": "verbosity (optional)"
+  },
+  "ここから生成": {
+    "en": "Generate from here"
+  },
+  "ここにコピー": {
+    "en": "Copy here"
+  },
+  "ここに移動": {
+    "en": "Move here"
+  },
+  "ここへ貼り付け": {
+    "webKey": "main.pasteMessages"
+  },
+  "ここまで": {
+    "en": "Up to here"
+  },
+  "このproviderのAPI key": {
+    "en": "API key for this provider"
+  },
+  "このproviderの端末API key": {
+    "en": "API key for this provider on this device"
+  },
+  "このアプリに保存したモデルと取得キャッシュを表示します。会話は含みません。": {
+    "en": "Shows models and download caches saved in this app. Conversations are not included."
+  },
+  "このバブル": {
+    "en": "This bubble"
+  },
+  "このビルドにはGoogleのiOSクライアント設定がありません。": {
+    "en": "This build has no Google iOS client configuration."
+  },
+  "このファイルで置き換える": {
+    "en": "Replace with this file"
+  },
+  "このフォルダに新規会話": {
+    "en": "New conversation in this folder"
+  },
+  "このプロンプトを削除": {
+    "en": "Delete this prompt"
+  },
+  "このページに保存記録はありません。IDを指定して個別に照会できます。": {
+    "en": "There are no saved records on this page. You can look up individual records by ID."
+  },
+  "このメッセージとすべての子孫を、非表示の枝も含めて削除します。保護されたメッセージが含まれる場合は削除しません。ピン留めは削除を防ぎません。": {
+    "en": "Deletes this message and all its descendants, including hidden branches. Nothing is deleted if any protected messages are included. Pinning does not prevent deletion."
+  },
+  "このメッセージの後へ": {
+    "en": "After this message"
+  },
+  "このメッセージは保護されているため置換できません。": {
+    "en": "This message is protected and cannot be replaced."
+  },
+  "このリクエストを復旧": {
+    "en": "Recover this request"
+  },
+  "この保存データを削除": {
+    "en": "Delete this saved data"
+  },
+  "この形式の端末内実行は未対応です。定義は保持します。": {
+    "en": "On-device execution of this format is not supported. The definition is retained."
+  },
+  "この未完了ファイルと対応する取得中ファイルを削除します。モデル定義と会話は保持します。": {
+    "en": "Deletes this incomplete file and its corresponding in-progress download files. Model definitions and conversations are retained."
+  },
+  "この発言": {
+    "en": "This message"
+  },
+  "この端末から送信": {
+    "webKey": "cloudkit.button.push"
+  },
+  "この端末にファイルあり": {
+    "en": "File available on this device"
+  },
+  "この端末のKeychainへprovider別に保存します。取り込んだAPI keyや他providerの鍵は自動使用しません。": {
+    "en": "Saved separately for each provider in this device's Keychain. Imported API keys and keys for other providers are not used automatically."
+  },
+  "この端末のデータをCloudKitの内容で置き換えます": {
+    "en": "Replace this device's data with CloudKit contents"
+  },
+  "この端末のデータをCloudKitへ送信します": {
+    "en": "Send this device's data to CloudKit"
+  },
+  "この端末のモデルファイルと、モデル定義・役割の割り当て・お気に入りを削除します。会話は保持します。": {
+    "en": "Deletes model files on this device, along with model definitions, role assignments, and favorites. Conversations are retained."
+  },
+  "この端末を採用": {
+    "en": "Use this device's version"
+  },
+  "この端末（GGUF）": {
+    "en": "This device (GGUF)"
+  },
+  "すべて": {
+    "webKey": "main.localModel.engineAll"
+  },
+  "すべてのプロンプトを削除しますか？": {
+    "webKey": "main.clearPromptsConfirm"
+  },
+  "すべてのモデルファイルを削除": {
+    "en": "Delete all model files"
+  },
+  "すべての会話とフォルダーを消去": {
+    "en": "Erase all conversations and folders"
+  },
+  "すべての会話とフォルダーを消去しますか？": {
+    "en": "Clear all conversations and folders?"
+  },
+  "すべての分岐": {
+    "en": "All branches"
+  },
+  "すべて消去": {
+    "en": "Erase all"
+  },
+  "その他（元の値）": {
+    "en": "Other (original value)"
+  },
+  "なし": {
+    "en": "None"
+  },
+  "オフ": {
+    "en": "Off"
+  },
+  "オンライン": {
+    "en": "Online"
+  },
+  "オンラインモデルを選択": {
+    "en": "Select an online model"
+  },
+  "キャッシュ: ": {
+    "en": "Cache: "
+  },
+  "キーボードを閉じる": {
+    "en": "Dismiss keyboard"
+  },
+  "クラウドから受信": {
+    "en": "Receive from cloud"
+  },
+  "クラウドを採用": {
+    "webKey": "drive.conflict.cloud"
+  },
+  "コピーした範囲がありません。": {
+    "webKey": "main.clipboardEmpty"
+  },
+  "サイズ": {
+    "en": "Size"
+  },
+  "サンプル会話です。新規作成で保存用の会話を開始します。": {
+    "en": "This is a sample conversation. Create a new conversation to start one that can be saved."
+  },
+  "サーバーに受付記録がありません。この表示だけでは保存失敗と判断できません。": {
+    "en": "The server has no record of receiving this request. This alone does not establish that saving failed."
+  },
+  "システム文": {
+    "webKey": "model.chatSystemPrompt"
+  },
+  "スターのみ": {
+    "en": "Starred only"
+  },
+  "ストリーミング": {
+    "webKey": "model.stream.label"
+  },
+  "ストリームプロキシ": {
+    "webKey": "main.proxySettings"
+  },
+  "セッションIDを指定して照会": {
+    "en": "Look up by session ID"
+  },
+  "タイトルの自動生成": {
+    "webKey": "main.autoTitle"
+  },
+  "タップして範囲の選択を切り替えます": {
+    "en": "Tap to toggle range selection"
+  },
+  "ダウンロード": {
+    "webKey": "main.localModel.download"
+  },
+  "ダーク": {
+    "webKey": "main.darkMode"
+  },
+  "チャットから分岐図へ連動": {
+    "en": "Follow chat navigation in the branch diagram"
+  },
+  "チャットで表示": {
+    "en": "Show in chat"
+  },
+  "チャット表示": {
+    "en": "Chat display"
+  },
+  "ツール呼び出し・結果を含むメッセージは、生成時の文脈から除外されません。": {
+    "en": "Messages containing tool calls or tool results are not excluded from the generation context."
+  },
+  "ツール結果": {
+    "en": "Tool result"
+  },
+  "テキストで表示": {
+    "en": "Show as text"
+  },
+  "テーマ": {
+    "webKey": "main.settingsLabel.theme"
+  },
+  "データを処理できませんでした": {
+    "en": "Could not process data"
+  },
+  "ドラッグしたメッセージから枝の末尾までを、ドロップ先のメッセージの後へ追加します。": {
+    "en": "Adds the messages from the dragged message to the end of its branch after the message you drop them onto."
+  },
+  "パスフレーズ": {
+    "webKey": "drive.encryption.passphrase"
+  },
+  "パスフレーズを確認": {
+    "webKey": "drive.encryption.confirm"
+  },
+  "パスフレーズ（12文字以上）": {
+    "en": "Passphrase (at least 12 characters)"
+  },
+  "パック: ": {
+    "en": "Packs: "
+  },
+  "パック読込 / 省略: ": {
+    "en": "Packs read / skipped: "
+  },
+  "ファイルの保存先は端末ごとに異なります。役割とモデル定義はWebと共通です。": {
+    "en": "File locations differ on each device. Role assignments and model definitions are shared with the web app."
+  },
+  "ファイルはこの端末にコピーします。ほかの端末では同じモデルIDにファイルを選択してください。ここでは単一GGUFを指定します。分割モデルはローカルモデル設定から登録してください。": {
+    "en": "The file is copied to this device. On other devices, select a file for the same model ID. Select a single GGUF file here. Register split models in local model settings."
+  },
+  "ファイルを保存中…": {
+    "en": "Saving file…"
+  },
+  "ファイルを削除しますか？": {
+    "en": "Delete the file?"
+  },
+  "ファイルを削除中…": {
+    "en": "Deleting file…"
+  },
+  "ファイルを取り込む": {
+    "en": "Import a file"
+  },
+  "ファイルを確認中…": {
+    "en": "Checking file…"
+  },
+  "ファイル全体で置換": {
+    "en": "Replace with the entire file"
+  },
+  "フォルダ": {
+    "webKey": "drive.conflict.folder"
+  },
+  "フォルダの名前": {
+    "webKey": "drive.labels.folderName"
+  },
+  "フォルダを削除しますか？": {
+    "en": "Delete the folder?"
+  },
+  "フォルダーから受信": {
+    "en": "Receive from folder"
+  },
+  "フォルダーを採用": {
+    "en": "Use the folder's version"
+  },
+  "フォルダーを選択": {
+    "webKey": "import.drive.selectFolder"
+  },
+  "フォルダー同期": {
+    "en": "Folder sync"
+  },
+  "フォルダー同期を解除": {
+    "en": "Disconnect folder sync"
+  },
+  "フォルダー同期・iCloud Drive": {
+    "en": "Folder sync / iCloud Drive"
+  },
+  "フォルダ名": {
+    "webKey": "drive.labels.folderName"
+  },
+  "プロキシ": {
+    "en": "Proxy"
+  },
+  "プロキシURL（HTTPS）": {
+    "en": "Proxy URL (HTTPS)"
+  },
+  "プロキシから復旧": {
+    "webKey": "main.recoverFromProxy"
+  },
+  "プロキシの全保存データを削除": {
+    "en": "Delete all data saved on the proxy"
+  },
+  "プロキシの復旧データと診断履歴を削除し、中継中の場合は停止します。端末に保存済みの会話は残ります。プロキシからは復旧できなくなります。": {
+    "en": "Deletes recovery data and diagnostic history on the proxy and stops any active relay. Conversations saved on this device are retained. Recovery from the proxy will no longer be possible."
+  },
+  "プロキシの状態": {
+    "en": "Proxy status"
+  },
+  "プロキシの状態を確認": {
+    "en": "Check proxy status"
+  },
+  "プロキシを使用": {
+    "webKey": "main.proxyEnabled"
+  },
+  "プロキシ認証token": {
+    "en": "Proxy authentication token"
+  },
+  "プロキシ認証が未設定のため、既知のIDだけを照会します。": {
+    "en": "Proxy authentication is not configured, so only known IDs are queried."
+  },
+  "プロパティを閉じる": {
+    "en": "Close properties"
+  },
+  "プロンプトを選択": {
+    "en": "Select a prompt"
+  },
+  "メッセージ操作": {
+    "en": "Message actions"
+  },
+  "メッセージ範囲": {
+    "en": "Message range"
+  },
+  "メッセージ設定": {
+    "en": "Message settings"
+  },
+  "メッセージ詳細": {
+    "en": "Message details"
+  },
+  "モデル": {
+    "webKey": "model.model"
+  },
+  "モデルID": {
+    "en": "Model ID"
+  },
+  "モデルのプロパティ": {
+    "en": "Model properties"
+  },
+  "モデルのプロパティを表示": {
+    "en": "Show model properties"
+  },
+  "モデルを削除": {
+    "en": "Delete model"
+  },
+  "モデルを削除しますか？": {
+    "en": "Delete the model?"
+  },
+  "モデルを削除中…": {
+    "en": "Deleting model…"
+  },
+  "モデルカタログ": {
+    "en": "Model catalog"
+  },
+  "モデルストレージ": {
+    "en": "Model storage"
+  },
+  "モデルファイルの復旧待ちです。再起動して復旧を再試行してください。": {
+    "en": "Model files are awaiting recovery. Restart the app to retry recovery."
+  },
+  "モデルファイルはありません。": {
+    "en": "No model files."
+  },
+  "モデル一覧を取得中": {
+    "en": "Fetching model list"
+  },
+  "モデル一覧を更新": {
+    "webKey": "model.provider.refresh"
+  },
+  "モデル切替時は保存済み設定を復元します。モデルに応じて出力上限を調整し、非対応モデルではストリーミングを使いません。ローカル実行は端末内のモデルファイルを使用します。": {
+    "en": "Switching models restores saved settings. Output limits are adjusted for the model, and streaming is disabled for models that do not support it. Local execution uses model files on this device."
+  },
+  "モデル設定の単価に基づく推定費用です。生成中の推定値は表示にだけ加算します。": {
+    "en": "Costs are estimated using prices in model settings. Estimates for ongoing generation are added only to the displayed total."
+  },
+  "ライト": {
+    "webKey": "main.lightMode"
+  },
+  "ラベル": {
+    "en": "Label"
+  },
+  "ラベル・スター・ピン留め": {
+    "en": "Labels, stars, and pins"
+  },
+  "リポジトリ名を検索": {
+    "en": "Search repository names"
+  },
+  "ログをコピー": {
+    "en": "Copy logs"
+  },
+  "ロック解除": {
+    "en": "Unlock"
+  },
+  "ローカルとクラウドの変更を確認し、解決方法を選択してください。": {
+    "en": "Review local and cloud changes, then choose how to resolve them."
+  },
+  "ローカルを採用": {
+    "webKey": "drive.conflict.local"
+  },
+  "ローカルモデルと生成設定": {
+    "en": "Local models and generation settings"
+  },
+  "ローカルモデルを使用": {
+    "webKey": "main.localModel.enabled"
+  },
+  "一覧を更新": {
+    "en": "Refresh list"
+  },
+  "一部のデータを除いて取り込みますか？": {
+    "en": "Import with some data excluded?"
+  },
+  "上へ移動": {
+    "en": "Move up"
+  },
+  "上書き・削除から保護": {
+    "en": "Protect from overwriting and deletion"
+  },
+  "下へ移動": {
+    "en": "Move down"
+  },
+  "両方の変更を統合": {
+    "webKey": "drive.conflict.merge"
+  },
+  "中断した応答を復旧": {
+    "en": "Recover an interrupted response"
+  },
+  "今すぐ同期": {
+    "en": "Sync now"
+  },
+  "会話とフォルダーを消去し、新しい会話を作成します。設定・モデル・クリップボードは保持します。この操作は元に戻せません。": {
+    "en": "Erases conversations and folders and creates a new conversation. Settings, models, and the clipboard are retained. This cannot be undone."
+  },
+  "会話と子フォルダは親フォルダへ移ります。親がない場合は未所属・最上位になります。": {
+    "en": "Conversations and subfolders move to the parent folder. If there is no parent, conversations become unfiled and subfolders move to the top level."
+  },
+  "会話のシステム文": {
+    "webKey": "model.chatSystemPrompt"
+  },
+  "会話の名前": {
+    "en": "Conversation name"
+  },
+  "会話の生成設定": {
+    "en": "Conversation generation settings"
+  },
+  "会話を削除しますか？": {
+    "en": "Delete the conversation?"
+  },
+  "会話を変更できませんでした": {
+    "en": "Could not modify conversation"
+  },
+  "会話を書き出す": {
+    "en": "Export conversation"
+  },
+  "会話を検索": {
+    "en": "Search conversations"
+  },
+  "会話を選択": {
+    "en": "Select a conversation"
+  },
+  "会話・フォルダを検索": {
+    "en": "Search conversations and folders"
+  },
+  "会話・フォルダ名": {
+    "en": "Conversation and folder names"
+  },
+  "会話一覧": {
+    "en": "Conversation list"
+  },
+  "会話一覧を表示": {
+    "en": "Show conversation list"
+  },
+  "会話一覧を閉じる": {
+    "en": "Close conversation list"
+  },
+  "会話全体": {
+    "en": "Entire conversation"
+  },
+  "会話間移動": {
+    "en": "Conversation navigation"
+  },
+  "低": {
+    "webKey": "model.imageDetail.low"
+  },
+  "余剰ファイル数: ": {
+    "en": "Excess files: "
+  },
+  "保存されたモデルはありません": {
+    "en": "No saved models"
+  },
+  "保存ファイルを復旧用に書き出す": {
+    "en": "Export saved file for recovery"
+  },
+  "保存先のバブルまたは内容が変更されています。自動で上書きしません。": {
+    "en": "The destination bubble or its content has changed. It will not be overwritten automatically."
+  },
+  "保存処理を復旧": {
+    "en": "Recover save operation"
+  },
+  "保存済みのモデル定義": {
+    "en": "Saved model definitions"
+  },
+  "保存済みの会話とフォルダを置き換えますか？": {
+    "en": "Replace saved conversations and folders?"
+  },
+  "保存済みの会話は変更しません。": {
+    "en": "Saved conversations are not changed."
+  },
+  "保存済みの利用量の累計をリセットしますか？": {
+    "en": "Reset saved usage totals?"
+  },
+  "保存済みの要約": {
+    "en": "Saved summaries"
+  },
+  "保存済みの評価": {
+    "en": "Saved evaluations"
+  },
+  "保存済みの鍵でロック解除": {
+    "en": "Unlock with saved key"
+  },
+  "保存済みの鍵でロック解除・再開": {
+    "en": "Unlock with saved key and resume"
+  },
+  "保存済みプロンプトをCSVに書き出す": {
+    "en": "Export saved prompts to CSV"
+  },
+  "保存済みモデルから選択": {
+    "en": "Select from saved models"
+  },
+  "保存済みモデル一覧から選択": {
+    "en": "Select from the saved model list"
+  },
+  "保存済み要約": {
+    "en": "Saved summaries"
+  },
+  "保護されたメッセージです。分岐として保存できます。": {
+    "en": "This message is protected. You can save it as a branch."
+  },
+  "保護中です。分岐として保存できます。": {
+    "en": "Protected. You can save it as a branch."
+  },
+  "停止": {
+    "en": "Stop"
+  },
+  "元の会話": {
+    "en": "Original conversation"
+  },
+  "元の会話から選択範囲を取り除きます。範囲外の子や後続は残ります。保護されたメッセージを含む場合は操作を行いません。ピン留めは操作を防ぎません。": {
+    "en": "Removes the selected range from the original conversation. Children and subsequent messages outside the range are retained. No action is taken if the range includes protected messages. Pinning does not prevent this action."
+  },
+  "元の値（未対応）": {
+    "en": "Original value (unsupported)"
+  },
+  "先頭のシステム本文、役割の編集、本文の追加・挿入、入力欄の生成設定を表示します。会話の内容は削除されません。": {
+    "en": "Shows the initial system message, role editing, options to add or insert content, and generation settings in the input area. Conversation content is not deleted."
+  },
+  "入力したモデルへ切替・設定を復元": {
+    "en": "Switch to the entered model and restore settings"
+  },
+  "入力画像を取り消す": {
+    "en": "Remove input image"
+  },
+  "全件": {
+    "en": "All"
+  },
+  "全会話の本文・ラベル": {
+    "en": "Content and labels across all conversations"
+  },
+  "全体: ": {
+    "en": "Overall: "
+  },
+  "全分岐または表示枝のテキスト本文を書き出します。メッセージの属性、画像・推論・tool call・tool resultは含めません。": {
+    "en": "Exports text content from all branches or the visible branch. Message attributes, images, reasoning, tool calls, and tool results are not included."
+  },
+  "全削除にはプロキシ側の認証設定が必要です。": {
+    "en": "Deleting all data requires authentication to be configured on the proxy."
+  },
+  "全記録に戻る": {
+    "en": "Back to all records"
+  },
+  "再生成": {
+    "webKey": "main.regenerate"
+  },
+  "再試行": {
+    "webKey": "main.retry"
+  },
+  "再起動してファイルの復旧を再試行してください。": {
+    "en": "Restart the app to retry file recovery."
+  },
+  "写真": {
+    "en": "Photos"
+  },
+  "処理を中止": {
+    "en": "Cancel operation"
+  },
+  "処理対象": {
+    "en": "Content to process"
+  },
+  "分割を均等に戻す": {
+    "en": "Reset to an even split"
+  },
+  "分割位置": {
+    "en": "Split position"
+  },
+  "分岐として保存": {
+    "webKey": "main.saveAsBranch"
+  },
+  "分岐のスワイプ方向": {
+    "webKey": "main.branchSwipeDirection"
+  },
+  "分岐の範囲": {
+    "en": "Branch scope"
+  },
+  "分岐を比較": {
+    "webKey": "main.compareBranches"
+  },
+  "分岐を配置中": {
+    "en": "Laying out branches"
+  },
+  "分岐保存": {
+    "webKey": "main.saveAsBranch"
+  },
+  "分岐図で表示": {
+    "en": "Show in branch diagram"
+  },
+  "切り取り": {
+    "en": "Cut"
+  },
+  "初回の保存を再開": {
+    "en": "Resume initial save"
+  },
+  "判定方式": {
+    "en": "Evaluation method"
+  },
+  "別の会話へ移動": {
+    "en": "Move to another conversation"
+  },
+  "別の会話へ範囲を追加": {
+    "en": "Add range to another conversation"
+  },
+  "利用可能なGGUFはありません。": {
+    "en": "No GGUF files are available."
+  },
+  "利用量と費用": {
+    "en": "Usage and costs"
+  },
+  "利用量を累計する": {
+    "en": "Track cumulative usage"
+  },
+  "削除予定: ": {
+    "en": "Scheduled for deletion: "
+  },
+  "前に挿入": {
+    "en": "Insert before"
+  },
+  "前の20件": {
+    "en": "Previous 20 records"
+  },
+  "前の一致箇所": {
+    "en": "Previous match"
+  },
+  "前の分岐": {
+    "en": "Previous branch"
+  },
+  "前の検索結果": {
+    "webKey": "main.previousResult"
+  },
+  "前後の分岐ボタン、またはこの番号の横スワイプで切り替え": {
+    "en": "Use the previous or next branch button, or swipe horizontally on this number, to switch branches"
+  },
+  "単一ファイル、または同じモデルの全分割ファイルを選択します。端末に保存し、空いている生成・分析の役割に割り当てます。": {
+    "en": "Select a single file or all split files for the same model. They are saved on this device and assigned to any unassigned generation and analysis roles."
+  },
+  "原文": {
+    "en": "Original text"
+  },
+  "参考ファイル数: ": {
+    "en": "Reference file count: "
+  },
+  "反対側の変更を置き換えます。未保存の編集がないことを確認してください。": {
+    "en": "Replaces changes on the other side. Make sure there are no unsaved edits."
+  },
+  "取り込み内容を確認": {
+    "en": "Review import contents"
+  },
+  "取り込み内容を確認中": {
+    "en": "Reviewing import contents"
+  },
+  "取り込み方法": {
+    "en": "Import method"
+  },
+  "取り込める内容を確認する": {
+    "en": "Review available content to import"
+  },
+  "取得した原本を書き出す": {
+    "en": "Export the downloaded original"
+  },
+  "取得を取り消す": {
+    "en": "Cancel download"
+  },
+  "取得を取消": {
+    "en": "Cancel fetching"
+  },
+  "取得・保存・生成・評価が終了すると削除できます。": {
+    "en": "You can delete it once downloading, saving, generation, and evaluation have finished."
+  },
+  "受信または送信を確認してから有効にできます。端末への保存後、操作が落ち着いてから自動送信します。バックグラウンド中の完了は保証されません。": {
+    "en": "You can enable this after confirming a receive or send operation. After saving to this device, changes are sent automatically once activity settles. Completion in the background is not guaranteed."
+  },
+  "受信位置と保存範囲が一致せず、欠落なく復旧できません。": {
+    "en": "The receive position does not match the saved range, so recovery without missing data is not possible."
+  },
+  "右へスワイプで次の分岐": {
+    "en": "Swipe right for the next branch"
+  },
+  "各会話の現在枝のテキスト本文を書き出します。選択した会話では表示中の経路を使います。メッセージの属性、画像・推論・tool call・tool resultは含めません。": {
+    "en": "Exports the text body of each conversation's current branch. Uses the visible path for the selected conversation. Message attributes, images, reasoning, tool call, and tool result are not included."
+  },
+  "各会話の現在枝を書き出します。分岐ツリーと折りたたみ設定は含めません。": {
+    "en": "Exports each conversation's current branch. The branch tree and collapse settings are not included."
+  },
+  "合計": {
+    "webKey": "main.total"
+  },
+  "合計（アプリ内ファイル）": {
+    "en": "Total (in-app files)"
+  },
+  "同期": {
+    "en": "Sync"
+  },
+  "同期の診断": {
+    "en": "Sync diagnostics"
+  },
+  "同期フォルダー": {
+    "en": "Sync folder"
+  },
+  "同期・データ": {
+    "en": "Sync and data"
+  },
+  "同期先との接続を解除": {
+    "en": "Disconnect from sync destination"
+  },
+  "同期先を新規作成": {
+    "en": "Create a new sync destination"
+  },
+  "同期先を選択": {
+    "en": "Select sync destination"
+  },
+  "同期先一覧を更新": {
+    "en": "Refresh sync destinations"
+  },
+  "同期履歴を整理": {
+    "en": "Compact sync history"
+  },
+  "名前": {
+    "webKey": "main.name"
+  },
+  "吹き出し表示": {
+    "en": "Chat bubbles"
+  },
+  "品質": {
+    "webKey": "main.evaluation.qualityTabLabel"
+  },
+  "品質の閾値": {
+    "webKey": "main.evaluation.qualityThresholds"
+  },
+  "圧縮": {
+    "en": "Compact"
+  },
+  "圧縮: ": {
+    "en": "Compression: "
+  },
+  "変更はありません": {
+    "webKey": "main.diffNoChanges"
+  },
+  "外付けキーボードでの操作に適用します。画面のキーボードでは改行します。": {
+    "en": "Applies to an external keyboard. The onscreen keyboard inserts a new line."
+  },
+  "外観と本文の表示": {
+    "en": "Appearance and message display"
+  },
+  "始点": {
+    "en": "Start"
+  },
+  "始点から終点へ親子関係でつながる範囲を選びます。非表示のメッセージも選択できます。": {
+    "en": "Select a range connected by parent-child relationships from the start to the end. Hidden messages can also be selected."
+  },
+  "安全性": {
+    "webKey": "main.evaluation.safetyTabLabel"
+  },
+  "安全性の閾値": {
+    "webKey": "main.evaluation.safetyThresholds"
+  },
+  "完了": {
+    "en": "Done"
+  },
+  "完了API URL（HTTPS）": {
+    "en": "Completion API URL (HTTPS)"
+  },
+  "完了した実行状況とログを消去": {
+    "en": "Clear completed activity and logs"
+  },
+  "実行ログをコピー": {
+    "en": "Copy activity logs"
+  },
+  "実行先": {
+    "en": "Execution location"
+  },
+  "実行場所": {
+    "en": "Execution location"
+  },
+  "実行形式": {
+    "en": "Runtime format"
+  },
+  "実行状況": {
+    "en": "Activity"
+  },
+  "実行状況の操作": {
+    "en": "Activity actions"
+  },
+  "対象のモデルファイルをこの端末から削除します。登録済みモデルを丸ごと削除する場合は定義・役割・お気に入りも削除します。会話は保持します。": {
+    "en": "Deletes the selected model files from this device. Deleting an entire registered model also removes its definition, role assignments, and favorite status. Conversations are retained."
+  },
+  "小さいパック: ": {
+    "en": "Small packs: "
+  },
+  "履歴はありません": {
+    "en": "No history"
+  },
+  "履歴を読み取れません": {
+    "en": "Cannot read history"
+  },
+  "履歴整理: ": {
+    "en": "History compaction: "
+  },
+  "左へスワイプで次の分岐": {
+    "en": "Swipe left for the next branch"
+  },
+  "差分": {
+    "webKey": "main.diffTitle"
+  },
+  "差分を計算中": {
+    "en": "Calculating diff"
+  },
+  "形式": {
+    "en": "Format"
+  },
+  "形式・範囲を指定して書き出す": {
+    "en": "Export with a specific format and scope"
+  },
+  "役割": {
+    "en": "Role"
+  },
+  "役割・プロンプト・生成の詳細": {
+    "en": "Roles, prompts, and generation details"
+  },
+  "後続を整理して編集": {
+    "en": "Edit and remove subsequent messages"
+  },
+  "復号: ": {
+    "en": "Decryption: "
+  },
+  "復旧を停止": {
+    "en": "Stop recovery"
+  },
+  "復旧データの保持期間が終了しました": {
+    "en": "The recovery data retention period has expired"
+  },
+  "応答の書き出し": {
+    "en": "Response opening text"
+  },
+  "応答の詳しさ": {
+    "webKey": "model.verbosity.label"
+  },
+  "応答を復旧中": {
+    "en": "Recovering response"
+  },
+  "挿入して保存": {
+    "en": "Insert and save"
+  },
+  "採用するデータを確認": {
+    "en": "Review data to use"
+  },
+  "採用する側の内容で、この端末またはフォルダーの変更を置き換えます。": {
+    "en": "Replaces changes on this device or in the folder with the content from the chosen side."
+  },
+  "接続を解除": {
+    "en": "Disconnect"
+  },
+  "推定費用": {
+    "en": "Estimated cost"
+  },
+  "推論": {
+    "webKey": "model.section.reasoning"
+  },
+  "推論の強さ": {
+    "webKey": "model.reasoningEffort.label"
+  },
+  "推論を要求": {
+    "en": "Request reasoning"
+  },
+  "推論トークン予算": {
+    "webKey": "model.reasoningBudget.label"
+  },
+  "操作": {
+    "en": "Actions"
+  },
+  "改名": {
+    "en": "Rename"
+  },
+  "整列表示": {
+    "en": "Aligned stream"
+  },
+  "整理: ": {
+    "en": "Compaction: "
+  },
+  "文字情報を保持できないため、このシステム文はこの画面では編集・挿入できません。ほかの設定は保存できます。": {
+    "en": "This system message cannot be edited or inserted on this screen because its text information cannot be preserved. You can save other settings."
+  },
+  "新しいGGUFを登録": {
+    "en": "Register a new GGUF"
+  },
+  "新しいプロンプトを追加": {
+    "en": "Add a new prompt"
+  },
+  "新しいモデル": {
+    "en": "New model"
+  },
+  "新規フォルダ": {
+    "webKey": "main.newFolder"
+  },
+  "新規会話の初期値": {
+    "en": "Initial values for new conversations"
+  },
+  "新規会話の既定設定": {
+    "en": "Default settings for new conversations"
+  },
+  "既存の同期フォルダーへ接続・再開": {
+    "en": "Connect to or resume an existing sync folder"
+  },
+  "旧Google保存を確認": {
+    "en": "Review legacy Google save"
+  },
+  "旧iOSのCloudKitデータを確認": {
+    "en": "Review legacy iOS CloudKit data"
+  },
+  "旧iOSの同期データを読み取り、選択して取り込みます。旧データは変更しません。": {
+    "en": "Reads legacy iOS sync data and lets you select what to import. The legacy data is not changed."
+  },
+  "旧iOSデータの取込み": {
+    "en": "Import legacy iOS data"
+  },
+  "旧会話用の予備streaming": {
+    "en": "Fallback streaming for legacy conversations"
+  },
+  "旧会話用の予備モデルID": {
+    "en": "Fallback model ID for legacy conversations"
+  },
+  "昇順": {
+    "en": "Ascending"
+  },
+  "暗号化: ": {
+    "en": "Encryption: "
+  },
+  "暗号化パスワード": {
+    "en": "Encryption password"
+  },
+  "更新": {
+    "webKey": "model.provider.refresh"
+  },
+  "書き出しファイルを選ぶ": {
+    "en": "Choose an export file"
+  },
+  "書き出す": {
+    "webKey": "main.export"
+  },
+  "最初のテキストを編集します。他の本文要素は保持します。": {
+    "en": "Edits the first text element. Other content elements are retained."
+  },
+  "最大出力token（空欄で解除）": {
+    "en": "Maximum output tokens (leave blank to clear)"
+  },
+  "最大出力トークン": {
+    "webKey": "model.token.label"
+  },
+  "最後の選択ノードへ貼り付け": {
+    "en": "Paste into the last selected node"
+  },
+  "有効時は生成本文とAPIキーを指定したプロキシ経由で送信します。設定と認証情報はこの端末のKeychainに保存します。": {
+    "en": "When enabled, generation content and API keys are sent through the specified proxy. Settings and credentials are stored in this device's Keychain."
+  },
+  "未完了ファイルを削除": {
+    "en": "Delete incomplete files"
+  },
+  "未所属": {
+    "en": "Unassigned"
+  },
+  "未指定": {
+    "en": "Not specified"
+  },
+  "未整理: ": {
+    "en": "Uncompacted: "
+  },
+  "本文": {
+    "en": "Message body"
+  },
+  "本文の入力": {
+    "en": "Message input"
+  },
+  "本文の移動": {
+    "en": "Message navigation"
+  },
+  "本文の表示": {
+    "en": "Message display"
+  },
+  "本文を保存しました": {
+    "en": "Message body saved"
+  },
+  "本文を折りたたみ中": {
+    "en": "Message body collapsed"
+  },
+  "本文を折りたたむ": {
+    "en": "Collapse message body"
+  },
+  "本文を編集": {
+    "en": "Edit message body"
+  },
+  "本文を置換して後続を整理しますか？": {
+    "en": "Replace the message body and remove subsequent messages?"
+  },
+  "本文を追加": {
+    "en": "Add message body"
+  },
+  "本文下の分岐番号をスワイプして切り替えます。": {
+    "en": "Swipe the branch number below the message body to switch branches."
+  },
+  "本文内を検索中": {
+    "en": "Searching message content"
+  },
+  "枝全体を削除": {
+    "en": "Delete entire branch"
+  },
+  "枝全体を削除しますか？": {
+    "en": "Delete the entire branch?"
+  },
+  "検索を取り消す": {
+    "en": "Cancel search"
+  },
+  "検索・整理": {
+    "en": "Search and cleanup"
+  },
+  "検索対象": {
+    "en": "Search target"
+  },
+  "検索履歴": {
+    "en": "Search history"
+  },
+  "検索履歴を消去": {
+    "webKey": "main.clearHistory"
+  },
+  "検索範囲": {
+    "en": "Search scope"
+  },
+  "検証: ": {
+    "en": "Verification: "
+  },
+  "標準色": {
+    "en": "Default color"
+  },
+  "次の20件": {
+    "en": "Next 20"
+  },
+  "次の一致箇所": {
+    "en": "Next match"
+  },
+  "次の分岐": {
+    "en": "Next branch"
+  },
+  "次の検索結果": {
+    "webKey": "main.nextResult"
+  },
+  "残高を更新": {
+    "webKey": "main.refreshCreditBalance"
+  },
+  "比較元の本文": {
+    "en": "Source message body"
+  },
+  "比較先の本文": {
+    "en": "Comparison message body"
+  },
+  "比較対象に指定": {
+    "webKey": "main.compareWith"
+  },
+  "消去": {
+    "en": "Clear"
+  },
+  "消去できませんでした": {
+    "en": "Could not clear data"
+  },
+  "照会": {
+    "en": "Look up"
+  },
+  "現在のシステム文をプリセットに置き換えますか？": {
+    "webKey": "model.presets.replaceConfirm"
+  },
+  "現在のデータで作成": {
+    "en": "Create with current data"
+  },
+  "現在のモデル": {
+    "en": "Current model"
+  },
+  "現在の会話とフォルダを、このファイルの内容で置き換えます。": {
+    "en": "Replaces the current conversations and folders with the contents of this file."
+  },
+  "現在の会話の分岐": {
+    "en": "Branches in the current conversation"
+  },
+  "現在の会話の生成設定": {
+    "en": "Generation settings for the current conversation"
+  },
+  "現在の本文と画像URLを書き出します。メッセージの属性、推論・tool call・tool resultは含めません。": {
+    "en": "Exports the current message body and image URLs. Message attributes, reasoning, tool call, and tool result are not included."
+  },
+  "現在の枝と比較": {
+    "en": "Compare with current branch"
+  },
+  "現在の経路": {
+    "en": "Current path"
+  },
+  "生成を再試行": {
+    "en": "Retry generation"
+  },
+  "生成プロパティ": {
+    "en": "Generation properties"
+  },
+  "生成モデルを選択": {
+    "en": "Select a generation model"
+  },
+  "生成中": {
+    "webKey": "main.evaluation.axisGenerating"
+  },
+  "生成中のMarkdown表示": {
+    "webKey": "main.streamingMarkdownPolicy"
+  },
+  "生成中は表示しない": {
+    "en": "Hide during generation"
+  },
+  "生成時の文脈から除外": {
+    "webKey": "main.omitOn"
+  },
+  "生成結果の保存を再試行": {
+    "en": "Retry saving generation results"
+  },
+  "生成設定を編集": {
+    "en": "Edit generation settings"
+  },
+  "画像を作成中": {
+    "en": "Creating image"
+  },
+  "画像を添付": {
+    "en": "Attach an image"
+  },
+  "画像を読み込み中": {
+    "en": "Loading image"
+  },
+  "画像ファイル": {
+    "en": "Image file"
+  },
+  "画像品質": {
+    "webKey": "model.imageDetail.label"
+  },
+  "画像（PNG）": {
+    "en": "Image (PNG)"
+  },
+  "登録済みのモデル定義がありません。": {
+    "en": "No registered model definitions."
+  },
+  "直近の整理: ": {
+    "en": "Last compaction: "
+  },
+  "破棄": {
+    "en": "Discard"
+  },
+  "確認中は保存済みの会話を変更しません。": {
+    "en": "Saved conversations are not changed during review."
+  },
+  "移行専用のGoogle認証で最新の旧保存を読み取ります。元ファイルは変更しません。旧アプリと同じGoogleアプリ設定からアクセスできる必要があります。": {
+    "en": "Reads the latest legacy save using Google authentication dedicated to migration. The original file is not changed. Access through the same Google app configuration as the legacy app is required."
+  },
+  "空のフォルダーに現在のデータで作成": {
+    "en": "Create in an empty folder with current data"
+  },
+  "端末に残る未完了の復旧記録だけを削除します。保存済みの会話とプロキシ側の記録は変更しません。": {
+    "en": "Deletes only incomplete recovery records remaining on this device. Saved conversations and records on the proxy are not changed."
+  },
+  "端末の未完了復旧記録を破棄": {
+    "en": "Discard incomplete recovery records on this device"
+  },
+  "端末の未完了復旧記録を破棄しますか？": {
+    "en": "Discard incomplete recovery records on this device?"
+  },
+  "端末内の生成で使う一時入力です。生成中に変更した内容は次回用に残ります。": {
+    "en": "Temporary input for on-device generation. Changes made during generation are retained for the next run."
+  },
+  "端末内またはiCloud Driveの専用フォルダーを選択してください。内容はパスフレーズで暗号化して保存します。": {
+    "en": "Select a dedicated folder on this device or in iCloud Drive. Content is encrypted with a passphrase before saving."
+  },
+  "端末内モデルの評価（実験的）": {
+    "en": "On-device model evaluation (experimental)"
+  },
+  "端末認証設定": {
+    "en": "Device authentication settings"
+  },
+  "競合時はWeb版と同じ更新時刻の判定で採用する内容を決めます。": {
+    "en": "Conflicts are resolved using the same modification-time rules as the Web version."
+  },
+  "範囲": {
+    "en": "Scope"
+  },
+  "範囲をコピー": {
+    "en": "Copy range"
+  },
+  "範囲を切り取り": {
+    "en": "Cut range"
+  },
+  "範囲を貼り付け": {
+    "en": "Paste range"
+  },
+  "範囲コピー・切り取り・移動": {
+    "en": "Copy, cut, or move a range"
+  },
+  "範囲選択": {
+    "webKey": "main.rangeSelectMode"
+  },
+  "索引: ": {
+    "en": "Index: "
+  },
+  "累計をリセット": {
+    "en": "Reset totals"
+  },
+  "終点": {
+    "en": "End"
+  },
+  "結果: ": {
+    "en": "Result: "
+  },
+  "編集の詳細": {
+    "en": "Edit details"
+  },
+  "編集をやり直す": {
+    "webKey": "main.branchEditorMenu.redo"
+  },
+  "編集を元に戻す": {
+    "webKey": "main.branchEditorMenu.undo"
+  },
+  "置き換え": {
+    "en": "Replace"
+  },
+  "置き換える": {
+    "en": "Replace"
+  },
+  "置換して後続を整理": {
+    "en": "Replace and remove subsequent messages"
+  },
+  "置換して整理": {
+    "en": "Replace and remove"
+  },
+  "自動同期": {
+    "en": "Automatic sync"
+  },
+  "表示する操作": {
+    "en": "Actions to display"
+  },
+  "表示と生成": {
+    "en": "Display and generation"
+  },
+  "表示を入れ替え": {
+    "webKey": "main.swapPanels"
+  },
+  "表示中の会話の非表示の枝を整理": {
+    "en": "Clean up hidden branches in visible conversations"
+  },
+  "表示中の会話をまとめて整理します。ピン留めされた枝と、保護されたメッセージは残ります。": {
+    "en": "Cleans up all visible conversations. Pinned branches and protected messages are retained."
+  },
+  "表示中の会話を編集": {
+    "en": "Edit visible conversations"
+  },
+  "表示中の分岐図を検索": {
+    "en": "Search the visible branch diagram"
+  },
+  "表示中の枝と本文の表示状態を画像にします。高度な操作を非表示にしている場合、先頭のシステム本文は含めません。": {
+    "en": "Creates an image of the visible branch with the current message display states. When advanced actions are hidden, the initial system message body is not included."
+  },
+  "表示中の経路": {
+    "en": "Visible path"
+  },
+  "表示対象が変わりました。編集中の本文を保持しています。": {
+    "en": "The displayed item has changed. Your message body edits have been retained."
+  },
+  "表示経路上の後続を指定します。範囲内に保護されたメッセージがある場合は本文だけを保存し、後続を削除しません。": {
+    "en": "Specify subsequent messages on the visible path. If the range contains protected messages, only the message body is saved; subsequent messages are not deleted."
+  },
+  "複製": {
+    "webKey": "main.cloneChat"
+  },
+  "要約": {
+    "en": "Summary"
+  },
+  "要約の形式": {
+    "en": "Summary format"
+  },
+  "要約の生成設定": {
+    "en": "Summary generation settings"
+  },
+  "要約を生成": {
+    "en": "Generate summary"
+  },
+  "要約・圧縮": {
+    "en": "Summary and compaction"
+  },
+  "観測時刻: ": {
+    "en": "Observed at: "
+  },
+  "解除してもフォルダーのファイルと、この端末の会話は残ります。": {
+    "en": "Disconnecting retains the folder's files and the conversations on this device."
+  },
+  "計測なし": {
+    "webKey": "drive.debug.noMeasurement"
+  },
+  "設定も初期化して取り込む": {
+    "en": "Reset settings and import"
+  },
+  "評価・文脈・保護": {
+    "en": "Evaluation, context, and protection"
+  },
+  "評価中": {
+    "webKey": "main.evaluation.running"
+  },
+  "評価対象": {
+    "en": "Evaluation target"
+  },
+  "評価設定を読み込めませんでした": {
+    "en": "Could not load evaluation settings"
+  },
+  "詳細設定": {
+    "en": "Advanced settings"
+  },
+  "読みやすい要約": {
+    "en": "Readable summary"
+  },
+  "読み込み方法": {
+    "en": "Import method"
+  },
+  "読み込んだV3 JSONを書き出す": {
+    "en": "Export the imported V3 JSON"
+  },
+  "識別子を表示できません": {
+    "en": "Cannot display identifier"
+  },
+  "貼り付け": {
+    "en": "Paste"
+  },
+  "貼り付けた範囲を表示します。元の後続や、範囲外の枝は残します。": {
+    "en": "Displays the pasted range. The original subsequent messages and branches outside the range are retained."
+  },
+  "貼り付け先": {
+    "en": "Paste destination"
+  },
+  "貼り付け先にはメッセージが必要です。": {
+    "en": "The paste destination must contain a message."
+  },
+  "転送量は成功したデータ本体のみで、メタデータや内部の競合照合は含みません。": {
+    "en": "Transfer sizes count only successfully transferred data payloads, excluding metadata and internal conflict comparisons."
+  },
+  "追加して保存": {
+    "en": "Add and save"
+  },
+  "送信": {
+    "en": "Send"
+  },
+  "送信 / 受信: ": {
+    "en": "Sent / received: "
+  },
+  "送信 / 受信時間: ": {
+    "en": "Send / receive time: "
+  },
+  "送信から除外した発言も含める": {
+    "en": "Include messages excluded from sending"
+  },
+  "送信する本文": {
+    "en": "Message body to send"
+  },
+  "通常: ": {
+    "en": "Normal: "
+  },
+  "進む": {
+    "en": "Forward"
+  },
+  "進行中: ": {
+    "en": "In progress: "
+  },
+  "選択したローカルモデルで自動判定します。読み込みや判定に失敗した場合は Remote を使用します。": {
+    "en": "Automatically evaluates using the selected local model. Uses Remote if loading or evaluation fails."
+  },
+  "選択した会話": {
+    "en": "Selected conversation"
+  },
+  "選択した会話の所属先と、その親フォルダも含めます。": {
+    "en": "Also includes the selected conversations' folders and their parent folders."
+  },
+  "選択した会話の表示枝": {
+    "en": "Visible branch of selected conversation"
+  },
+  "選択した項目を追加": {
+    "en": "Add selected items"
+  },
+  "選択を解除": {
+    "en": "Clear selection"
+  },
+  "選択ノードと比較": {
+    "webKey": "main.compareWithSelected"
+  },
+  "選択中の会話だけ": {
+    "en": "Selected conversations only"
+  },
+  "選択範囲": {
+    "en": "Selected range"
+  },
+  "選択範囲の操作": {
+    "en": "Selected range actions"
+  },
+  "選択範囲をコピー": {
+    "webKey": "main.copySelectedNodes"
+  },
+  "選択範囲を切り取り": {
+    "webKey": "main.cutSelectedNodes"
+  },
+  "閾値超過: ": {
+    "en": "Above threshold: "
+  },
+  "降順": {
+    "en": "Descending"
+  },
+  "非表示の枝を削除": {
+    "en": "Delete hidden branches"
+  },
+  "非表示の枝を整理": {
+    "en": "Clean up hidden branches"
+  },
+  "順序": {
+    "en": "Order"
+  },
+  "高": {
+    "webKey": "model.imageDetail.high"
+  }
+}

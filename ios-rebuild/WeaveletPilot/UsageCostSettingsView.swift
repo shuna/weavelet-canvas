@@ -86,7 +86,7 @@ struct UsageCostSettingsView: View {
             if let message = state.openRouterVerificationError { Text(message).font(.footnote).foregroundStyle(.secondary) }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
-        .navigationTitle("利用量と費用")
+        .nativeNavigationTitle("利用量と費用")
         .confirmationDialog("保存済みの利用量の累計をリセットしますか？",isPresented:$confirmsReset,titleVisibility:.visible) {
             Button("累計をリセット",role:.destructive) {
                 do { try state.resetUsageTotals(); errorMessage = nil }

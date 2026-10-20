@@ -32,7 +32,7 @@ struct NodeOptionsView: View {
                 }
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }
-            .navigationTitle("メッセージ設定")
+            .nativeNavigationTitle("メッセージ設定")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("キャンセル") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {

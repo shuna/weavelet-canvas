@@ -208,7 +208,7 @@ struct ChatSearchView: View {
                         }
                     }
                     .searchable(text: queryBinding, prompt: "検索")
-                    .navigationTitle("会話を検索")
+                    .nativeNavigationTitle("会話を検索")
                     .toolbar {
                         ToolbarItem(placement:.topBarLeading) { historyMenu }
                         ToolbarItem(placement:.confirmationAction) { Button("閉じる",action:closeSearch) }

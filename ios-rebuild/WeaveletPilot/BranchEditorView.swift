@@ -984,7 +984,7 @@ private struct BranchNodeDetailView: View {
                     ContentUnavailableView("メッセージがありません",systemImage:"doc.text")
                 }
             }
-            .navigationTitle("メッセージ詳細")
+            .nativeNavigationTitle("メッセージ詳細")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(colorScheme,for:.navigationBar)
             .toolbar {

@@ -120,7 +120,7 @@ struct ConversationSummaryView: View {
                     }
                 }
             }
-            .navigationTitle("要約・圧縮")
+            .nativeNavigationTitle("要約・圧縮")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement:.confirmationAction) { Button("閉じる") { dismiss() } } }
             .sheet(item:$configDraft) { config in

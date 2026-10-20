@@ -119,7 +119,7 @@ struct FolderSyncSettingsView: View {
                 picking = false
                 if let url { connection.run { try await connection.select(url) } }
             } }
-            .navigationTitle("フォルダー同期")
+            .nativeNavigationTitle("フォルダー同期")
             .toolbar { ToolbarItem(placement:.confirmationAction) { Button("完了") { dismiss() }.disabled(connection.working) } }
             .interactiveDismissDisabled(connection.working)
         }

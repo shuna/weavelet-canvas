@@ -73,7 +73,7 @@ struct ConversationEvaluationView: View {
                     }
                 }
             }
-            .navigationTitle("評価")
+            .nativeNavigationTitle("評価")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement:.confirmationAction) { Button("閉じる") { dismiss() } } }
         }
@@ -160,7 +160,7 @@ struct EvaluationSettingsView: View {
             }
         }
         .disabled(state.hasGenerations)
-        .navigationTitle("評価設定")
+        .nativeNavigationTitle("評価設定")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

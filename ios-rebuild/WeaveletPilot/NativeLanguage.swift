@@ -40,9 +40,7 @@ struct NativeLanguages: Decodable {
 
     // UIKit-backed navigation titles cache SwiftUI Text localization while presented.
     func localized(_ key: String) -> String {
-        let code = Bundle.preferredLocalizations(from:Bundle.main.localizations,forPreferences:[locale.identifier]).first ?? languages.fallbackLanguage
-        guard let path = Bundle.main.path(forResource:code,ofType:"lproj"), let bundle = Bundle(path:path) else { return key }
-        return bundle.localizedString(forKey:key,value:nil,table:nil)
+        nativeLocalizedString(key,locale:locale)
     }
 
     @discardableResult func select(_ code: String) -> Bool {
@@ -66,5 +64,25 @@ struct NativeLanguagePicker: View {
                 Text(verbatim:language.languages.languageCodeToName[code] ?? code).tag(code)
             }
         }
+    }
+}
+
+private func nativeLocalizedString(_ key: String, locale: Locale) -> String {
+    let code = Bundle.preferredLocalizations(from:Bundle.main.localizations,forPreferences:[locale.identifier]).first ?? NativeLanguages.bundled.fallbackLanguage
+    guard let path = Bundle.main.path(forResource:code,ofType:"lproj"), let bundle = Bundle(path:path) else { return key }
+    return bundle.localizedString(forKey:key,value:nil,table:nil)
+}
+
+private struct NativeNavigationTitle: ViewModifier {
+    @Environment(\.locale) private var locale
+    let key: String
+    func body(content: Content) -> some View {
+        content.navigationTitle(nativeLocalizedString(key,locale:locale))
+    }
+}
+
+extension View {
+    func nativeNavigationTitle(_ key: String) -> some View {
+        modifier(NativeNavigationTitle(key:key))
     }
 }

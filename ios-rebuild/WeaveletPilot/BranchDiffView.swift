@@ -110,7 +110,7 @@ struct BranchDiffView: View {
                     ProgressView("差分を計算中")
                 }
             }
-            .navigationTitle("分岐を比較")
+            .nativeNavigationTitle("分岐を比較")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("閉じる") { dismiss() } } }
         }
         .task(id: request.id) {

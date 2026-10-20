@@ -324,7 +324,7 @@ struct CloudKitSyncSettingsView: View {
             .fileExporter(isPresented:$exporting,document:exportDocument,contentType:exportType,defaultFilename:exportName) { result in
                 if case .failure(let error) = result { connection.errorMessage = error.localizedDescription }
             }
-            .navigationTitle("CloudKit同期")
+            .nativeNavigationTitle("CloudKit同期")
             .toolbar { ToolbarItem(placement:.confirmationAction) { Button("完了") { dismiss() }.disabled(connection.working) } }
             .interactiveDismissDisabled(connection.working)
         }

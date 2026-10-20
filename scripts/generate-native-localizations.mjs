@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const languageDataPath = join(root, 'src/constants/languageData.json');
 const localeRoot = join(root, 'public/locales');
+const nativeCopyPath = join(root, 'shared/localization/native-ui.json');
 const nativeRoot = join(root, 'ios-rebuild/WeaveletPilot');
 const catalogPath = join(nativeRoot, 'Localizable.xcstrings');
 const webLanguagesPath = join(nativeRoot, 'WebLanguages.json');
@@ -72,7 +73,7 @@ function fallbackChain(language, fallbackLanguage) {
 }
 
 function nativeStrings(source) {
-  const pattern = /\b(?:Text|Button|Section|Picker|Toggle|NavigationLink|Label)\(\s*"((?:\\.|[^"\\])*)"/g;
+  const pattern = /\b(?:Text|Button|Section|Picker|Toggle|NavigationLink|Label|TextField|SecureField|LabeledContent|ProgressView|navigationTitle|nativeNavigationTitle|navigationSubtitle|accessibilityLabel|accessibilityHint|alert|confirmationDialog)\(\s*"((?:\\.|[^"\\])*)"/g;
   const values = new Set();
   for (const match of source.matchAll(pattern)) {
     const value = match[1];
@@ -105,6 +106,13 @@ async function update(path, contents) {
 }
 
 const languageData = await readJSON(languageDataPath);
+const nativeCopy = await readJSON(nativeCopyPath);
+for (const [source, entry] of Object.entries(nativeCopy)) {
+  if (!source || !entry || (typeof entry.webKey === 'string') === (typeof entry.en === 'string')) {
+    throw new Error(`Invalid native UI translation: ${source}`);
+  }
+  if ((entry.en !== undefined && !entry.en.trim()) || (entry.webKey !== undefined && !entry.webKey.trim())) throw new Error(`Empty native UI translation: ${source}`);
+}
 const { i18nLanguages, selectableLanguages, languageCodeToName, fallbackLanguage } = languageData;
 if (!Array.isArray(i18nLanguages) || !Array.isArray(selectableLanguages) || typeof fallbackLanguage !== 'string') {
   throw new Error('languageData.json is invalid');
@@ -128,6 +136,9 @@ for (const language of i18nLanguages) {
 
 const japanese = translations.get('ja');
 if (!japanese) throw new Error('Japanese Web locale is required');
+for (const entry of Object.values(nativeCopy)) {
+  if (entry.webKey && !japanese.has(entry.webKey)) throw new Error(`Unknown Web translation key: ${entry.webKey}`);
+}
 const candidates = new Map();
 for (const [key, value] of japanese) {
   // Diagnostic completion states do not provide a dismissal-button translation.
@@ -143,35 +154,46 @@ for (const path of (await files(nativeRoot)).filter(path => extname(path) === '.
 }
 
 // Explicit aliases also cover closed-enum labels passed through LocalizedStringKey.
-for (const literal of Object.keys(nativeAliases)) literals.add(literal);
+for (const literal of [...Object.keys(nativeAliases), ...Object.keys(nativeCopy)]) literals.add(literal);
 
 const selected = new Map();
 const unresolved = [];
 for (const literal of [...literals].sort((left, right) => left.localeCompare(right, 'ja'))) {
-  const alias = nativeAliases[literal];
+  const copy = nativeCopy[literal];
+  if (copy?.en) {
+    selected.set(literal, { en: copy.en });
+    continue;
+  }
+  const alias = copy?.webKey ?? nativeAliases[literal];
   const matches = alias ? [alias] : candidates.get(literal) ?? [];
   if (matches.length !== 1 || !japanese.has(matches[0])) {
     unresolved.push(literal);
     continue;
   }
-  selected.set(literal, matches[0]);
+  selected.set(literal, { webKey: matches[0] });
 }
 
 const strings = {};
-for (const [literal, key] of [...selected].sort(([left], [right]) => left.localeCompare(right, 'ja'))) {
+for (const [literal, entry] of [...selected].sort(([left], [right]) => left.localeCompare(right, 'ja'))) {
   const localizations = {};
   for (const language of i18nLanguages) {
-    let value;
-    for (const candidate of fallbackChain(language, fallbackLanguage)) {
-      value = translations.get(candidate)?.get(key);
-      if (value !== undefined) break;
+    let value = entry.en;
+    let resolved = fallbackLanguage;
+    if (entry.webKey) {
+      for (const candidate of fallbackChain(language, fallbackLanguage)) {
+        value = translations.get(candidate)?.get(entry.webKey);
+        if (value !== undefined) { resolved = candidate; break; }
+      }
     }
-    if (value === undefined) throw new Error(`No ${fallbackLanguage} translation for ${key}`);
-    localizations[language] = { stringUnit: { state: 'translated', value: language === 'ja' ? literal : value } };
+    if (value === undefined) throw new Error(`No ${fallbackLanguage} translation for ${entry.webKey}`);
+    const isFallback = language !== 'ja' && !language.startsWith(resolved);
+    localizations[language] = { stringUnit: {
+      state: isFallback ? 'needs_review' : 'translated', value: language === 'ja' ? literal : value,
+    } };
   }
   strings[literal] = {
     extractionState: 'manual',
-    comment: `Web locale key: ${key}`,
+    comment: entry.webKey ? `Web locale key: ${entry.webKey}` : 'Native UI copy; English fallback until a locale-specific translation is available.',
     localizations,
   };
 }
@@ -180,4 +202,4 @@ const catalog = { sourceLanguage: 'ja', strings, version: '1.0' };
 const webLanguages = { i18nLanguages, selectableLanguages, languageCodeToName, fallbackLanguage };
 const catalogChanged = await update(catalogPath, json(catalog));
 const languagesChanged = await update(webLanguagesPath, json(webLanguages));
-console.log(`native localizations: ${selected.size} translated, ${unresolved.length} unresolved native literals${catalogChanged || languagesChanged ? ' (updated)' : ''}`);
+console.log(`native localizations: ${selected.size} localized keys, ${unresolved.length} unresolved native literals${catalogChanged || languagesChanged ? ' (updated)' : ''}`);

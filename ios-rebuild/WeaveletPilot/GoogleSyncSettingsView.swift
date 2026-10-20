@@ -312,7 +312,7 @@ struct GoogleSyncSettingsView: View {
             .fileExporter(isPresented: $exporting, document: exportDocument, contentType: .data, defaultFilename: "weavelet-canvas-sync.wvlt") { result in
                 if case .failure(let error) = result { connection.errorMessage = error.localizedDescription }
             }
-            .navigationTitle("Google同期")
+            .nativeNavigationTitle("Google同期")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完了") { dismiss() }.disabled(connection.working) } }
             .interactiveDismissDisabled(connection.working)
             .confirmationDialog("採用するデータを確認", isPresented: Binding(get: { confirmation != nil }, set: { if !$0 { confirmation = nil } }), titleVisibility: .visible) {

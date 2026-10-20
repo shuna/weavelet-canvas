@@ -145,7 +145,7 @@ struct LocalModelSettingsView: View {
         } message: {
             Text("この端末のモデルファイルと、モデル定義・役割の割り当て・お気に入りを削除します。会話は保持します。")
         }
-        .navigationTitle("ローカルモデル")
+        .nativeNavigationTitle("ローカルモデル")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             guard !catalogLoaded else { return }
@@ -434,7 +434,7 @@ private struct ModelStorageView: View {
                 }
             }
         }
-        .navigationTitle("モデルストレージ")
+        .nativeNavigationTitle("モデルストレージ")
         .navigationBarTitleDisplayMode(.inline)
         .task { await refresh() }
         .confirmationDialog("ファイルを削除しますか？",isPresented:Binding(get:{pending != nil},set:{if !$0 { pending = nil }}),titleVisibility:.visible) {
@@ -759,7 +759,7 @@ struct ConversationModelInspector: View {
             }
             .sheet(item:$configDraft) { draft in ChatConfigView(state:state,draft:draft) }
             .textSelection(.enabled)
-            .navigationTitle("モデルのプロパティ")
+            .nativeNavigationTitle("モデルのプロパティ")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement:horizontalSizeClass == .compact ? .topBarLeading : .topBarTrailing) {
