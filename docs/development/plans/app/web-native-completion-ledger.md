@@ -1282,3 +1282,15 @@ Web CollapseAllButtonsの同chat・activePath外session選択とstartedAt降順�
 新caseはfocus保存失敗時のsnapshot/disk不変・未公開focusと生成要求ID保持、成功後の元source/表示経路保持・wide split維持、生成結果保存失敗時の出力保持とsnapshot/disk不変、既存handlerによる再試行、再起動後export一致・未知大数/孤立UTF16保持を確認する。未変更の全項目I/O・実Web→native→Web暗号化同期の成功は再利用する。独立Astraの機能群監査と保存再試行入口移動の限定確認は新規P1/P2なし。ログ /private/tmp/weavelet-orphan-generation-{generate,types,web-build,freshness,native-test,native-final-test,preservation-test}.log。
 
 隔離FAKE Catalystでは別分岐へ履歴移動中も生成を続け、左下の経路外1件入口からgraphへ移動、target cardが中央に表示され、その後FAKE partial completeへ更新されることを確認した。終了後のprocess不在とbuilt Info.plistのbyte一致復元を確認。保存失敗UIそのもの、狭幅/文字拡大/VoiceOver全経路、実API/cloudは未確認。origin/mainをfetchし追加commitなし。iPhone照会/導入・push・main統合は行っていない。全Web機能/全UIと実オンライン相互運用の最終受入は未完了。
+
+## 分岐図の生成途中プレビュー共有と表示領域の修正（2026-10-21）
+
+実Web useBranchEditorLayoutのlive previewをcontentPreviewへ切り出し、Web実callerとnative branchLayout bridgeで共有した。resolveContentTextと同じtext部のみ・半角空白連結・80 UTF-16単位の省略を維持する。native表示境界では既存nativePreviewで切断surrogateを置換する。既存workerの一時preview処理は変更せず、実hookの表示規則を共有する範囲に限定した。
+
+nativeはchat/nodeのUTF8一致と既存共有fingerprint・request IDの現行性を確認し、既存graphの対象cardへ出力だけを重ねる。チャット表示も同じ対象lookupを利用する。parts一致時のpreview cacheと既存JSC Sessionを再利用し、生成出力をlayout keyや保存sourceへ追加しない。完了・取消等のgeneration除去時にはcacheも破棄する。新規依存・保存/同期fieldは追加していない。
+
+狭幅では通常表示の入力欄を行の44pt折畳領域の右へ揃え、吹き出し表示の余白は維持した。既存DEBUG connected previewをbuilt Info指定でも起動でき、実viewport内に収めた。実Catalyst分割表示で右pane全体が空白になる不具合も発見した。offset前の半幅ZStackへclipしていたため、clip前に全viewportのframeを指定する1行で両paneの描画領域を確保した。
+
+Web関連6件・型検査・Vite build・最終bundle鮮度、Catalyst BranchEditor16＋ParallelGeneration5の21件が成功。共有text選択/空白、Unicode境界、chat/node接続の混線拒否、保存失敗後のpreviewと元source/disk保持・再試行・再起動/exportを確認した。split frame修正後は影響する実画面と最終buildのみ再確認し、未変更の21件を反復していない。保存/同期基盤は未変更で、全項目I/O・実Web→native→Web暗号化同期の既存成功結果を再利用した。ログ /private/tmp/weavelet-live-preview-{generate,web-test,types,web-build,freshness,native-test,final-build}.log。Viteの既存chunk容量警告は残る。
+
+独立Astraの機能一式監査とsplit frameのみの限定再監査は新規P1/P2なし。隔離FAKE Catalystで393pt制約の本文/入力欄整列・編集/取消、左右分割の生成中FAKE partialから完了本文へのcard更新と位置維持、左右入替、上下分割、境界dragで50→41%の領域変化を確認した。狭幅previewは実iPhoneではなくCatalyst上の制約表示である。終了後にprocess不在とbuilt Info.plistのbyte一致復元を確認。長時間streamの性能、実keyboard/文字拡大/VoiceOver全経路、実API/cloudは未確認。iPhone照会/導入・push・main統合は行っていない。全機能/全UIと実オンライン相互運用の最終受入は未完了。

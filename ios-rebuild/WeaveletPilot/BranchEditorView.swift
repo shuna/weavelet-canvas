@@ -406,6 +406,7 @@ struct BranchEditorView: View {
 
     private func graphCanvas(_ graph: BranchGraph, sourceKey: BranchLayoutKey) -> some View {
         let headerOffset: CGFloat = sourceKey.entries.count > 1 ? 60 : 0
+        let livePreviews = branchPreviews(in:graph, sourceKey:sourceKey)
         return ZStack(alignment: .topLeading) {
             ForEach(graph.headers(in: sourceKey)) { header in
                 Text(header.title).font(.subheadline.weight(.semibold)).lineLimit(1).frame(width: 280, height: 40)
@@ -429,7 +430,8 @@ struct BranchEditorView: View {
                 if let nodeKey = sourceKey.context(chatIndex: node.chatIndex) {
                     let target = compareTarget?.key == nodeKey ? compareTarget?.nodeID : nil
                     let otherNode = target.flatMap { $0.utf8.elementsEqual(node.id.utf8) ? nil : $0 }
-                    BranchNodeCard(node: node, canEdit: state.exchange != nil && state.generation(for: nodeKey.chatID) == nil,
+                    BranchNodeCard(node: node, preview: livePreviews[node.identity] ?? node.preview,
+                        canEdit: state.exchange != nil && state.generation(for: nodeKey.chatID) == nil,
                         canDelete: !(node.role == "system" && nodeKey.isRoot(node.id)),
                         hasClipboard: state.hasBranchClipboard, select: {
                         do {
@@ -456,6 +458,19 @@ struct BranchEditorView: View {
             }
         }
     }
+    private func branchPreviews(in graph: BranchGraph, sourceKey: BranchLayoutKey) -> [BranchGraph.Identity:String] {
+        guard sourceKey.isCurrent(in:state) else { return [:] }
+        var previews: [BranchGraph.Identity:String] = [:]
+        for entry in sourceKey.entries {
+            guard let generation = state.generation(for: entry.chatID),
+                  case .string(let nodeID) = generation.plan?["targetNodeId"],
+                  let current = state.generation(for: entry.chatID,nodeID:nodeID),
+                  graph.positionsByID[.init(chatIndex:entry.chatIndex,nodeID:Data(nodeID.utf8))] != nil,
+                  let preview = state.branchPreview(for:current) else { continue }
+            previews[.init(chatIndex:entry.chatIndex,nodeID:Data(nodeID.utf8))] = preview
+        }
+        return previews
+    }
     private func performMenu(_ node: BranchGraph.Node, key: BranchLayoutKey, action: () -> Void) {
         guard key.isCurrent(in: state), state.generation(for: key.chatID) == nil else { return }
         do {
@@ -469,6 +484,7 @@ struct BranchEditorView: View {
 
 private struct BranchNodeCard: View {
     let node: BranchGraph.Node
+    let preview: String
     let canEdit: Bool
     let canDelete: Bool
     let hasClipboard: Bool
@@ -489,14 +505,14 @@ private struct BranchNodeCard: View {
                         Spacer(minLength: 4)
                         if node.active { Image(systemName: "checkmark.circle.fill").accessibilityLabel("現在の経路") }
                     }
-                    Text(node.preview.isEmpty ? "本文なし" : node.preview).font(.caption).lineLimit(2)
+                    Text(preview.isEmpty ? "本文なし" : preview).font(.caption).lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(10)
                 .frame(width: 236, height: 80, alignment: .topLeading)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(node.label ?? node.role)、\(node.preview)")
+            .accessibilityLabel("\(node.label ?? node.role)、\(preview)")
             Menu {
                 Button("ラベル・スター・ピン留め", systemImage: "slider.horizontal.3", action: configure)
                     .disabled(!canEdit)

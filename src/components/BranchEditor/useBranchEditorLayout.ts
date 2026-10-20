@@ -5,6 +5,7 @@ import { useWorkspaceStore } from '@store/workspaceScope';
 import { showToast } from '@utils/showToast';
 import type { ContentStoreData } from '@utils/contentStore';
 import { resolveContentText } from '@utils/contentStore';
+import { contentPreview } from '@utils/contentPreview';
 import type { WorkerInput, WorkerOutput } from './branchLayout.worker';
 import { perfStart, perfEnd } from '@utils/perfTrace';
 
@@ -45,8 +46,7 @@ function resolveContentPreview(
   contentStore: ContentStoreData,
   hash: string
 ): string {
-  const text = resolveContentText(contentStore, hash);
-  return text.length > 80 ? `${text.slice(0, 80)}...` : text;
+  return contentPreview([{ type: 'text', text: resolveContentText(contentStore, hash) }]);
 }
 
 export function useBranchEditorLayout(tree: BranchTree | undefined) {

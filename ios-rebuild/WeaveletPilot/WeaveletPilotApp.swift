@@ -9,11 +9,12 @@ struct WeaveletPilotApp: App {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--ui-mockup") || Bundle.main.object(forInfoDictionaryKey: "WeaveletLaunchMode") as? String == "ui-mockup" {
                 IOSLayoutMockupView()
-            } else if ProcessInfo.processInfo.arguments.contains("--ui-connected-preview") {
+            } else if ProcessInfo.processInfo.arguments.contains("--ui-connected-preview") || Bundle.main.object(forInfoDictionaryKey: "WeaveletLaunchMode") as? String == "ui-connected-preview" {
                 ChatView(state:live.state)
                     .environment(\.horizontalSizeClass,.compact)
                     .preferredColorScheme(ProcessInfo.processInfo.arguments.contains("--ui-preview-light") ? .light : ProcessInfo.processInfo.arguments.contains("--ui-preview-dark") ? .dark : nil)
-                    .frame(width:393,height:852)
+                    .frame(maxWidth:393,maxHeight:852)
+                    .frame(maxWidth:.infinity,maxHeight:.infinity)
             } else {
                 ChatView(state: live.state)
             }
@@ -685,6 +686,7 @@ struct ChatView: View {
                         }
                     }
             }
+            .frame(width:geometry.size.width,height:geometry.size.height,alignment:.topLeading)
             .coordinateSpace(name:"conversation-split")
             .clipped()
         }
@@ -919,8 +921,10 @@ struct ChatView: View {
             }
             if state.isLocalConversation { prefillInput(key:state.stickyPrefillKey) }
         }
-        .padding(12)
+        .padding(.vertical,12)
+        .padding(.horizontal,state.style == .bubbles ? 12 : 0)
         .overlay(alignment:.top) { Divider() }
+        .padding(.leading,state.style == .bubbles ? 0 : 44)
         .padding(.horizontal,16).padding(.vertical,8)
         .frame(maxWidth:900)
         .frame(maxWidth:.infinity)
@@ -968,11 +972,7 @@ struct ChatView: View {
     }
 
     private func generation(at node: MessageNode, in conversation: Conversation) -> ActiveGeneration? {
-        guard let generation = state.generation(for: conversation.id),
-              generation.chatID.utf8.elementsEqual(conversation.id.utf8),
-              case .string(let target) = generation.plan?["targetNodeId"],
-              target.utf8.elementsEqual(node.id.utf8) else { return nil }
-        return generation
+        state.generation(for:conversation.id,nodeID:node.id)
     }
 
     private var branchSwipePreference: String? {

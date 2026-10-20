@@ -1,4 +1,6 @@
 import {describe, expect, it} from 'vitest';
+import {contentPreview} from './contentPreview';
+import {resolveContentText} from './contentStore';
 import {layoutBranchEntries, type WorkerInput} from './branchLayout';
 import {branchLayout} from '../../shared/google-sync/branchLayout';
 import {branchEnsure} from '../../shared/google-sync/branchLayout';
@@ -37,6 +39,13 @@ describe('native branch layout bridge', () => {
     request.entries[0].nodes.a = {id:'a',parentId:'b',role:'assistant',contentHash:'body'};
     request.entries[0].nodes.b = {id:'b',parentId:'a',role:'assistant',contentHash:'body'};
     expect(JSON.parse(branchLayout(JSON.stringify(request)))).toEqual(layoutBranchEntries(request));
+  });
+
+  it('uses the Web text preview rule for a live native result without changing its input', () => {
+    const request = {operation:'preview',content:[{type:'reasoning',text:'hidden'}, {type:'text',text:'x'.repeat(79) + '😀'}]};
+    const before = JSON.stringify(request);
+    expect(JSON.parse(branchLayout(before))).toEqual({preview:'x'.repeat(79) + '�...'});
+    expect(JSON.stringify(request)).toBe(before);
   });
 });
 
@@ -80,4 +89,13 @@ it('materializes a flat chat through the Web ensure path and preserves original 
   expect(JSON.parse(json).chat.branchTree).toBeUndefined();
   const withoutMaps = JSON.parse(branchEnsure(JSON.stringify({chat:{...chat,collapsedNodes:undefined},contentStore:{},newIDs:['id-1','id-2'],now:10000}))) as DocumentPatch[];
   expect(withoutMaps.filter(patch => patch.op === 'set').every(patch => Object.hasOwn(patch, 'value'))).toBe(true);
+});
+
+it('shares the actual Web live preview text selection and spacing', () => {
+  const parts = [{type:'reasoning' as const,text:'hidden'}, {type:'text' as const,text:'first'}, {type:'text' as const,text:'second'}];
+  const store = {body:{content:parts,refCount:1}};
+  const actual = resolveContentText(store,'body');
+  expect(actual).toBe('first second');
+  expect(contentPreview(parts)).toBe(actual);
+  expect(contentPreview(parts)).toBe(contentPreview([{type:'text',text:actual}]));
 });

@@ -150,6 +150,7 @@ final class ChatState: ObservableObject {
     @Published private(set) var document: SyncDocument?
     @Published var persistenceError: String?
     @Published private(set) var generations: [Data: ActiveGeneration] = [:]
+    private var branchPreviewCache: [UUID: (parts: OrderedJSON, preview: String)] = [:]
     @Published private(set) var remoteSettings = RemoteSettings()
     @Published var openRouterVerificationError: String?
     private var openRouterVerificationTasks: [Data:Task<Void,Never>] = [:]
@@ -184,7 +185,7 @@ final class ChatState: ObservableObject {
     private var pendingTitleContexts: [UUID:(legacy:RemoteCredentialRecord,client:RemoteClient,read:ProviderModels.CredentialReader)] = [:]
     private var generationTasks: [UUID: Task<Void, Never>] = [:]
     private var streamStatusBridge: SharedWebOperations.Session?
-    private var generationTargetBridge: SharedWebOperations.Session?
+    private var generationBridge: SharedWebOperations.Session?
     private let store: LocalStateStore?
     private let localGenerate: LocalLlama.Generator
     private let localEvaluationGenerate: LocalLlama.Generator?
@@ -218,6 +219,25 @@ final class ChatState: ObservableObject {
         }
     }
     func generation(for chatID: String) -> ActiveGeneration? { generations[Data(chatID.utf8)] }
+    func generation(for chatID: String, nodeID: String) -> ActiveGeneration? {
+        guard let current = generation(for: chatID),
+              current.chatID.utf8.elementsEqual(chatID.utf8),
+              case .string(let target) = current.plan?["targetNodeId"],
+              target.utf8.elementsEqual(nodeID.utf8),
+              (try? generationTargetIsCurrent(current)) == true else { return nil }
+        return current
+    }
+    func branchPreview(for current: ActiveGeneration) -> String? {
+        if let cached = branchPreviewCache[current.id], cached.parts == current.output.parts { return cached.preview }
+        do {
+            if generationBridge == nil { generationBridge = try SharedWebOperations.Session() }
+            let result = try generationBridge!.call("branchLayout", .object([
+                .init(key:"operation",value:.string("preview")), .init(key:"content",value:current.output.parts)]))
+            let preview = try result.required("preview").string("branch preview")
+            branchPreviewCache[current.id] = (current.output.parts, preview)
+            return preview
+        } catch { return nil }
+    }
     var hasGenerations: Bool { !generations.isEmpty }
     var hasRunningLocalGeneration: Bool { generations.values.contains { $0.running && !$0.usesRemoteTransport } }
     var canUndoMessageEdit: Bool { !hasGenerations && (editingHistory?.canUndo ?? false) }
@@ -233,6 +253,7 @@ final class ChatState: ObservableObject {
     private func removeGeneration(id: UUID) {
         guard let current = generation(id) else { return }
         generations.removeValue(forKey: Data(current.chatID.utf8))
+        branchPreviewCache.removeValue(forKey: id)
         pendingTitleContexts.removeValue(forKey: id)
         liveUsageTasks.removeValue(forKey: id)?.cancel()
         liveUsageVersions.removeValue(forKey: id)
@@ -249,8 +270,8 @@ final class ChatState: ObservableObject {
         let ticket = OrderedJSON.object([
             .init(key:"kind",value:.string("generation")), .init(key:"chatId",value:.string(current.chatID)),
             .init(key:"nodeId",value:.string(nodeID)), .init(key:"dependencyIds",value:.array(dependencies.map(OrderedJSON.string)))])
-        if generationTargetBridge == nil { generationTargetBridge = try SharedWebOperations.Session() }
-        let result = try generationTargetBridge!.call("aiTaskTarget", .object([
+        if generationBridge == nil { generationBridge = try SharedWebOperations.Session() }
+        let result = try generationBridge!.call("aiTaskTarget", .object([
             .init(key:"ticket",value:ticket),
             .init(key:"before",value:.object([.init(key:"chats",value:.array([try boundary.chat(before)]))])),
             .init(key:"current",value:.object([.init(key:"chats",value:.array([try boundary.chat(latest)]))]))]))

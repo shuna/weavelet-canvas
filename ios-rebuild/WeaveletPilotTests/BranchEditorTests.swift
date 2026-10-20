@@ -81,6 +81,20 @@ final class BranchEditorTests: XCTestCase {
         XCTAssertThrowsError(try BranchGraph(output, requestID: 41))
     }
 
+    func testLivePreviewUsesSharedWebTextRuleWithoutChangingParts() throws {
+        let parts = OrderedJSON.array([
+            .object([.init(key:"type",value:.string("reasoning")),.init(key:"text",value:.string("hidden"))]),
+            .object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string(String(repeating:"x",count:79) + "😀"))])
+        ])
+        let result = try SharedWebOperations.call("branchLayout", .object([
+            .init(key:"operation",value:.string("preview")), .init(key:"content",value:parts)]))
+        XCTAssertEqual(result, .object([.init(key:"preview",value:.string(String(repeating:"x",count:79) + "�..."))]))
+        XCTAssertEqual(parts, .array([
+            .object([.init(key:"type",value:.string("reasoning")),.init(key:"text",value:.string("hidden"))]),
+            .object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string(String(repeating:"x",count:79) + "😀"))])
+        ]))
+    }
+
     func testCurrentAndTwoNodeComparisonsUseSharedWebPaths() throws {
         let state = ChatState()
         try state.importWebData(fixture().encoded())

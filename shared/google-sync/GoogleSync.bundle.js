@@ -8819,7 +8819,7 @@ var WeaveletGoogleSync = (() => {
   }
 
   // src/utils/branchUtils.ts
-  var import_lodash = __toESM(require_lodash());
+  var import_lodash = __toESM(require_lodash(), 1);
 
   // src/utils/contentValidation.ts
   var hasMeaningfulContent = (content) => content.some((part) => {
@@ -23545,6 +23545,12 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     return result3;
   }
 
+  // src/utils/contentPreview.ts
+  function contentPreview(parts) {
+    const text = parts.filter((part) => part.type === "text").map((part) => part.text ?? "").join(" ");
+    return text.length > 80 ? `${text.slice(0, 80)}...` : text;
+  }
+
   // src/utils/diffUtils.ts
   var import_diff_match_patch3 = __toESM(require_diff_match_patch(), 1);
   function wordDiff(a, b) {
@@ -23583,7 +23589,11 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   // shared/google-sync/branchLayout.ts
   var nativePreview = (value) => Array.from(value, (scalar) => scalar.length === 1 && scalar.charCodeAt(0) >= 55296 && scalar.charCodeAt(0) <= 57343 ? "\uFFFD" : scalar).join("");
   function branchLayout(json) {
-    const output2 = layoutBranchEntries(JSON.parse(json));
+    const input = JSON.parse(json);
+    if ("operation" in input && input.operation === "preview") {
+      return JSON.stringify({ preview: nativePreview(contentPreview(input.content ?? [])) });
+    }
+    const output2 = layoutBranchEntries(input);
     for (const node of output2.rfNodes)
       node.data.contentPreview = nativePreview(node.data.contentPreview);
     return JSON.stringify(output2);
