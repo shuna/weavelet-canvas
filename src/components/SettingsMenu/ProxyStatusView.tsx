@@ -39,12 +39,9 @@ export function ProxyStatusView({ config }: { config: ProxyConfig }) {
   const [recovering, setRecovering] = useState<string>();
   useEffect(() => {
     let active = true;
-    let fetching = false;
     let abort: AbortController | undefined;
     setStatus(undefined);
     const load = async () => {
-      if (fetching) return;
-      fetching = true;
       setLoading(true);
       abort = new AbortController();
       const timer = setTimeout(() => abort?.abort(), 8_000);
@@ -58,13 +55,11 @@ export function ProxyStatusView({ config }: { config: ProxyConfig }) {
         if (active) setError(e instanceof Error && e.name !== 'AbortError' ? e.message : '状態の取得がタイムアウトしました');
       } finally {
         clearTimeout(timer);
-        fetching = false;
         if (active) setLoading(false);
       }
     };
     void load();
-    const poll = setInterval(() => { void load(); }, 5_000);
-    return () => { active = false; abort?.abort(); clearInterval(poll); };
+    return () => { active = false; abort?.abort(); };
   }, [config.endpoint, config.authToken, selectedId, cursor, refresh]);
 
   const removeStorage = async (sessionId?: string) => {
@@ -84,7 +79,7 @@ export function ProxyStatusView({ config }: { config: ProxyConfig }) {
     <div className='flex flex-wrap items-center gap-3'>
       <span className='font-mono break-all'>{config.endpoint}</span>
       <button type='button' className='btn btn-neutral' disabled={loading} onClick={() => setRefresh(n => n + 1)}>更新</button>
-      <span className='text-xs text-gray-500 dark:text-gray-400'>{loading ? '確認中…' : `5秒ごとに更新 · 最終確認 ${time(status?.checkedAt)}`}</span>
+      <span className='text-xs text-gray-500 dark:text-gray-400'>{loading ? '確認中…' : `手動更新 · 最終確認 ${time(status?.checkedAt)}`}</span>
     </div>
     <form className='flex gap-2' onSubmit={event => { event.preventDefault(); setSelectedId(manualId.trim()); setRefresh(n => n + 1); }}>
       <input className='flex-1 min-w-0 rounded border p-2 dark:bg-gray-800 dark:border-gray-600' aria-label='調べるプロキシセッションID' placeholder='セッションIDを指定して照会' value={manualId} onChange={event => setManualId(event.target.value)} />

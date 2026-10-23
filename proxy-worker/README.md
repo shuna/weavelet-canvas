@@ -4,6 +4,14 @@ CloudFlare Worker that proxies SSE streams from LLM APIs with disconnect recover
 
 **This is an optional component.** The main application works without it. Deploy this if you want server-side stream buffering to recover from client disconnections.
 
+## Emergency suspension
+
+`PROXY_SUSPENDED = "true"` in `wrangler.toml` suspends the proxy to stop Durable Objects operations. All requests except `/health` and OPTIONS return 503 before accessing storage or upstream APIs. Both Durable Object classes also reject requests and skip alarm cleanup without rescheduling. Existing data is retained; expiry cleanup is paused. `/health` reports `status: "suspended"`.
+
+The public endpoint and preview URLs are also disabled with `workers_dev = false` and `preview_urls = false`, so browser requests to those URLs do not invoke the Worker. Browsers may continue attempting requests until the page is closed or polling is stopped.
+
+Deploy with `npx wrangler deploy --config /absolute/path/to/proxy-worker/wrangler.toml`. Keep suspension enabled until the operation-limit cause is resolved. Resuming requires setting the variable to `"false"`, restoring the required public endpoint settings, and redeploying; alarms consumed during suspension are not automatically restored.
+
 ## Security considerations
 
 **API key passthrough:** The client sends LLM API keys (e.g. `Authorization: Bearer sk-...`) inside the request body. The Worker forwards them verbatim to the LLM endpoint. Keys are **not** logged or stored, but they do transit through the Cloudflare Worker. If you are deploying this proxy for other users, make sure they understand this trust model. For production deployments, consider having the Worker inject API keys from Cloudflare secrets instead.
@@ -22,7 +30,7 @@ Changed snapshots are saved every 10 seconds throughout the stream, without a li
 
 ## Inspecting proxy state
 
-Open **Settings → Proxy → プロキシの状態を確認**. The view refreshes every five seconds and lists stored records from all devices and runtimes in pages of twenty, comparing local recovery cursors where available. It shows the Worker version, Cloudflare data center, execution-instance identifier, relay phase, received/buffered bytes, cache-write failures, expiry, and classified termination reason. A session ID from another device can be entered manually.
+Open **Settings → Proxy → プロキシの状態を確認**. The view fetches once when opened; subsequent refreshes require the **更新** button or an explicit action such as changing pages or looking up an ID. It lists stored records from all devices and runtimes in pages of twenty, comparing local recovery cursors where available. It shows the Worker version, Cloudflare data center, execution-instance identifier, relay phase, received/buffered bytes, cache-write failures, expiry, and classified termination reason. A session ID from another device can be entered manually.
 
 The authenticated `GET /api/status?all=1` API enumerates the shared registry and reads metadata directly from each durable session, including requests this browser has never seen. It requires configured `PROXY_AUTH_TOKEN`. The response uses `scope: "all-sessions"`, `nextCursor`, and `unavailableSessions`; repeat with `cursor` to browse further pages. It never returns prompt/response bodies or provider credentials. Expired/removed diagnostic records are omitted; a page can be empty while still exposing a cursor for later registry entries. Missing objects are distinct from temporarily unavailable lookups, which are counted and shown as errors.
 
