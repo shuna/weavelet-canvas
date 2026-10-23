@@ -1,11 +1,13 @@
 import type { ProxyStatus } from './diagnostics';
 import { DIAGNOSTIC_TTL_MS } from './recoveryStore';
 
-interface RegistryEnv { SESSIONS: DurableObjectNamespace }
+interface RegistryEnv { SESSIONS: DurableObjectNamespace; PROXY_SUSPENDED?: string }
 // Only opaque object IDs are indexed; response bodies and credentials stay in their session.
 export class SessionRegistry {
   constructor(private state: DurableObjectState, private env: RegistryEnv) {}
   async fetch(request: Request) {
+    if (this.env.PROXY_SUSPENDED === 'true')
+      return Response.json({ error: 'Proxy temporarily suspended' }, { status: 503 });
     const url = new URL(request.url), storage = this.state.storage;
     if (request.method === 'PUT') {
       const { objectId } = await request.json() as { objectId: string };
@@ -58,6 +60,7 @@ export class SessionRegistry {
     return new Response('Not Found', { status: 404 });
   }
   async alarm() {
+    if (this.env.PROXY_SUSPENDED === 'true') return;
     let cursor: string | undefined;
     while (true) {
       const records = await this.state.storage.list<{ expiresAt: number }>({ prefix: 'session:', limit: 100, ...(cursor ? { startAfter: cursor } : {}) });

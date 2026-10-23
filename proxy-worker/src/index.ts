@@ -3,6 +3,7 @@ import { RecoveryStore, type RecoveryCache } from './recoveryStore';
 import { forgetDiagnostic, getInstanceId, sessionDiagnostics, startDiagnostic, type ProxyStatus } from './diagnostics';
 export interface Env {
   PROXY_AUTH_TOKEN: string;
+  PROXY_SUSPENDED?: string;
   SESSIONS?: DurableObjectNamespace;
   REGISTRY?: DurableObjectNamespace;
   recoveryStore?: RecoveryStore;
@@ -795,7 +796,9 @@ const worker = {
       return jsonResponse({ error: 'Invalid path encoding' }, 400);
     }
     if (url.pathname === '/health')
-      return jsonResponse({ status: 'ok', version: '0.6.0' });
+      return jsonResponse({ status: env.PROXY_SUSPENDED === 'true' ? 'suspended' : 'ok', version: '0.6.0' });
+    if (env.PROXY_SUSPENDED === 'true')
+      return jsonResponse({ error: 'Proxy temporarily suspended' }, 503);
     if (url.pathname.startsWith('/api/') && !authenticated(request, env))
       return jsonResponse({ error: 'Unauthorized' }, 401);
     if (url.pathname === '/api/storage' && request.method === 'DELETE') {
@@ -894,6 +897,8 @@ export class ProxySession {
     this.store = new RecoveryStore(state.storage);
   }
   async fetch(request: Request) {
+    if (this.env.PROXY_SUSPENDED === 'true')
+      return jsonResponse({ error: 'Proxy temporarily suspended' }, 503);
     const url = new URL(request.url);
     if (request.method === 'GET' && url.pathname === '/internal/status') {
       const diagnostic = await this.store.diagnostic();
@@ -921,5 +926,8 @@ export class ProxySession {
       waitUntil: (promise: Promise<unknown>) => this.state.waitUntil(promise),
     } as ExecutionContext);
   }
-  alarm() { return this.store.alarm(); }
+  alarm() {
+    if (this.env.PROXY_SUSPENDED === 'true') return;
+    return this.store.alarm();
+  }
 }
