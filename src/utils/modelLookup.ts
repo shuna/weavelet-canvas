@@ -434,15 +434,19 @@ export function getModelDefaultMaxTokens(
   modelSource?: 'remote' | 'local'
 ): number {
   const context = getModelContextInfo(modelId, providerId, modelSource);
+  const outputLimit = getModelOutputLimit(modelId, providerId, modelSource);
+  const contextLimit = getMaxCompletionTokensForContext(context.contextLength);
+  if (outputLimit != null) return context.isFallback ? outputLimit : Math.min(outputLimit, contextLimit);
+  return context.isFallback ? defaultUserMaxToken : contextLimit;
+}
+
+export function getModelOutputLimit(modelId: string, providerId?: ProviderId, modelSource?: 'remote' | 'local'): number | undefined {
   const state = useStore.getState();
   const lanCustom = providerId === 'lan' ? findProviderCustomModel(state.providerCustomModels, modelId, providerId) : undefined;
-  const outputLimit = lanCustom ? lanCustom.maxCompletionTokens : modelSource === 'local' ? undefined : [
+  return lanCustom ? lanCustom.maxCompletionTokens : modelSource === 'local' ? undefined : [
     findProviderCustomModel(state.providerCustomModels, modelId, providerId),
     findFavorite(state.favoriteModels, modelId, providerId),
     findCachedModel(state.providerModelCache, modelId, providerId),
   ].map((model) => model?.maxCompletionTokens)
     .find((limit) => limit != null && Number.isFinite(limit) && limit > 0);
-  const contextLimit = getMaxCompletionTokensForContext(context.contextLength);
-  if (outputLimit != null) return context.isFallback ? outputLimit : Math.min(outputLimit, contextLimit);
-  return context.isFallback ? defaultUserMaxToken : contextLimit;
 }

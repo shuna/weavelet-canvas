@@ -1,4 +1,6 @@
 import { _defaultChatConfig } from '@constants/chat';
+import { getModelCapabilities, getModelContextInfo, isModelStreamSupported } from './modelLookup';
+import useStore from '@store/store';
 import { getModelDefaultMaxTokens } from './modelLookup';
 import type { ConfigInterface, ModelSettings } from '@type/chat';
 
@@ -23,34 +25,38 @@ export const pickModelSettings = (config: ConfigInterface): ModelSettings => ({
   force_reasoning: config.force_reasoning,
 });
 
+export const commonModelSettings = (
+  target: Pick<ConfigInterface, 'model' | 'providerId' | 'modelSource'>
+): ModelSettings => {
+  const shared = useStore.getState().defaultChatConfig;
+  const defaults = pickModelSettings(shared ?? _defaultChatConfig);
+  const modelLimit = getModelDefaultMaxTokens(target.model, target.providerId, target.modelSource);
+  return {
+    ...defaults,
+    openRouter: target.providerId === 'openrouter' && target.modelSource !== 'local'
+      ? (shared?.providerId === 'openrouter' ? defaults.openRouter : undefined) ?? defaultOpenRouterSettings() : undefined,
+    reasoning_effort: defaults.reasoning_effort ?? 'none',
+    reasoning_budget_tokens: defaults.reasoning_budget_tokens ?? 0,
+    force_reasoning: defaults.force_reasoning ?? false,
+    stream: isModelStreamSupported(target.model, target.providerId, target.modelSource) && defaults.stream !== false,
+    max_tokens: shared ? (shared.max_tokens === 0 ? 0 : Math.min(shared.max_tokens, modelLimit)) : modelLimit,
+  };
+};
+
+export const commonModelRevision = (config: ConfigInterface): string => JSON.stringify([
+  modelKey(config), getModelContextInfo(config.model, config.providerId, config.modelSource),
+  commonModelSettings(config), getModelCapabilities(config.model, config.providerId, config.modelSource),
+]);
+
 export const savedModelSettings = (
   config: ConfigInterface,
   target: Pick<ConfigInterface, 'model' | 'providerId' | 'modelSource'>
-): ModelSettings => {
-  if (modelKey(config) === modelKey(target)) return pickModelSettings(config);
-  const saved = config.modelSettings?.[modelKey(target)];
-  if (saved) return { ...saved, openRouter: saved.openRouter ? structuredClone(saved.openRouter) : undefined };
-  return {
-    ...pickModelSettings(_defaultChatConfig),
-    openRouter: target.providerId === 'openrouter' && target.modelSource !== 'local'
-      ? defaultOpenRouterSettings() : undefined,
-    max_tokens: getModelDefaultMaxTokens(target.model, target.providerId, target.modelSource),
-  };
-};
+): ModelSettings => modelKey(config) === modelKey(target) ? pickModelSettings(config) : commonModelSettings(target);
 
 export const switchConfigModel = (
   config: ConfigInterface,
   target: Pick<ConfigInterface, 'model' | 'providerId' | 'modelSource'>
 ): ConfigInterface => {
   if (modelKey(config) === modelKey(target)) return config;
-  const modelSettings = {
-    ...config.modelSettings,
-    [modelKey(config)]: pickModelSettings(config),
-  };
-  return {
-    ...config,
-    ...savedModelSettings({ ...config, modelSettings }, target),
-    ...target,
-    modelSettings,
-  };
+  return { ...config, ...commonModelSettings(target), ...target, modelSettings: undefined, modelReview: undefined };
 };

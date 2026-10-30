@@ -283,3 +283,8 @@ describe('prepareStreamRequest reasoning payloads', () => {
     expect(body).not.toHaveProperty('modelSettings');
   });
 });
+
+it('does not send the chat model review marker to an inference server', () => {
+  const request = prepareStreamRequest('http://server/chat', messages, { ...baseConfig, providerId: 'lan', modelReview: 'reviewed-common-definition' });
+  expect(request.body).not.toHaveProperty('modelReview');
+});

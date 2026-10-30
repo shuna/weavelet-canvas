@@ -1,3 +1,4 @@
+import { InfoTooltip } from '@components/ConfigMenu/fields';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
@@ -23,15 +24,13 @@ export default function LanProviderSettings({ onDirtyChange }: { onDirtyChange?:
     event.preventDefault();
     try { save(form); setDirty(false); setError(''); } catch { setError(t('lan.invalidSettings') as string); }
   }}>
-    <label className='block text-sm'>{t('lan.endpoint')}<input className={inputClass} value={form.endpoint} onChange={event => update({ endpoint: event.target.value })} /></label>
+    <label className='block text-sm'>{t('lan.endpoint')}{form.endpoint.trim().startsWith('http:') && <InfoTooltip warning text={t('lan.httpWarning')} />}<input className={inputClass} value={form.endpoint} onChange={event => update({ endpoint: event.target.value })} /></label>
     <label className='block text-sm'>{t('lan.modelsEndpoint')}<input className={inputClass} value={form.modelsEndpoint ?? ''} onChange={event => update({ modelsEndpoint: event.target.value })} /></label>
     <label className='block text-sm'>{t('lan.authentication')}<select className={inputClass} value={String(form.modelsRequireAuth)} onChange={event => update({ modelsRequireAuth: event.target.value === 'true' })}>
       <option value='false'>{t('lan.noAuth')}</option><option value='true'>Bearer API key</option>
     </select></label>
     {form.modelsRequireAuth && <label className='block text-sm'>API key<input type='password' autoComplete='off' className={inputClass} value={form.apiKey ?? ''} onChange={event => update({ apiKey: event.target.value })} /></label>}
-    {form.endpoint.trim().startsWith('http:') && <p className='text-sm'>{t('lan.httpWarning')}</p>}
-    <p className='text-xs'>{t('lan.connectionHelp')}</p>
-    {error && <p role='alert' className='text-sm text-red-500'>{error}</p>}
     <button type='submit' disabled={!dirty} className='px-3 py-1.5 rounded bg-blue-600 text-white disabled:opacity-50'>{t('custom.save', 'Save')}</button>
+    {error && <InfoTooltip warning text={error} />}
   </form>;
 }

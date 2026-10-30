@@ -157,7 +157,8 @@ describe('model completion defaults', () => {
     expect(getModelDefaultMaxTokens('invalid', 'openrouter')).toBe(4000);
     expect(getModelDefaultMaxTokens('output-only', 'openrouter')).toBe(16000);
     const config = { ..._defaultChatConfig, model: 'output', providerId: 'openrouter' as const };
-    expect(normalizeConfigStream(config).max_tokens).toBe(32000);
+    expect(normalizeConfigStream(config)).toBe(config);
+    expect(normalizeConfigStream(config).max_tokens).toBe(_defaultChatConfig.max_tokens);
     expect(normalizeConfigStream({ ...config, max_tokens: 1000 }).max_tokens).toBe(1000);
     expect(normalizeConfigStream({ ...config, max_tokens: 0 }).max_tokens).toBe(0);
   });

@@ -60,6 +60,7 @@ const buildRequestBody = (
     verbosity,
     force_reasoning,
     modelSettings,
+    modelReview,
     openRouter,
     systemPrompt,
     modelSource,

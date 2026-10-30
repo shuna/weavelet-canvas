@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { cancelAiTask, cancelAiTaskRequest, isAiTaskCurrent, type AiTaskTicket } from './aiTaskLifetime';
 import { isOpenRouterEndpoint, observeOpenRouterHeaders, observeOpenRouterUsage, type OpenRouterRequestContext } from '@utils/openrouterControls';
 import { recordOpenRouterObservation } from '@utils/openrouterObservation';
@@ -924,7 +925,7 @@ export const executeSubmitStream = async ({
     const swAvailable = !swDisabled && await swBridge.waitForController();
     if (!canApply()) return;
     if (swAvailable) {
-      const requestId = crypto.randomUUID();
+      const requestId = uuidv4();
       const prepared = prepareStreamRequest(
         resolvedProvider.endpoint,
         requestMessages,
@@ -1050,7 +1051,7 @@ export const executeSubmitStream = async ({
 
     // --- Path 2: Proxy without SW (fetch proxy SSE directly) ---
     if (proxyConfig) {
-      const requestId = crypto.randomUUID();
+      const requestId = uuidv4();
       const proxySessionId = `${chatId}:${requestId}`;
       setSessionCancelMeta(sessionId, { proxySessionId });
       const prepared = prepareStreamRequest(

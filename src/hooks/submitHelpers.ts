@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { validateLanProvider } from '@utils/lanProvider';
 import { DEFAULT_PROVIDERS } from '@store/provider-config';
 import { beginAiTask, finishAiTask, isAiTaskCurrent } from './aiTaskLifetime';
@@ -435,7 +436,7 @@ export const maybeGenerateAutoTitle = async ({
   const titleChatIndex = titleChats.findIndex((chat) => chat.id === chatId);
   if (titleChatIndex < 0) return;
 
-  const ticket = beginAiTask({ requestId: crypto.randomUUID(), kind: 'title', chatId, dependencyIds: [] });
+  const ticket = beginAiTask({ requestId: uuidv4(), kind: 'title', chatId, dependencyIds: [] });
   let title: string;
   try {
     title = (await generateTitleForChat([promptMessage], sourceConfig ?? titleChats[titleChatIndex].config, deps)).trim();

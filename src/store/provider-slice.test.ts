@@ -32,3 +32,19 @@ it('registers favorites from both entry points without replacing user-edited met
   expect(get().providerCustomModels.lan?.[0].supportsVision).toBe(false);
   expect(get().providerCustomModels.lan?.[0].contextLength).toBeUndefined();
 });
+
+it('refreshes LAN context metadata without changing current or historical chat parameters', () => {
+  const get = store();
+  const config = { model: 'custom', providerId: 'lan', max_tokens: 700, temperature: 0.3, modelSettings: { saved: { max_tokens: 123 } } };
+  const chats = [{ id: 'one', config }];
+  Object.assign(get(), { chats });
+  get().addProviderCustomModel({ modelId: 'custom', providerId: 'lan', modelType: 'text', contextLength: 8192, supportsVision: true });
+  get().setFavoriteModels([{ modelId: 'custom', providerId: 'lan', contextLength: 8192 }]);
+  get().setProviderModelCache('lan', [{ id: 'custom', name: 'Custom', providerId: 'lan', contextLength: 65536 }]);
+  expect(get().providerCustomModels.lan?.[0]).toMatchObject({ contextLength: 65536, supportsVision: true });
+  expect(get().favoriteModels[0].contextLength).toBe(65536);
+  expect((get() as any).chats).toBe(chats);
+  expect(chats[0].config).toBe(config);
+  expect(chats[0].config.max_tokens).toBe(700);
+  expect(chats[0].config.modelSettings.saved.max_tokens).toBe(123);
+});

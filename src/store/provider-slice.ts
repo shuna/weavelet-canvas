@@ -97,7 +97,17 @@ export const createProviderSlice: StoreSlice<ProviderSlice> = (set, get) => ({
       return {
         ...prev,
         providerModelCache: { ...prev.providerModelCache, [id]: models },
-        favoriteModels: backfillFavoritesFromProviderModels(
+        providerCustomModels: id === 'lan' ? {
+          ...prev.providerCustomModels,
+          lan: prev.providerCustomModels.lan?.map(model => {
+            const received = models.find(entry => entry.id === model.modelId);
+            return received?.contextLength ? { ...model, contextLength: received.contextLength } : model;
+          }),
+        } : prev.providerCustomModels,
+        favoriteModels: id === 'lan' ? prev.favoriteModels.map(model => {
+          const received = model.providerId === 'lan' ? models.find(entry => entry.id === model.modelId) : undefined;
+          return received?.contextLength ? { ...model, contextLength: received.contextLength } : model;
+        }) : backfillFavoritesFromProviderModels(
           prev.favoriteModels,
           id,
           models

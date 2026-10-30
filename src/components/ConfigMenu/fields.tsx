@@ -70,7 +70,7 @@ export const FieldDescription = ({ children }: { children: React.ReactNode }) =>
   </div>
 );
 
-export const InfoTooltip = ({ text }: { text: React.ReactNode }) => {
+export const InfoTooltip = ({ text, warning = false }: { text: React.ReactNode; warning?: boolean }) => {
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [position, setPosition] = useState({ left: 0, top: 0 });
@@ -121,10 +121,10 @@ export const InfoTooltip = ({ text }: { text: React.ReactNode }) => {
   return (
     <div className='relative inline-flex ml-1' ref={ref} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
       <button type='button'
-        className='inline-flex items-center justify-center w-4 h-4 rounded-full text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors'
-        onClick={() => setPinned(v => !v)} aria-label='Info' aria-expanded={open} aria-describedby={open ? id : undefined}>
+        className={`inline-flex items-center justify-center w-4 h-4 rounded-full transition-colors ${warning ? 'text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'}`}
+        onClick={() => setPinned(v => !v)} aria-label={warning ? 'Warning' : 'Info'} aria-expanded={open} aria-describedby={open ? id : undefined}>
         <svg width='14' height='14' viewBox='0 0 20 20' fill='currentColor'>
-          <path fillRule='evenodd' d='M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z' clipRule='evenodd' />
+          {warning ? <path fillRule='evenodd' d='M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l6.58 11.698c.75 1.334-.213 2.983-1.742 2.983H3.42c-1.53 0-2.493-1.649-1.743-2.983L8.257 3.1zM10 7a1 1 0 00-1 1v3a1 1 0 002 0V8a1 1 0 00-1-1zm0 8a1 1 0 100-2 1 1 0 000 2z' clipRule='evenodd' /> : <path fillRule='evenodd' d='M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z' clipRule='evenodd' />}
         </svg>
       </button>
       {open && createPortal(<div ref={tooltipRef} id={id} role='tooltip'

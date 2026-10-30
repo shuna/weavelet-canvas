@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { localModelRuntime } from '@src/local-llm/runtime';
 import { beginAiTask, finishAiTask, isAiTaskCurrent } from './aiTaskLifetime';
 import i18next from 'i18next';
@@ -8,9 +9,9 @@ import { useTranslation } from 'react-i18next';
 import { useRef, useState } from 'react';
 import { countTokens, limitMessageTokens, loadEncoder } from '@utils/messageUtils';
 import { hasMeaningfulMessageContent } from '@utils/contentValidation';
-import { getModelContextInfo } from '@utils/modelLookup';
+import { getModelOutputLimit, getModelContextInfo } from '@utils/modelLookup';
 import { confirmChatModelFavorite, resolveChatModel } from '@utils/chatModelResolution';
-import { fitsContextWindow, getPromptBudgetForContext } from '@utils/tokenBudget';
+import { fitsContextWindow, getMaxCompletionTokensForContext, getPromptBudgetForContext } from '@utils/tokenBudget';
 import {
   applySubmitTokenUsage,
   buildGeneratingSession,
@@ -98,8 +99,16 @@ const useSubmit = () => {
       return;
     }
     if (resolved?.providerId) submitConfig.providerId = resolved.providerId;
+    const currentContext = getModelContextInfo(submitConfig.model, submitConfig.providerId, submitConfig.modelSource);
+    const outputLimit = getModelOutputLimit(submitConfig.model, submitConfig.providerId, submitConfig.modelSource);
+    if ((outputLimit !== undefined && submitConfig.max_tokens > outputLimit) ||
+        (!currentContext.isFallback && submitConfig.max_tokens > getMaxCompletionTokensForContext(currentContext.contextLength))) {
+      setError(i18next.t('model:modelUpdate.exceedsLimit') as string);
+      return;
+    }
 
-    const sessionId = crypto.randomUUID();
+
+    const sessionId = uuidv4();
     const abortController = createSubmitAbortController(sessionId);
 
     const { updatedChats, messageIndex, targetNodeId, contentStore } = insertAssistantPlaceholder(
