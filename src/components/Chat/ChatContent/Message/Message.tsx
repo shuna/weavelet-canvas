@@ -1,3 +1,4 @@
+import PopupModal from '@components/PopupModal';
 import { normalizeBubbleSummaryText } from '@utils/bubbleSummary';
 import { useSyncReview, acknowledgeSyncNode } from '@store/storage/google/conflicts';
 import { useTranslation } from 'react-i18next';
@@ -256,6 +257,12 @@ const Message = React.memo(
           const chat = state.chats?.[currentChatIndex];
           if (!chat) return null;
           const resolvedIndex = chat.branchTree?.activePath.indexOf(resolvedNodeId) ?? -1;
+          let evaluationProvider;
+          try {
+            evaluationProvider = resolveProviderForModel(chat.config.model, state.favoriteModels || [], state.providers || {}, { endpoint: state.apiEndpoint, key: state.apiKey }, chat.config.providerId);
+          } catch (error) {
+            return <PopupModal setIsModalOpen={setIsEvalModalOpen} message={error instanceof Error ? error.message : String(error)} />;
+          }
           return (
             <EvaluationModal
               chatId={chatId}
@@ -264,13 +271,7 @@ const Message = React.memo(
               messageIndex={resolvedIndex >= 0 ? resolvedIndex : messageIndex}
               phase={role === 'user' ? 'pre-send' : 'post-receive'}
               role={role}
-              resolvedProvider={resolveProviderForModel(
-                chat.config.model,
-                state.favoriteModels || [],
-                state.providers || {},
-                { endpoint: state.apiEndpoint, key: state.apiKey },
-                chat.config.providerId
-              )}
+              resolvedProvider={evaluationProvider}
               model={chat.config.model}
               setIsModalOpen={setIsEvalModalOpen}
               initialTab={evalInitialTab}

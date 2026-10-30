@@ -461,3 +461,13 @@ it('preserves bubble interruption and request identity through chat persistence 
   applyPersistedChatDataState(restored as never, saved);
   expect(restored.chats![0].branchTree!.nodes['node-2'].streamState).toEqual(node.streamState);
 });
+
+
+it('normalizes providers from old sync snapshots before committing hydrated state', async () => {
+  const { prepareHydratedData } = await import('./rehydrateData');
+  const future = { id: 'future', name: 'Future', endpoint: 'https://future.test/chat', modelsRequireAuth: false };
+  const prepared = prepareHydratedData({ base: {}, persisted: { chats: [], providers: { openai: DEFAULT_PROVIDERS.openai, future } as never }, savedIndex: -1 });
+  expect(prepared.state.providers?.lan).toEqual(DEFAULT_PROVIDERS.lan);
+  expect(prepared.state.providers?.openai).toEqual(DEFAULT_PROVIDERS.openai);
+  expect(prepared.state.providers).toHaveProperty('future', future);
+});
