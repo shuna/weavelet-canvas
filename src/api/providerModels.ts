@@ -13,6 +13,7 @@ type ProviderModelPayload = {
   name?: unknown;
   context_length?: unknown;
   context_window?: unknown;
+  meta?: unknown;
   top_provider?: unknown;
   created?: unknown;
   pricing?: unknown;
@@ -130,6 +131,8 @@ const normalizeModelEntry = (
 
   if (providerId === 'lan') return {
     id, name, providerId, modelType: 'text', streamSupport: true,
+    contextLength: [payload.context_length, payload.context_window, isRecord(payload.meta) ? payload.meta.n_ctx : undefined]
+      .find((value): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value > 0),
     supportsReasoning: false, supportsVision: false, supportsAudio: false,
   };
 

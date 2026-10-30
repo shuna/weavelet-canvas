@@ -32,3 +32,14 @@ it('does not fetch for missing or invalid settings', async () => {
   await expect(fetchProviderModels({ ...provider, modelsEndpoint: 'http://other/models' })).rejects.toThrow();
   expect(fetcher).not.toHaveBeenCalled();
 });
+
+it('reads explicit LAN context limits including Strata metadata without guessing missing values', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [
+    { id: 'strata', meta: { n_ctx: 65536 } },
+    { id: 'standard', context_length: 32768, meta: { n_ctx: 65536 } },
+    { id: 'window', context_window: 8192 },
+    { id: 'invalid', context_length: -1, context_window: 1.5, meta: { n_ctx: '65536' } },
+  ] }))));
+  const models = await fetchProviderModels(provider);
+  expect(models.map(model => model.contextLength)).toEqual([65536, 32768, 8192, undefined]);
+});

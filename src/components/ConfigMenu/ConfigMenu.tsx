@@ -1,3 +1,4 @@
+import ModelUpdateNotice from './ModelUpdateNotice';
 import OpenRouterFields from './OpenRouterFields';
 import { validateOpenRouterSettings, canUseOpenRouterResponseCache } from '@utils/openrouterControls';
 import React, { useEffect, useRef, useState } from 'react';
@@ -16,7 +17,7 @@ import {
 import { getModelDefaultMaxTokens } from '@utils/modelLookup';
 import { ModelOptions } from '@type/chat';
 import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupport';
-import { clampCompletionTokens, getMaxCompletionTokensForContext } from '@utils/tokenBudget';
+import { getMaxCompletionTokensForContext } from '@utils/tokenBudget';
 import { _defaultChatConfig } from '@constants/chat';
 import { SYSTEM_PROMPT_PRESETS } from '@constants/systemPromptPresets';
 import useStore from '@store/store';
@@ -207,6 +208,7 @@ const ConfigMenu = ({
   const [_systemPrompt, _setSystemPrompt] = useState<string>(config.systemPrompt ?? '');
   const [_openRouter, _setOpenRouter] = useState(config.openRouter);
   const [_modelSettings, _setModelSettings] = useState(config.modelSettings ?? {});
+  const [_modelReview, _setModelReview] = useState(config.modelReview);
   const { t } = useTranslation('model');
   const isStreamSupported = isModelStreamSupported(_model, _providerId, _modelSource);
   const reasoningDetected = useModelSupportsReasoning(_model, _providerId);
@@ -227,34 +229,25 @@ const ConfigMenu = ({
     maxVerbositySupported
   );
 
+  const draft = {
+    max_tokens: _maxToken, model: _model, providerId: _providerId, modelSource: _modelSource,
+    temperature: _temperature, presence_penalty: _presencePenalty, top_p: _topP, frequency_penalty: _frequencyPenalty,
+    stream: _stream, reasoning_effort: _reasoningEffort, reasoning_budget_tokens: _reasoningBudget,
+    verbosity: _verbosity, force_reasoning: _forceReasoning, systemPrompt: _systemPrompt || undefined,
+    openRouter: _openRouter, modelReview: _modelReview, modelSettings: _modelSettings,
+  };
+  const inputs = JSON.stringify(draft);
+  const previousDraft = useRef(draft);
   useEffect(() => {
-    if (!isStreamSupported && _stream) {
-      _setStream(false);
-    }
-  }, [isStreamSupported, _stream]);
-
-  useEffect(() => {
-    const modelContextLength = getModelConfigContextInfo(_model, _providerId, _modelSource).contextLength;
     if (_providerId === 'openrouter' && validateOpenRouterSettings(_openRouter, _model, canUseOpenRouterResponseCache())) return;
-    setConfig(normalizeConfigStream({
-      max_tokens: clampCompletionTokens(_maxToken, modelContextLength),
-      model: _model,
-      temperature: _temperature,
-      presence_penalty: _presencePenalty,
-      top_p: _topP,
-      frequency_penalty: _frequencyPenalty,
-      stream: _stream,
-      providerId: _providerId,
-      modelSource: _modelSource,
-      reasoning_effort: reasoningSupported ? effectiveReasoningEffort : undefined,
-      reasoning_budget_tokens: reasoningSupported ? _reasoningBudget : undefined,
-      verbosity: verbositySupported ? effectiveVerbosity : undefined,
-      force_reasoning: reasoningForced || undefined,
-      systemPrompt: _systemPrompt || undefined,
-      openRouter: _openRouter,
-      modelSettings: _modelSettings,
-    }));
-  }, [_maxToken, _model, _providerId, _modelSource, _temperature, _presencePenalty, _topP, _frequencyPenalty, _stream, _reasoningEffort, _reasoningBudget, _verbosity, _systemPrompt, _modelSettings, _openRouter, reasoningSupported, reasoningForced, reasoningRequired, verbositySupported, maxVerbositySupported]);
+    const patch = Object.fromEntries(Object.entries(draft).filter(([key, value]) =>
+      JSON.stringify(value) !== JSON.stringify(previousDraft.current[key as keyof typeof draft])
+    )) as Partial<ConfigInterface>;
+    previousDraft.current = draft;
+    if (!Object.keys(patch).length) return;
+    if (Object.hasOwn(patch, 'modelSettings')) patch.modelSettings = undefined;
+    setConfig({ ...config, ...patch });
+  }, [inputs]);
 
   useEffect(() => {
     if (_imageDetail !== imageDetail) setImageDetail(_imageDetail);
@@ -307,6 +300,7 @@ const ConfigMenu = ({
                 openRouter: _openRouter,
                 modelSettings: _modelSettings,
               }, { model: modelId, providerId, modelSource });
+              _setModelReview(undefined);
               _setModel(next.model);
               _setProviderId(next.providerId);
               _setModelSource(next.modelSource);
@@ -326,6 +320,15 @@ const ConfigMenu = ({
             _label={t('model')}
             className=''
           />
+          {!auxiliary && <ModelUpdateNotice config={{ ...config, modelReview: _modelReview }}
+            onReview={_setModelReview} onApply={(settings, revision) => {
+              _setMaxToken(settings.max_tokens); _setTemperature(settings.temperature);
+              _setPresencePenalty(settings.presence_penalty); _setTopP(settings.top_p); _setFrequencyPenalty(settings.frequency_penalty);
+              _setStream(settings.stream !== false); _setReasoningEffort(settings.reasoning_effort);
+              _setReasoningBudget(settings.reasoning_budget_tokens ?? 0); _setVerbosity(settings.verbosity);
+              _setForceReasoning(settings.force_reasoning ?? false); _setOpenRouter(settings.openRouter);
+              _setModelSettings({}); _setModelReview(revision);
+            }} />}
           {auxiliary && <div className='flex justify-end'><ResetButton visible={_model !== _defaultChatConfig.model || _providerId !== _defaultChatConfig.providerId} onClick={() => { _setModel(_defaultChatConfig.model); _setProviderId(_defaultChatConfig.providerId); _setModelSource(undefined); }} /></div>}
           <CapabilityBadges
             reasoning={capabilities.reasoning}
@@ -635,11 +638,6 @@ export const MaxTokenSlider = ({
   const maxForModel = getMaxForModel();
   const maxCompletionForModel = getMaxCompletionTokensForContext(maxForModel);
 
-  useEffect(() => {
-    if (_maxToken > maxCompletionForModel) {
-      _setMaxToken(maxCompletionForModel);
-    }
-  }, [_maxToken, _setMaxToken, maxCompletionForModel]);
 
   return (
     <RangeField
@@ -647,7 +645,7 @@ export const MaxTokenSlider = ({
       value={_maxToken}
       onChange={_setMaxToken}
       min={0}
-      max={maxCompletionForModel}
+      max={Math.max(maxCompletionForModel, _maxToken)}
       step={1}
       description={t('token.description')}
       defaultValue={getModelDefaultMaxTokens(_model, _providerId, _modelSource)}

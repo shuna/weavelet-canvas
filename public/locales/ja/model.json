@@ -200,9 +200,17 @@
     "noAuth": "なし",
     "invalidSettings": "URLとBearer APIキーを確認してください。2つのURLは同じoriginにしてください。",
     "httpWarning": "通信内容とAPIキーは暗号化されません。",
-    "connectionHelp": "同じLAN、サーバー起動、URL、ブラウザのLAN許可、サーバーのCORS設定を確認してください。一覧URLが空欄ならモデルを手動登録します。",
     "discardChanges": "未保存のLAN設定を破棄しますか？",
     "auxiliaryPolicy": "LAN会話のタイトル・要約・品質評価には元会話のLANモデルを使用します。",
     "safetyPolicy": "LAN会話の安全性評価は、明示選択した端末内分類器だけで行います。外部への代替送信は行いません。"
+  },
+  "modelUpdate": {
+    "unreviewed": "共通モデル情報が未確認、または更新されています。チャットの値は保持しています。",
+    "different": "このチャットには共通設定と異なる値があります。",
+    "context": "現在の文脈上限：{{count}}トークン",
+    "values": "このチャット：{{current}} / 共通：{{common}}",
+    "keep": "現在の値を維持",
+    "replaceAll": "共通設定ですべて上書き",
+    "exceedsLimit": "出力上限が現在のモデル上限を超えています。チャット設定で値を調整するか、共通設定を適用してください。"
   }
 }

@@ -1,3 +1,4 @@
+import { InfoTooltip } from '@components/ConfigMenu/fields';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -42,7 +43,7 @@ const ProviderMenu = ({
   const confirmDiscard = () => !lanDirty.current || window.confirm(t('lan.discardChanges') as string);
   const [selectedProvider, setSelectedProvider] = useState<ProviderId>('openrouter');
   const [viewMode, setViewMode] = useState<ViewMode>('browse');
-  const { models, loading, errors, loadModels, refreshModels } = useProviderModels(providers);
+  const { models, loading, errors, loadModels, refreshModels } = useProviderModels(providers, selectedProvider);
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<SortField>('alpha');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -194,7 +195,7 @@ const ProviderMenu = ({
               onSelectProvider={handleProviderChange}
             />
 
-            <div className='flex-1 flex flex-col overflow-hidden'>
+            <div className={`flex-1 min-h-0 min-w-0 flex flex-col ${selectedProvider === 'lan' ? 'overflow-y-auto md:overflow-hidden' : 'overflow-hidden'}`}>
               {/* Browse / Custom tabs */}
               <div className='flex border-b dark:border-gray-600'>
                 <button
@@ -219,6 +220,7 @@ const ProviderMenu = ({
                 </button>
               </div>
 
+              <div className={`flex flex-col overflow-hidden min-h-0 ${selectedProvider === 'lan' ? 'h-56 shrink-0 md:h-auto md:shrink md:flex-1' : 'flex-1'}`}>
               {viewMode === 'browse' ? (
                 <>
                   <ProviderModelList
@@ -248,8 +250,9 @@ const ProviderMenu = ({
               )}
 
               <LocalModelListSection />
+              </div>
 
-              {errors[selectedProvider] && <p role='alert' className='p-2 text-sm text-red-500'>{errors[selectedProvider]}</p>}
+              {errors[selectedProvider] && (selectedProvider === 'lan' ? <div className='px-3'><InfoTooltip warning text={errors[selectedProvider]} /></div> : <p role='alert' className='p-2 text-sm text-red-500'>{errors[selectedProvider]}</p>)}
               <ProviderSettingsForm
                 onLanDirtyChange={onLanDirtyChange}
                 selectedProvider={selectedProvider}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { validateLanProvider } from '@utils/lanProvider';
 import { fetchProviderModels } from '@api/providerModels';
 import useStore from '@store/store';
 import { ProviderConfig, ProviderId, ProviderModel } from '@type/provider';
@@ -74,7 +75,7 @@ export const sortModels = (
     });
 };
 
-export const useProviderModels = (providers: Record<ProviderId, ProviderConfig>) => {
+export const useProviderModels = (providers: Record<ProviderId, ProviderConfig>, selectedProvider?: ProviderId) => {
   const cachedModels = useStore((state) => state.providerModelCache);
   const setProviderModelCache = useStore((state) => state.setProviderModelCache);
   const [models, setModels] = useState<ProviderModelMap>(() => ({ ...cachedModels }));
@@ -160,6 +161,14 @@ export const useProviderModels = (providers: Record<ProviderId, ProviderConfig>)
     },
     []
   );
+
+  useEffect(() => {
+    if (selectedProvider !== 'lan') return;
+    try {
+      const provider = validateLanProvider(providers.lan);
+      if (provider.endpoint && provider.modelsEndpoint) void refreshModels('lan', providers.lan);
+    } catch { /* Incomplete saved settings must not trigger a request. */ }
+  }, [selectedProvider, providers.lan, refreshModels]);
 
   return {
     errors,

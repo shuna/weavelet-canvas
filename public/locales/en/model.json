@@ -221,9 +221,17 @@
     "noAuth": "None",
     "invalidSettings": "Check the URLs and Bearer API key. Both URLs must use the same origin.",
     "httpWarning": "HTTP does not encrypt messages or the API key.",
-    "connectionHelp": "Check LAN access, the server URL, browser LAN permission and server CORS settings. Leave the model list URL blank for manual registration.",
     "discardChanges": "Discard unsaved LAN settings?",
     "auxiliaryPolicy": "LAN conversations use their own LAN model for titles, summaries and quality evaluation.",
     "safetyPolicy": "LAN conversations use only an explicitly selected local classifier for safety evaluation, with no remote fallback."
+  },
+  "modelUpdate": {
+    "unreviewed": "Common model information is unreviewed or has changed. Your chat settings have been kept.",
+    "different": "This chat has settings different from the common defaults.",
+    "context": "Current context limit: {{count}} tokens",
+    "values": "This chat: {{current}} / Common: {{common}}",
+    "keep": "Keep current values",
+    "replaceAll": "Overwrite all with common settings",
+    "exceedsLimit": "The output setting exceeds the current model limit. Adjust it in chat settings or apply the common settings."
   }
 }

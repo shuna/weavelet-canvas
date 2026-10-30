@@ -103,21 +103,22 @@ describe('OpenRouter request controls', () => {
 });
 
 describe('model-scoped OpenRouter settings', () => {
-  it('restores independent nested settings and distinguishes a legacy missing field', () => {
+  it('creates independent common settings on model switches without retaining historical overrides', () => {
     vi.spyOn(useStore, 'getState').mockReturnValue({ providerCustomModels: {}, favoriteModels: [], providerModelCache: {} } as never);
     const next = switchConfigModel(config, { model: 'openai/gpt-4.1', providerId: 'openrouter' });
     expect(next.openRouter).toEqual({ stickySession: true, responseCache: { mode: 'off' } });
     next.openRouter!.responseCache!.mode = 'on';
     const restored = switchConfigModel(next, { model: config.model, providerId: 'openrouter' });
-    expect(restored.openRouter).toEqual(config.openRouter);
+    expect(restored.openRouter).toEqual({ stickySession: true, responseCache: { mode: 'off' } });
+    expect(restored.modelSettings).toBeUndefined();
     expect(restored.openRouter).not.toBe(config.openRouter);
-    restored.openRouter!.routing!.only!.push('other');
+    restored.openRouter!.responseCache!.mode = 'on';
     expect(config.openRouter!.routing!.only).toEqual(['anthropic']);
     const other = switchConfigModel(config, { model: config.model, providerId: 'openai' });
     expect(other.openRouter).toBeUndefined();
     const legacy = { ...config, modelSettings: { [JSON.stringify(['remote', 'openrouter', 'legacy'])]: { ..._defaultChatConfig } } };
-    expect(savedModelSettings(legacy, { model: 'legacy', providerId: 'openrouter' })).toHaveProperty('openRouter', undefined);
-    expect(switchConfigModel(legacy, { model: 'legacy', providerId: 'openrouter' }).openRouter).toBeUndefined();
+    expect(savedModelSettings(legacy, { model: 'legacy', providerId: 'openrouter' }).openRouter).toEqual({ stickySession: true, responseCache: { mode: 'off' } });
+    expect(switchConfigModel(legacy, { model: 'legacy', providerId: 'openrouter' }).modelSettings).toBeUndefined();
   });
   it('copies defaults and all snapshots without changing existing conversations', () => {
     const defaults = { ...config, modelSettings: { old: { ..._defaultChatConfig, openRouter: config.openRouter } } };

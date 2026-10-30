@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { localModelRuntime } from '@src/local-llm/runtime';
 import { beginAiTask, cancelAiTask, finishAiTask, isAiTaskCurrent, ownsAiTask, evaluationDependencyIds, type AiTaskTicket } from './aiTaskLifetime';
 import { showToast } from '@utils/showToast';
@@ -43,7 +44,7 @@ export interface EvaluationContext {
 function evaluationTask(chatId: string, nodeId: string, phase: 'pre-send' | 'post-receive', parent?: AiTaskTicket) {
   const key = evaluationResultKey(chatId, nodeId, phase);
   const controller = new AbortController();
-  const ticket = beginAiTask({ requestId: crypto.randomUUID(), chatId, nodeId, parent,
+  const ticket = beginAiTask({ requestId: uuidv4(), chatId, nodeId, parent,
     kind: phase === 'pre-send' ? 'evaluation-pre' : 'evaluation-post',
     dependencyIds: evaluationDependencyIds(chatId, nodeId, phase),
     cancel: () => {

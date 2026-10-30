@@ -25,10 +25,9 @@ import {
   _defaultImageDetail,
   _defaultSystemMessage,
 } from '@constants/chat';
-import { getModelConfigContextInfo, useModelRequiresReasoning, useModelSupportsReasoning } from '@utils/modelLookup';
+import { useModelRequiresReasoning, useModelSupportsReasoning } from '@utils/modelLookup';
 import { getEffectiveReasoningEffort } from '@utils/reasoning';
 import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupport';
-import { clampCompletionTokens } from '@utils/tokenBudget';
 import { savedModelSettings, switchConfigModel } from '@utils/modelSettings';
 import { ModelOptions, ReasoningEffort } from '@type/chat';
 import { ImageDetail } from '@type/chat';
@@ -248,16 +247,10 @@ const ChatConfigPopup = ({
   const isStreamSupported = isModelStreamSupported(_model, _providerId, _modelSource);
   const reasoningRequired = useModelRequiresReasoning(_model, _providerId);
 
-  React.useEffect(() => {
-    if (!isStreamSupported && _stream) {
-      _setStream(false);
-    }
-  }, [isStreamSupported, _stream]);
 
   const handleSave = () => {
     const error = _providerId === 'openrouter' ? validateOpenRouterSettings(_openRouter, _model, canUseOpenRouterResponseCache()) : undefined;
     if (error) { showToast(t(error) as string, 'error'); return; }
-    const modelContextLength = getModelConfigContextInfo(_model, _providerId, _modelSource).contextLength;
     const nextConfig = normalizeConfigStream({
       ...config,
       ...savedModelSettings(
@@ -265,7 +258,7 @@ const ChatConfigPopup = ({
         { model: _model, providerId: _providerId, modelSource: _modelSource }
       ),
       model: _model,
-      max_tokens: clampCompletionTokens(_maxToken, modelContextLength),
+      max_tokens: _maxToken,
       temperature: _temperature,
       top_p: _topP,
       presence_penalty: _presencePenalty,
@@ -425,11 +418,6 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
   const isStreamSupported = isModelStreamSupported(_model, _providerId, _modelSource);
   const reasoningRequired = useModelRequiresReasoning(_model, _providerId);
 
-  React.useEffect(() => {
-    if (!isStreamSupported && _stream) {
-      _setStream(false);
-    }
-  }, [isStreamSupported, _stream]);
 
   // Keep refs in sync for unmount save
   const stateRef = useRef({
@@ -452,7 +440,6 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
       const error = s._providerId === 'openrouter' ? validateOpenRouterSettings(s._openRouter, s._model, canUseOpenRouterResponseCache()) : undefined;
       if (error) { showToast(t(error) as string, 'error'); return; }
       const currentConfig = useStore.getState().defaultChatConfig;
-      const modelContextLength = getModelConfigContextInfo(s._model, s._providerId, s._modelSource).contextLength;
       const nextConfig = normalizeConfigStream({
         ...currentConfig,
         ...savedModelSettings(
@@ -460,7 +447,7 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
           { model: s._model, providerId: s._providerId, modelSource: s._modelSource }
         ),
         model: s._model,
-        max_tokens: clampCompletionTokens(s._maxToken, modelContextLength),
+        max_tokens: s._maxToken,
         temperature: s._temperature,
         top_p: s._topP,
         presence_penalty: s._presencePenalty,

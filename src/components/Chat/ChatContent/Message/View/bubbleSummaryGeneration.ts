@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import useStore from '@store/store';
 import { generateBubbleSummary } from '@hooks/submitHelpers';
@@ -21,7 +22,7 @@ export async function startBubbleSummary(chat: ChatInterface, indices: number[],
   const sources = indices.map(index => ({ nodeId: path[index], parentId: chat.branchTree!.nodes[path[index]].parentId, role: chat.messages[index].role as 'user' | 'assistant', textParts: chat.messages[index].content.filter(isTextContent).map(value => value.text) }));
   if (Object.values(useSummaryGeneration.getState().jobs).some(job => job.busy && job.chatId === chat.id && (job.originNodeId === originNodeId || job.sourceNodeIds.some(id => sources.some(source => source.nodeId === id))))) return false;
   const previous = chat.summaries?.find(summary => summary.mode === mode && summary.format === deps.summaryFormat && summary.sources.length === sources.length && summary.sources.every((source, index) => source.nodeId === sources[index].nodeId));
-  const summary: BubbleSummary = { id: previous?.id ?? crypto.randomUUID(), mode, format: deps.summaryFormat, sources, text: '', useForSubmit: false };
+  const summary: BubbleSummary = { id: previous?.id ?? uuidv4(), mode, format: deps.summaryFormat, sources, text: '', useForSubmit: false };
   const key = `${chat.id}:${originNodeId}`;
   const job: SummaryJob = { chatId: chat.id, originNodeId, sourceNodeIds: sources.map(source => source.nodeId), mode, format: deps.summaryFormat, busy: true, error: '' };
   useSummaryGeneration.setState(state => ({ jobs: { ...Object.fromEntries(Object.entries(state.jobs).filter(([, previousJob]) => previousJob.busy || previousJob.chatId !== chat.id || !previousJob.sourceNodeIds.some(id => job.sourceNodeIds.includes(id)))), [key]: job } }));

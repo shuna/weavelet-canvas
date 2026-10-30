@@ -270,6 +270,8 @@ export interface ConfigInterface {
   modelSource?: 'remote' | 'local';
   /** Generation settings saved per model and provider in this chat. */
   modelSettings?: Record<string, ModelSettings>;
+  /** Last acknowledged common model definition for the active model only. */
+  modelReview?: string;
 }
 
 export interface ChatHistoryInterface {
