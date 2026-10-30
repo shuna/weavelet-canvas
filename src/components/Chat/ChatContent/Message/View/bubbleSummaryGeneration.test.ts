@@ -88,3 +88,10 @@ it.each([undefined, 'compact'] as const)('saves and selects format %s of an omit
   expect(mocks.save).toHaveBeenCalledWith('chat', expect.objectContaining({ text: 'Summary' }));
   expect(mocks.choose).toHaveBeenCalledOnce();
 });
+
+it('records the LAN conversation model despite a separate summary config', async () => {
+  const value = mocks.state.chats[0]; value.config.providerId = 'lan';
+  mocks.generate.mockResolvedValue('Summary');
+  expect(await startBubbleSummary(value, [0], 'single', 'a', { ...deps, summaryConfig: { ...value.config, model: 'cloud', providerId: 'openai' } })).toBe(true);
+  expect(mocks.save).toHaveBeenCalledWith('chat', expect.objectContaining({ generation: expect.objectContaining({ model: 'gpt-4o', providerId: 'lan' }) }));
+});

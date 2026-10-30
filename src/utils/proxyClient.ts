@@ -80,7 +80,8 @@ export async function deleteProxyStorage(config: ProxyConfig, sessionId?: string
   return deleted;
 }
 
-export function getProxyConfig(): ProxyConfig | undefined {
+export function getProxyConfig(providerId?: string): ProxyConfig | undefined {
+  if (providerId === 'lan') return undefined;
   const { proxyEnabled, proxyEndpoint, proxyAuthToken } = useStore.getState();
   const endpoint = proxyEndpoint?.trim().replace(/\/+$/, '');
   if (!proxyEnabled || !endpoint) return undefined;

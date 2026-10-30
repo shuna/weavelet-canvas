@@ -1,3 +1,4 @@
+import { validateLanProvider } from '@utils/lanProvider';
 import { StoreSlice } from './store';
 import {
   CustomProviderModel,
@@ -20,6 +21,7 @@ export interface ProviderSlice {
   providerCustomModels: Partial<Record<ProviderId, CustomProviderModel[]>>;
   _legacyCustomModels?: unknown[];
   showProviderMenu: boolean;
+  saveLanProvider: (config: ProviderConfig) => void;
   setProviderApiKey: (id: ProviderId, key: string) => void;
   setProviderEndpoint: (id: ProviderId, endpoint: string) => void;
   toggleFavoriteModel: (model: FavoriteModel) => void;
@@ -32,6 +34,16 @@ export interface ProviderSlice {
   clearLegacyCustomModels: () => void;
 }
 
+function registerLanFavorites(previous: ProviderSlice, favorites: FavoriteModel[]) {
+  const models = [...(previous.providerCustomModels.lan ?? [])];
+  for (const favorite of favorites) {
+    if (favorite.providerId !== 'lan' || models.some(model => model.modelId === favorite.modelId)) continue;
+    const cached = previous.providerModelCache.lan?.find(model => model.id === favorite.modelId);
+    models.push({ ...cached, ...favorite, name: cached?.name, modelType: 'text' });
+  }
+  return { ...previous.providerCustomModels, lan: models };
+}
+
 export const createProviderSlice: StoreSlice<ProviderSlice> = (set, get) => ({
   providers: { ...DEFAULT_PROVIDERS },
   favoriteModels: [],
@@ -39,6 +51,14 @@ export const createProviderSlice: StoreSlice<ProviderSlice> = (set, get) => ({
   providerCustomModels: {},
   _legacyCustomModels: undefined,
   showProviderMenu: false,
+  saveLanProvider: (config) => {
+    const validated = validateLanProvider({ ...config, id: 'lan' });
+    set((prev: ProviderSlice) => ({
+      providers: { ...prev.providers, lan: validated },
+      providerModelCache: { ...prev.providerModelCache, lan: undefined },
+    }));
+  },
+
   setProviderApiKey: (id: ProviderId, key: string) => {
     if (get().providers[id]?.apiKey === key) return;
     set((prev: ProviderSlice) => ({
@@ -60,6 +80,7 @@ export const createProviderSlice: StoreSlice<ProviderSlice> = (set, get) => ({
       return {
         ...prev,
         favoriteModels: toggleFavoriteModelEntry(prev.favoriteModels, model),
+        providerCustomModels: registerLanFavorites(prev, [model]),
       };
     });
   },
@@ -68,6 +89,7 @@ export const createProviderSlice: StoreSlice<ProviderSlice> = (set, get) => ({
     set((prev: ProviderSlice) => ({
       ...prev,
       favoriteModels: models,
+      providerCustomModels: registerLanFavorites(prev, models),
     }));
   },
   setProviderModelCache: (id: ProviderId, models: ProviderModel[]) => {

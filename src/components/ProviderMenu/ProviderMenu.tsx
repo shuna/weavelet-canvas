@@ -37,9 +37,12 @@ const ProviderMenu = ({
   const setApiVersion = useStore((state) => state.setApiVersion);
   const toggleFavoriteModel = useStore((state) => state.toggleFavoriteModel);
 
+  const lanDirty = useRef(false);
+  const onLanDirtyChange = useCallback((dirty: boolean) => { lanDirty.current = dirty; }, []);
+  const confirmDiscard = () => !lanDirty.current || window.confirm(t('lan.discardChanges') as string);
   const [selectedProvider, setSelectedProvider] = useState<ProviderId>('openrouter');
   const [viewMode, setViewMode] = useState<ViewMode>('browse');
-  const { models, loading, loadModels, refreshModels } = useProviderModels(providers);
+  const { models, loading, errors, loadModels, refreshModels } = useProviderModels(providers);
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<SortField>('alpha');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -64,7 +67,7 @@ const ProviderMenu = ({
   }, [selectedProvider, providers, apiVersion]);
 
   useEffect(() => {
-    loadModels(selectedProvider);
+    if (selectedProvider !== 'lan') loadModels(selectedProvider);
   }, [loadModels, selectedProvider]);
 
   // Keep refs in sync for unmount save
@@ -81,6 +84,7 @@ const ProviderMenu = ({
     options?: { notify?: boolean }
   ) => {
     const s = stateOverride ?? stateRef.current;
+    if (s.selectedProvider === 'lan') return false;
     const currentProviders = useStore.getState().providers;
     const currentProvider = normalizeProviderConfig(
       s.selectedProvider,
@@ -109,6 +113,7 @@ const ProviderMenu = ({
   }, []);
 
   const handleProviderChange = useCallback((nextProvider: ProviderId) => {
+    if (!confirmDiscard()) return;
     saveSettings(stateRef.current, { notify: false });
     setSelectedProvider(nextProvider);
   }, [saveSettings]);
@@ -126,6 +131,7 @@ const ProviderMenu = ({
   );
 
   const handleClose = () => {
+    if (!confirmDiscard()) return;
     saveSettings(undefined, { notify: false });
     setIsModalOpen(false);
   };
@@ -243,7 +249,9 @@ const ProviderMenu = ({
 
               <LocalModelListSection />
 
+              {errors[selectedProvider] && <p role='alert' className='p-2 text-sm text-red-500'>{errors[selectedProvider]}</p>}
               <ProviderSettingsForm
+                onLanDirtyChange={onLanDirtyChange}
                 selectedProvider={selectedProvider}
                 providers={providers}
                 endpointInput={endpointInput}

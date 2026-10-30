@@ -162,3 +162,17 @@ describe('model completion defaults', () => {
     expect(normalizeConfigStream({ ...config, max_tokens: 0 }).max_tokens).toBe(0);
   });
 });
+
+it('keeps LAN metadata isolated and respects cleared custom limits', () => {
+  vi.mocked(useStore.getState).mockReturnValue({
+    providerCustomModels: { lan: [{ modelId: 'o1-vision', providerId: 'lan', modelType: 'text', supportsReasoning: false }] },
+    favoriteModels: [{ modelId: 'o1-vision', providerId: 'lan', contextLength: 128000, maxCompletionTokens: 32000 }],
+    providerModelCache: { openai: [{ id: 'o1-vision', providerId: 'openai', contextLength: 200000, supportsReasoning: true }] },
+  } as never);
+  expect(getModelSupportsReasoning('o1-vision', 'lan')).toBe(false);
+  expect(getModelContextInfo('o1-vision', 'lan')).toEqual({ contextLength: UNKNOWN_MODEL_CONTEXT_LENGTH, isFallback: true });
+  expect(getModelDefaultMaxTokens('o1-vision', 'lan')).not.toBe(32000);
+  vi.mocked(useStore.getState).mockReturnValue({ providerCustomModels: {}, favoriteModels: [], providerModelCache: { openai: [{ id: 'o1-test', contextLength: 200000 }] } } as never);
+  expect(getModelContextInfo('o1-test', 'lan').isFallback).toBe(true);
+  expect(getModelSupportsReasoning('o1-test', 'lan')).toBe(false);
+});

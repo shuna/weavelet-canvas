@@ -69,6 +69,7 @@ export interface ProxyStreamConfig {
 }
 
 export interface StartStreamParams {
+  providerId?: string;
   signal?: AbortSignal;
   requestId: string;
   chatId: string;
@@ -150,6 +151,21 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
   if (!controller) {
     channel.port1.close();
     throw new Error('Service Worker controller not available');
+  }
+
+  if (params.providerId === 'lan') {
+    const probe = new MessageChannel();
+    const supported = await new Promise<boolean>(resolve => {
+      const timer = setTimeout(() => resolve(false), 3000);
+      probe.port1.onmessage = event => { clearTimeout(timer); resolve(event.data?.lanDirect === true); };
+      controller.postMessage({ type: 'lanCapabilities' }, [probe.port2]);
+    });
+    probe.port1.close();
+    if (!supported) {
+      channel.port1.close();
+      await deleteRequest(requestId);
+      throw new Error('Update the Service Worker and reload before using LAN streaming');
+    }
   }
 
   const failHeartbeat = (reason: string) => {
@@ -325,6 +341,7 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
   controller.postMessage(
     {
       type: 'startStream',
+      providerId: params.providerId,
       requestId,
       chatId,
       nodeId,

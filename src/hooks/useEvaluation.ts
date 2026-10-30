@@ -30,6 +30,7 @@ function extractText(content: ContentInterface[]): string {
 }
 
 export interface EvaluationContext {
+  providerId?: import('@type/provider').ProviderId;
   chatId: string;
   nodeId: string;
   parentTicket?: AiTaskTicket;
@@ -89,7 +90,7 @@ async function runEvaluationForPhase(
     const { safetyEngine, hybridRemoteOnSafe } = settings;
 
     // Prepare local evaluation models before first use
-    if (store.localModelEnabled) {
+    if (store.localModelEnabled && ctx.providerId !== 'lan') {
       const evalIds: string[] = [];
       if (analysisModelId) evalIds.push(analysisModelId);
       if (shouldSafety && !analysisModelId && moderationModelId) evalIds.push(moderationModelId);
@@ -105,7 +106,9 @@ async function runEvaluationForPhase(
       // --- Local safety (if engine is local or hybrid) ---
       if (safetyEngine === 'local' || safetyEngine === 'hybrid') {
         try {
-          result.localSafety = await runLocalModeration(textToCheck, localModelOwnerId, ticket.controller.signal, moderationModelId);
+          result.localSafety = ctx.providerId === 'lan'
+            ? await runLanLocalSafety(textToCheck, ticket.controller.signal)
+            : await runLocalModeration(textToCheck, localModelOwnerId, ticket.controller.signal, moderationModelId);
         } catch (e) {
           console.warn('[evaluation] local safety screening failed:', e);
         }
@@ -128,7 +131,7 @@ async function runEvaluationForPhase(
           !result.localSafety
         ));
 
-      if (shouldRunRemote) {
+      if (shouldRunRemote && ctx.providerId !== 'lan') {
         try {
           result.safety = await runSafetyCheck(textToCheck, ctx.openRouter, ticket.controller.signal);
         } catch (e) {
@@ -138,9 +141,10 @@ async function runEvaluationForPhase(
       }
     }
 
+    if (ctx.providerId === 'lan' && shouldSafety && !result.localSafety) showToast('Safety evaluation is unavailable: LAN conversations do not use remote moderation', 'error');
     if (!isAiTaskCurrent(ticket)) return;
     if (shouldQuality && userText) {
-      if (analysisModelId) {
+      if (analysisModelId && ctx.providerId !== 'lan') {
         // Use local quality evaluation as the primary evaluator
         if (userText) {
           try {
@@ -171,7 +175,8 @@ async function runEvaluationForPhase(
             i18next.language,
             undefined,
             ctx.openRouter,
-            ticket.controller.signal
+            ticket.controller.signal,
+            ctx.providerId
           );
         } catch (e) {
           console.warn('[evaluation] quality evaluation failed:', e);
@@ -222,6 +227,18 @@ export async function runPostReceiveEvaluation(
   await runEvaluationForPhase('post-receive', userText, assistantText, ctx);
 }
 
+export async function runLanLocalSafety(text: string, signal?: AbortSignal) {
+  const state = useStore.getState();
+  const engine = state.evaluationSettings.safetyEngine;
+  const modelId = state.localModelEnabled ? state.activeLocalModels.analysis ?? state.activeLocalModels.moderation : undefined;
+  if ((engine !== 'local' && engine !== 'hybrid') || !modelId) throw new Error('LAN safety evaluation requires an available local classifier');
+  const owner = createLocalModelOwner('lan-safety');
+  try {
+    await prepareModelsForExecution(owner, [modelId], { signal });
+    return await runLocalModeration(text, owner, signal, modelId);
+  } finally { releaseModelsForExecution(owner); }
+}
+
 /**
  * Hook providing manual evaluation trigger functions.
  */
@@ -239,6 +256,11 @@ export function useEvaluation() {
       const ticket = evaluationTask(chatId, nodeId, phase);
       store.setEvaluationPending(key, true);
       try {
+        if (resolvedProvider.providerId === 'lan' || store.chats?.find(c => c.id === chatId)?.config.providerId === 'lan') {
+          const localSafety = await runLanLocalSafety(text, ticket.controller.signal);
+          if (isAiTaskCurrent(ticket)) useStore.getState().setEvaluationResult(key, { ...useStore.getState().evaluationResults[key], phase, localSafety });
+          return;
+        }
         const safety = await runSafetyCheck(text, store.chats?.find(c => c.id === chatId)?.config.openRouter, ticket.controller.signal);
         if (!isAiTaskCurrent(ticket)) return;
         const existing = useStore.getState().evaluationResults[key];
@@ -248,7 +270,7 @@ export function useEvaluation() {
           safety,
         });
       } catch (e) {
-        console.warn('[evaluation] manual safety check failed:', e);
+        showToast(e instanceof Error ? e.message : String(e), 'error');
       } finally {
         if (ownsAiTask(ticket)) useStore.getState().setEvaluationPending(key, false);
         finishAiTask(ticket);
@@ -278,7 +300,7 @@ export function useEvaluation() {
           ? (store.activeLocalModels['analysis'] ?? null)
           : null;
 
-        if (analysisModelId) {
+        if (analysisModelId && resolvedProvider.providerId !== 'lan') {
           // Use local quality evaluation
           if (store.localModelEnabled) {
             localModelOwnerId = createLocalModelOwner(`manual-evaluation:${key}`);
@@ -307,7 +329,8 @@ export function useEvaluation() {
             i18next.language,
             undefined,
             store.chats?.find(c => c.id === chatId)?.config.openRouter,
-            ticket.controller.signal
+            ticket.controller.signal,
+            resolvedProvider.providerId
           );
           if (!isAiTaskCurrent(ticket)) return;
           const existing = useStore.getState().evaluationResults[key];

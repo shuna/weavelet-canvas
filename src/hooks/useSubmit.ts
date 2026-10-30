@@ -90,6 +90,15 @@ const useSubmit = () => {
     // Same-chat guard
     if (isChatGenerating(chatId)) return;
 
+    const initialState = useStore.getState();
+    const isLocal = isLocalModelConfig(submitConfig);
+    let resolved: ResolvedProvider | undefined;
+    try { resolved = isLocal ? undefined : resolveProviderForModel(submitConfig.model, initialState.favoriteModels, initialState.providers, fallbackProvider, submitConfig.providerId); } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+      return;
+    }
+    if (resolved?.providerId) submitConfig.providerId = resolved.providerId;
+
     const sessionId = crypto.randomUUID();
     const abortController = createSubmitAbortController(sessionId);
 
@@ -120,9 +129,6 @@ const useSubmit = () => {
       chatId
     );
 
-    const initialState = useStore.getState();
-    const isLocal = isLocalModelConfig(submitConfig);
-    const resolved = isLocal ? undefined : resolveProviderForModel(submitConfig.model, initialState.favoriteModels, initialState.providers, fallbackProvider, submitConfig.providerId);
     const apiVersion = initialState.apiVersion;
     const prefillKey = mode === 'append' ? '__sticky__' : (chats[chatIndex].branchTree?.activePath[(insertIndex ?? 1) - 1] ?? '__sticky__');
     const assistantPrefill = initialState.assistantPrefillMap[prefillKey]?.trim() || undefined;
@@ -174,6 +180,7 @@ const useSubmit = () => {
       // Pre-send evaluation (async, non-blocking)
       const userMsg = [...messages].reverse().find((m) => m.role === 'user');
       const evalCtx: EvaluationContext = {
+        providerId: resolved?.providerId,
         chatId,
         nodeId: targetNodeId,
         parentTicket: ticket,

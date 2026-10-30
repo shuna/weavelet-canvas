@@ -65,7 +65,7 @@ const ResizableSidebar = ({
   );
 };
 
-const ProviderMenuInline = ({ onSettingsChanged }: { onSettingsChanged?: () => void }) => {
+const ProviderMenuInline = ({ onSettingsChanged, onLanDirtyChange: reportLanDirty }: { onSettingsChanged?: () => void; onLanDirtyChange?: (dirty: boolean) => void }) => {
   const { t } = useTranslation('model');
 
   const providers = useStore((state) => state.providers);
@@ -76,9 +76,12 @@ const ProviderMenuInline = ({ onSettingsChanged }: { onSettingsChanged?: () => v
   const setApiVersion = useStore((state) => state.setApiVersion);
   const toggleFavoriteModel = useStore((state) => state.toggleFavoriteModel);
 
+  const lanDirty = useRef(false);
+  const onLanDirtyChange = useCallback((dirty: boolean) => { lanDirty.current = dirty; reportLanDirty?.(dirty); }, [reportLanDirty]);
+  const confirmDiscard = () => !lanDirty.current || window.confirm(t('lan.discardChanges') as string);
   const [selectedProvider, setSelectedProvider] = useState<ProviderId>('openrouter');
   const [viewMode, setViewMode] = useState<ViewMode>('browse');
-  const { models, loading, loadModels, refreshModels } = useProviderModels(providers);
+  const { models, loading, errors, loadModels, refreshModels } = useProviderModels(providers);
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<SortField>('alpha');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -103,7 +106,7 @@ const ProviderMenuInline = ({ onSettingsChanged }: { onSettingsChanged?: () => v
   }, [selectedProvider, providers, apiVersion]);
 
   useEffect(() => {
-    loadModels(selectedProvider);
+    if (selectedProvider !== 'lan') loadModels(selectedProvider);
   }, [loadModels, selectedProvider]);
 
   // Keep refs in sync for unmount save
@@ -121,6 +124,7 @@ const ProviderMenuInline = ({ onSettingsChanged }: { onSettingsChanged?: () => v
     }
   ) => {
     const s = stateOverride ?? stateRef.current;
+    if (s.selectedProvider === 'lan') return false;
     const currentProviders = useStore.getState().providers;
     const currentProvider = normalizeProviderConfig(
       s.selectedProvider,
@@ -146,6 +150,7 @@ const ProviderMenuInline = ({ onSettingsChanged }: { onSettingsChanged?: () => v
   }, []);
 
   const handleProviderChange = useCallback((nextProvider: ProviderId) => {
+    if (!confirmDiscard()) return;
     saveSettings(stateRef.current);
     setSelectedProvider(nextProvider);
   }, [saveSettings]);
@@ -272,7 +277,9 @@ const ProviderMenuInline = ({ onSettingsChanged }: { onSettingsChanged?: () => v
             <LocalModelListSection />
           </div>
 
-          <ProviderSettingsForm
+          {errors[selectedProvider] && <p role='alert' className='p-2 text-sm text-red-500'>{errors[selectedProvider]}</p>}
+              <ProviderSettingsForm
+                onLanDirtyChange={onLanDirtyChange}
             selectedProvider={selectedProvider}
             providers={providers}
             endpointInput={endpointInput}

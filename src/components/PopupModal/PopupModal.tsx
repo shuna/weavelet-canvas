@@ -10,6 +10,7 @@ const PopupModal = ({
   setIsModalOpen,
   handleConfirm,
   handleClose,
+  beforeClose,
   handleClickBackdrop,
   cancelButton = true,
   disableClose = false,
@@ -25,6 +26,7 @@ const PopupModal = ({
   setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
   handleConfirm?: () => void;
   handleClose?: () => void;
+  beforeClose?: () => boolean;
   handleClickBackdrop?: () => void;
   cancelButton?: boolean;
   disableClose?: boolean;
@@ -39,7 +41,7 @@ const PopupModal = ({
   const { t } = useTranslation();
 
   const _handleClose = () => {
-    if (disableClose) return;
+    if (disableClose || beforeClose?.() === false) return;
     handleClose && handleClose();
     setIsModalOpen(false);
   };
@@ -54,7 +56,7 @@ const PopupModal = ({
     if (disableClose) return;
     if (event.key === 'Escape') {
       if (handleClickBackdrop) handleClickBackdrop();
-      else handleClose ? handleClose() : setIsModalOpen(false);
+      else _handleClose();
     } else if (event.key === 'Enter') {
       if (handleConfirm) handleConfirm();
     }
@@ -72,7 +74,7 @@ const PopupModal = ({
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [handleConfirm, handleClose, handleClickBackdrop, disableClose]);
+  }, [handleConfirm, handleClose, handleClickBackdrop, disableClose, beforeClose]);
 
   if (modalRoot) {
     return ReactDOM.createPortal(

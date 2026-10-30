@@ -1,3 +1,4 @@
+import { validateLanProvider } from '@utils/lanProvider';
 import { getProxyConfig, fetchViaProxy } from '@utils/proxyClient';
 import { applyOpenRouterControls, observeOpenRouterHeaders, observeOpenRouterUsage, type OpenRouterRequestContext } from '@utils/openrouterControls';
 import {
@@ -136,13 +137,17 @@ export const getChatCompletion = async (
   signal?: AbortSignal,
   context?: OpenRouterRequestContext
 ) => {
+  if (config.providerId === 'lan') {
+    endpoint = validateLanProvider({ id: 'lan', name: 'LAN', endpoint, modelsRequireAuth: !!apiKey, apiKey }).endpoint;
+    if (!endpoint) throw new Error('LAN generation URL is required');
+  }
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...customHeaders,
   };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
-  if (isAzureEndpoint(endpoint) && apiKey) {
+  if (config.providerId !== 'lan' && isAzureEndpoint(endpoint) && apiKey) {
     headers['api-key'] = apiKey;
 
     const apiVersion = apiVersionToUse ?? '2024-02-01';
@@ -158,9 +163,11 @@ export const getChatCompletion = async (
   endpoint = endpoint.trim();
 
   const body = buildRequestBody(messages, config, { stream: false });
-  const proxyConfig = getProxyConfig();
+  const proxyConfig = getProxyConfig(config.providerId);
   applyOpenRouterControls(endpoint, config, body, headers as Record<string, string>, { ...context, viaProxy: !!proxyConfig });
-  const response = await fetchViaProxy(proxyConfig, endpoint, headers as Record<string, string>, body, signal);
+  const response = config.providerId === 'lan'
+    ? await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(body), signal, credentials: 'omit', redirect: 'error' })
+    : await fetchViaProxy(proxyConfig, endpoint, headers as Record<string, string>, body, signal);
   if (!response.ok) throw new Error(await response.text());
 
   const data = await response.json();
@@ -178,13 +185,17 @@ export const getChatCompletionStream = async (
   signal?: AbortSignal,
   context?: OpenRouterRequestContext
 ) => {
+  if (config.providerId === 'lan') {
+    endpoint = validateLanProvider({ id: 'lan', name: 'LAN', endpoint, modelsRequireAuth: !!apiKey, apiKey }).endpoint;
+    if (!endpoint) throw new Error('LAN generation URL is required');
+  }
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...customHeaders,
   };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
-  if (isAzureEndpoint(endpoint) && apiKey) {
+  if (config.providerId !== 'lan' && isAzureEndpoint(endpoint) && apiKey) {
     headers['api-key'] = apiKey;
 
     const apiVersion = apiVersionToUse ?? '2024-02-01';
@@ -199,9 +210,11 @@ export const getChatCompletionStream = async (
   }
   endpoint = endpoint.trim();
   const body = buildRequestBody(messages, config, { stream: true });
-  const proxyConfig = getProxyConfig();
+  const proxyConfig = getProxyConfig(config.providerId);
   applyOpenRouterControls(endpoint, config, body, headers as Record<string, string>, { ...context, viaProxy: !!proxyConfig });
-  const response = await fetchViaProxy(proxyConfig, endpoint, headers as Record<string, string>, body, signal);
+  const response = config.providerId === 'lan'
+    ? await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(body), signal, credentials: 'omit', redirect: 'error' })
+    : await fetchViaProxy(proxyConfig, endpoint, headers as Record<string, string>, body, signal);
   if (response.status === 404 || response.status === 405) {
     const text = await response.text();
 
@@ -243,13 +256,17 @@ export const prepareStreamRequest = (
   apiVersionToUse?: string,
   context?: OpenRouterRequestContext
 ): { endpoint: string; headers: Record<string, string>; body: object } => {
+  if (config.providerId === 'lan') {
+    endpoint = validateLanProvider({ id: 'lan', name: 'LAN', endpoint, modelsRequireAuth: !!apiKey, apiKey }).endpoint;
+    if (!endpoint) throw new Error('LAN generation URL is required');
+  }
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...customHeaders,
   };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
-  if (isAzureEndpoint(endpoint) && apiKey) {
+  if (config.providerId !== 'lan' && isAzureEndpoint(endpoint) && apiKey) {
     headers['api-key'] = apiKey;
 
     const apiVersion = apiVersionToUse ?? '2024-02-01';

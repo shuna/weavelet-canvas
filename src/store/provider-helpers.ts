@@ -20,7 +20,7 @@ export const normalizeProviderConfig = (
 export const normalizeProviderConfigs = (
   providers?: Partial<Record<ProviderId, ProviderConfig>>
 ): Record<ProviderId, ProviderConfig> =>
-  Object.fromEntries(
+  Object.assign({}, providers, Object.fromEntries(
     Object.keys(DEFAULT_PROVIDERS).map((providerId) => [
       providerId,
       normalizeProviderConfig(
@@ -28,7 +28,7 @@ export const normalizeProviderConfigs = (
         providers?.[providerId as ProviderId]
       ),
     ])
-  ) as Record<ProviderId, ProviderConfig>;
+  )) as Record<ProviderId, ProviderConfig>;
 
 export const updateProviderConfig = (
   providers: Record<ProviderId, ProviderConfig>,

@@ -1,3 +1,5 @@
+import { validateLanProvider } from '@utils/lanProvider';
+import { DEFAULT_PROVIDERS } from '@store/provider-config';
 import { beginAiTask, finishAiTask, isAiTaskCurrent } from './aiTaskLifetime';
 import { assertAuxiliaryEndpoint, hardOpenRouterConstraints } from '@utils/openrouterControls';
 import { getChatCompletion } from '@api/api';
@@ -42,6 +44,7 @@ const effectiveSummaryChat = (chat: ChatInterface, chatIndex: number): ChatInter
 };
 
 export type ResolvedProvider = {
+  providerId?: ProviderId;
   endpoint: string;
   key?: string;
 };
@@ -128,23 +131,20 @@ export const resolveProviderForModel = (
 ): ResolvedProvider => {
   // If providerId is specified, resolve directly
   if (providerId) {
-    const provider = normalizeProviderConfig(providerId, providers[providerId]);
-    return { endpoint: provider.endpoint, key: provider.apiKey };
+    if (!Object.hasOwn(DEFAULT_PROVIDERS, providerId)) throw new Error('Unsupported provider');
+    let provider = normalizeProviderConfig(providerId, providers[providerId]);
+    if (providerId === 'lan') {
+      provider = validateLanProvider(provider);
+      if (!provider.endpoint) throw new Error('LAN generation URL is required');
+    }
+    return { providerId, endpoint: provider.endpoint, key: provider.apiKey };
   }
 
   // Fallback to favoriteModels lookup
   const favorite = favoriteModels.find((entry) => entry.modelId === modelId);
   if (!favorite) return fallback;
 
-  const provider = normalizeProviderConfig(
-    favorite.providerId,
-    providers[favorite.providerId]
-  );
-
-  return {
-    endpoint: provider.endpoint,
-    key: provider.apiKey,
-  };
+  return resolveProviderForModel(modelId, [], providers, fallback, favorite.providerId);
 };
 
 /** Check if model supports system role (reasoning models don't) */
@@ -246,7 +246,7 @@ export const getSubmitContextMessages = (
   const sanitized = sanitizeMessagesForSubmit(withoutSystem);
 
   // Prepend config system prompt if non-empty and model supports it
-  const supportsSystem = modelId ? modelSupportsSystemRole(modelId) : true;
+  const supportsSystem = chat?.config.providerId === 'lan' ? true : modelId ? modelSupportsSystemRole(modelId) : true;
   if (systemPrompt && supportsSystem) {
     return [
       { role: 'system', content: [{ type: 'text', text: systemPrompt } as TextContentInterface] },
@@ -312,8 +312,8 @@ export const generateTitleForChat = async (
   deps: TitleGenerationDeps
 ): Promise<string> => {
   try {
-    const titleModel = deps.titleModel ?? modelConfig.model;
-    const titleProviderId = deps.titleModel ? deps.titleProviderId : modelConfig.providerId;
+    const titleModel = modelConfig.providerId === 'lan' ? modelConfig.model : deps.titleModel ?? modelConfig.model;
+    const titleProviderId = modelConfig.providerId !== 'lan' && deps.titleModel ? deps.titleProviderId : modelConfig.providerId;
     const titleChatConfig = { ...modelConfig, model: titleModel, providerId: titleProviderId, openRouter: { routing: hardOpenRouterConstraints(modelConfig.openRouter), responseCache: { mode: 'off' as const } } };
     const resolved = resolveProviderForModel(
       titleModel,
@@ -353,7 +353,7 @@ export const generateBubbleSummary = async (
   deps: TitleGenerationDeps & { summaryConfig?: ConfigInterface; summaryFormat?: 'compact' },
   signal?: AbortSignal
 ): Promise<string> => {
-  const modelConfig = deps.summaryConfig ?? chat.config;
+  const modelConfig = chat.config.providerId === 'lan' ? chat.config : deps.summaryConfig ?? chat.config;
   if (isLocalModelConfig(modelConfig)) throw new Error('ローカルモデルでは要約生成を利用できません');
   const messages = sourceIndexes.map(index => chat.messages[index]).filter(isSummaryEligible);
   if (messages.length !== sourceIndexes.length) throw new Error('要約対象にできないバブルが含まれています');
@@ -452,8 +452,8 @@ export const maybeGenerateAutoTitle = async ({
 
   if (useStore.getState().countTotalTokens) {
     const titleConfig = updatedChats[latestIndex].config;
-    const titleTokenModel = deps.titleModel ?? titleConfig.model;
-    const titleTokenProviderId = deps.titleModel ? deps.titleProviderId : titleConfig.providerId;
+    const titleTokenModel = titleConfig.providerId === 'lan' ? titleConfig.model : deps.titleModel ?? titleConfig.model;
+    const titleTokenProviderId = titleConfig.providerId !== 'lan' && deps.titleModel ? deps.titleProviderId : titleConfig.providerId;
     await updateTotalTokenUsed(titleTokenModel as ModelOptions, [promptMessage], {
       role: 'assistant',
       content: [{ type: 'text', text: title }],

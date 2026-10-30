@@ -76,6 +76,10 @@ export function applyOpenRouterControls(
   endpoint: string, config: ConfigInterface, body: Record<string, unknown>, headers: Record<string, string>, context?: OpenRouterRequestContext
 ): void {
   const settings = config.openRouter;
+  if (config.providerId === 'lan') {
+    if (hardOpenRouterConstraints(settings)) throw new Error(i18next.t('model:openRouter.errors.auxiliary') as string);
+    return;
+  }
   if (!isOpenRouterEndpoint(endpoint)) {
     if (settings && config.providerId === 'openrouter') throw new Error(i18next.t('model:openRouter.errors.endpoint') as string);
     return;

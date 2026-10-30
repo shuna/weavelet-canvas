@@ -7,7 +7,7 @@ vi.mock('@components/ConfigMenu', () => ({ default: () => null }));
 vi.mock('@hooks/submitHelpers', () => ({ isLocalModelConfig: () => false }));
 it('resets dedicated summary configuration to chat settings without touching other storage', () => {
   const view = SummarySettingsFields({ config: { model: 'chat' } as any });
-  const fieldset = view.props.children[0];
+  const fieldset = view.props.children.find((child: any) => child?.type === 'fieldset');
   const reset = fieldset.props.children[0].props.children[3];
   reset.props.onClick();
   expect(state.setBubbleSummaryConfig).toHaveBeenCalledExactlyOnceWith(undefined);
@@ -17,7 +17,7 @@ it('resets dedicated summary configuration to chat settings without touching oth
 it('keeps the parameter button visible and disabled in default mode', () => {
   state.bubbleSummaryConfig = undefined;
   const view = SummarySettingsFields({ config: { model: 'chat' } as any });
-  const fields = view.props.children[0].props.children;
+  const fields = view.props.children.find((child: any) => child?.type === 'fieldset').props.children;
   expect(fields[0].props.children[1].props.children[0].props.checked).toBe(true);
   expect(fields[2].props.disabled).toBe(true);
   expect(fields[2].props.children).toBe('モデル・生成パラメータを調整');

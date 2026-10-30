@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchProviderModels } from '@api/providerModels';
 import useStore from '@store/store';
 import { ProviderConfig, ProviderId, ProviderModel } from '@type/provider';
@@ -78,7 +78,16 @@ export const useProviderModels = (providers: Record<ProviderId, ProviderConfig>)
   const cachedModels = useStore((state) => state.providerModelCache);
   const setProviderModelCache = useStore((state) => state.setProviderModelCache);
   const [models, setModels] = useState<ProviderModelMap>(() => ({ ...cachedModels }));
+  const [errors, setErrors] = useState<Partial<Record<ProviderId, string>>>({});
+  const requests = useRef(new Map<ProviderId, AbortController>());
+  useEffect(() => () => { for (const controller of requests.current.values()) controller.abort(); }, []);
   const [loading, setLoading] = useState<ProviderLoadingMap>({});
+
+  useEffect(() => {
+    requests.current.get('lan')?.abort();
+    setErrors(previous => ({ ...previous, lan: undefined }));
+    setLoading(previous => ({ ...previous, lan: false }));
+  }, [providers.lan]);
 
   // Sync local state when Zustand cache changes (e.g. cleared on endpoint/apiKey change)
   useEffect(() => {
@@ -112,6 +121,7 @@ export const useProviderModels = (providers: Record<ProviderId, ProviderConfig>)
 
   const loadModels = useCallback(
     async (providerId: ProviderId, force = false) => {
+      if (providerId === 'lan' && !force) return;
       if (!force && hasLoadedProviderModels(models, providerId)) {
         return;
       }
@@ -129,18 +139,30 @@ export const useProviderModels = (providers: Record<ProviderId, ProviderConfig>)
 
   const refreshModels = useCallback(
     async (providerId: ProviderId, providerConfig: ProviderConfig) => {
+      requests.current.get(providerId)?.abort();
+      const controller = new AbortController();
+      requests.current.set(providerId, controller);
+      const signature = JSON.stringify(providerConfig);
+      const current = () => !controller.signal.aborted && signature === JSON.stringify(useStore.getState().providers[providerId]);
       setProviderLoading(providerId, true);
+      setErrors(previous => ({ ...previous, [providerId]: undefined }));
       try {
-        const result = await fetchProviderModels(providerConfig);
-        updateModels(providerId, result);
+        const result = await fetchProviderModels(providerConfig, controller.signal);
+        if (current()) updateModels(providerId, result);
+      } catch (error) {
+        if (current()) setErrors(previous => ({ ...previous, [providerId]: error instanceof Error ? error.message : 'Model listing failed' }));
       } finally {
-        setProviderLoading(providerId, false);
+        if (requests.current.get(providerId) === controller) {
+          requests.current.delete(providerId);
+          setProviderLoading(providerId, false);
+        }
       }
     },
     []
   );
 
   return {
+    errors,
     models,
     loading,
     loadModels,

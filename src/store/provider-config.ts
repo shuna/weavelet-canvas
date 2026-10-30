@@ -1,6 +1,7 @@
 import { ProviderConfig, ProviderId } from '@type/provider';
 
 export const DEFAULT_PROVIDERS: Record<ProviderId, ProviderConfig> = {
+  lan: { id: 'lan', name: 'OpenAI互換（LAN）', endpoint: '', modelsRequireAuth: false },
   openrouter: {
     id: 'openrouter',
     name: 'OpenRouter',
@@ -74,6 +75,7 @@ export const DEFAULT_PROVIDERS: Record<ProviderId, ProviderConfig> = {
 };
 
 export const PROVIDER_ORDER: ProviderId[] = [
+  'lan',
   'openrouter',
   'openai',
   'deepseek',

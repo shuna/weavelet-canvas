@@ -170,4 +170,15 @@ describe('Service Worker stream heartbeat', () => {
     expect(controller.postMessage.mock.calls).toHaveLength(messages);
   });
 
+  it('refuses LAN streaming when the active worker cannot confirm direct-fetch support', async () => {
+    const controller = { postMessage: vi.fn() };
+    Object.defineProperty(globalThis, 'navigator', { value: { serviceWorker: { controller } }, configurable: true });
+    const { startStream } = await import('./swBridge');
+    const pending = startStream({ providerId: 'lan', requestId: 'old-worker', chatId: 'chat', nodeId: 'node', endpoint: 'http://lan/chat', headers: {}, body: {}, chatIndex: 0, messageIndex: 0, onChunk: vi.fn(), onDone: vi.fn(), onError: vi.fn() });
+    const rejected = expect(pending).rejects.toThrow('Update the Service Worker');
+    await vi.advanceTimersByTimeAsync(3001);
+    await rejected;
+    expect(controller.postMessage.mock.calls.every(call => (call[0] as { type: string }).type !== 'startStream')).toBe(true);
+  });
+
 });

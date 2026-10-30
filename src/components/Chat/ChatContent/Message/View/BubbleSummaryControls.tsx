@@ -110,7 +110,7 @@ function SummaryDialog({ messageIndex, initialSummary, initialFormat, setOpen }:
   const indices = path.map((id, index) => selected.includes(id) ? index : -1).filter(index => index >= 0);
   const continuous = indices.length > 0 && indices.length === selected.length && indices[indices.length - 1] - indices[0] + 1 === indices.length;
   const valid = continuous && indices.every(index => eligible(index) && candidate(index)) && (mode !== 'single' || indices.length === 1);
-  const generationConfig = summaryConfig ?? chat.config;
+  const generationConfig = chat.config.providerId === 'lan' ? chat.config : summaryConfig ?? chat.config;
   const local = isLocalModelConfig(generationConfig);
   const reason = local ? 'ローカルモデルでは要約生成を利用できません。' : !generationConfig.model ? '要約のモデルを選択してください。' : !selected.length ? '要約するバブルを選択してください。' : !valid ? '同じ経路の連続した通常テキストを選択してください。画像・ツール・生成中のバブルは対象外です。' : '';
   const generate = () => {

@@ -194,3 +194,39 @@ describe('asynchronous evaluation execution', () => {
     expect(fixture.getWllamaEngine).toHaveBeenLastCalledWith('generation-a');
   });
 });
+
+
+it.each(['remote', 'local', 'hybrid'])('does not send LAN safety evaluation to remote when engine is %s', async (safetyEngine) => {
+  fixture.state.localModelEnabled = false;
+  fixture.state.evaluationSettings = { ...fixture.state.evaluationSettings, safetyEngine, safetyPreSend: 'auto', qualityPreSend: 'manual' };
+  await runPreSendEvaluation(userContent, { ...context, providerId: 'lan' });
+  expect(fixture.safety).not.toHaveBeenCalled();
+  expect(fixture.state.setEvaluationResult).not.toHaveBeenCalled();
+});
+it('keeps LAN quality evaluation on the captured LAN provider', async () => {
+  fixture.state.localModelEnabled = false;
+  await runPreSendEvaluation(userContent, { ...context, providerId: 'lan' });
+  expect(fixture.quality).toHaveBeenCalledWith('question', undefined, context.endpoint, context.model, undefined, 'en', undefined, undefined, expect.any(AbortSignal), 'lan');
+});
+
+it('runs explicitly selected LAN local safety without remote fallback', async () => {
+  await useEvaluation().triggerManualSafety('question', 'chat', 'assistant', 'pre-send', { endpoint: 'http://lan/chat', providerId: 'lan' });
+  expect(fixture.safety).not.toHaveBeenCalled();
+  expect(fixture.state.setEvaluationResult).toHaveBeenCalledWith(key, expect.objectContaining({ localSafety: expect.any(Object) }));
+});
+it('does not fall back when manual LAN local preparation fails', async () => {
+  fixture.prepare.mockRejectedValueOnce(new Error('unavailable'));
+  await useEvaluation().triggerManualSafety('question', 'chat', 'assistant', 'pre-send', { endpoint: 'http://lan/chat', providerId: 'lan' });
+  expect(fixture.safety).not.toHaveBeenCalled();
+  expect(fixture.state.setEvaluationResult).not.toHaveBeenCalled();
+  expect(fixture.release).toHaveBeenCalled();
+});
+
+
+it('continues LAN quality evaluation after local safety preparation fails', async () => {
+  fixture.state.evaluationSettings = { ...fixture.state.evaluationSettings, safetyEngine: 'local', safetyPreSend: 'auto' };
+  fixture.prepare.mockRejectedValueOnce(new Error('unavailable'));
+  await runPreSendEvaluation(userContent, { ...context, providerId: 'lan' });
+  expect(fixture.safety).not.toHaveBeenCalled();
+  expect(fixture.quality).toHaveBeenCalled();
+});
