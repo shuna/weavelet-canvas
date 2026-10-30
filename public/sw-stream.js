@@ -510,6 +510,7 @@ async function handleStartStream(msg, port) {
     try {
       response = await fetch(fetchEndpoint, {
         method: 'POST', headers: fetchHeaders, body: fetchBody, signal: controller.signal,
+        ...(msg.providerId === 'lan' ? { credentials: 'omit', redirect: 'error' } : {}),
       });
     } finally {
       clearTimeout(headerTimer);
@@ -887,7 +888,9 @@ self.addEventListener('message', (event) => {
   const msg = event.data;
   if (!msg || !msg.type) return;
 
-  if (msg.type === 'startStream') {
+  if (msg.type === 'lanCapabilities') {
+    event.ports?.[0]?.postMessage({ lanDirect: true });
+  } else if (msg.type === 'startStream') {
     // Use dedicated MessagePort if provided (immune to extension interference).
     // Fall back to client.postMessage for backwards compatibility.
     const port = event.ports && event.ports[0];

@@ -84,4 +84,10 @@ const useStore = create<StoreState>()(
   )
 );
 
+useStore.subscribe((state, previous) => {
+  if (state.providers.lan !== previous.providers.lan && state.providerModelCache.lan) {
+    useStore.setState({ providerModelCache: { ...state.providerModelCache, lan: undefined } });
+  }
+});
+
 export default useStore;

@@ -1,3 +1,4 @@
+import { runLanLocalSafety } from '@hooks/useEvaluation';
 import React, { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
@@ -730,6 +731,12 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
     setSafetyRunning(true);
     setSafetyError(null);
     try {
+      if (resolvedProvider.providerId === 'lan') {
+        const localSafety = await runLanLocalSafety(textToCheck);
+        const state = useStore.getState();
+        state.setEvaluationResult(key, { ...state.evaluationResults[key], phase, localSafety, safetyContext: { ...currentContextInfo } });
+        return;
+      }
       const safety = await runSafetyCheck(textToCheck);
       const existing = useStore.getState().evaluationResults[key];
       useStore.getState().setEvaluationResult(key, {
@@ -766,7 +773,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
         ? (store.activeLocalModels['analysis'] ?? null)
         : null;
 
-      if (analysisModelId) {
+      if (analysisModelId && resolvedProvider.providerId !== 'lan') {
         // Use local analysis (evaluation) model
         localModelOwnerId = createLocalModelOwner(`modal-evaluation:${key}`);
         await prepareModelsForExecution(localModelOwnerId, [analysisModelId]);
@@ -795,7 +802,10 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
           model,
           resolvedProvider.key,
           i18next.language,
-          evaluationMode
+          evaluationMode,
+          undefined,
+          undefined,
+          resolvedProvider.providerId
         );
         const existing = store.evaluationResults[key];
         store.setEvaluationResult(key, {

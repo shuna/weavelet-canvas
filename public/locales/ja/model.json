@@ -192,5 +192,17 @@
     },
     "directCacheDisabled": "直接接続では回答キャッシュ制御ヘッダーを送れないため無効です。保存値は保持し、送信には適用しません。Proxy経由に戻すと利用できます。",
     "zdrCacheDisabled": "ZDR有効時は回答キャッシュをオフとして送信します。"
+  },
+  "lan": {
+    "endpoint": "生成API URL",
+    "modelsEndpoint": "モデル一覧URL（任意）",
+    "authentication": "認証",
+    "noAuth": "なし",
+    "invalidSettings": "URLとBearer APIキーを確認してください。2つのURLは同じoriginにしてください。",
+    "httpWarning": "通信内容とAPIキーは暗号化されません。",
+    "connectionHelp": "同じLAN、サーバー起動、URL、ブラウザのLAN許可、サーバーのCORS設定を確認してください。一覧URLが空欄ならモデルを手動登録します。",
+    "discardChanges": "未保存のLAN設定を破棄しますか？",
+    "auxiliaryPolicy": "LAN会話のタイトル・要約・品質評価には元会話のLANモデルを使用します。",
+    "safetyPolicy": "LAN会話の安全性評価は、明示選択した端末内分類器だけで行います。外部への代替送信は行いません。"
   }
 }

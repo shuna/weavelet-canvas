@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import type { CustomProviderModel, FavoriteModel, ProviderId } from '@type/provider';
@@ -34,12 +34,14 @@ export default function ProviderCustomModelList({
 
   const models = providerCustomModels[selectedProvider] || [];
 
-  const [form, setForm] = useState(emptyForm);
+  const initialForm = selectedProvider === 'lan' ? { ...emptyForm, contextLength: undefined, promptPrice: undefined, completionPrice: undefined, imagePrice: undefined } : emptyForm;
+  const [form, setForm] = useState(initialForm);
+  useEffect(() => { setForm(initialForm); setEditingId(null); setError(''); }, [selectedProvider]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   const resetForm = () => {
-    setForm(emptyForm);
+    setForm(initialForm);
     setEditingId(null);
     setError('');
   };
@@ -49,6 +51,12 @@ export default function ProviderCustomModelList({
     const id = form.modelId.trim();
     if (!id) return;
 
+    if ([form.contextLength, form.maxCompletionTokens].some(value => value !== undefined && (!Number.isInteger(value) || value <= 0)) ||
+        [form.promptPrice, form.completionPrice, form.imagePrice].some(value => value !== undefined && (!Number.isFinite(value) || value < 0)) ||
+        (form.contextLength !== undefined && form.maxCompletionTokens !== undefined && form.maxCompletionTokens > form.contextLength)) {
+      setError(t('lan.invalidLimits', 'Enter positive integer limits; output must not exceed context length. Prices must be non-negative.') as string);
+      return;
+    }
     if (editingId) {
       updateProviderCustomModel(selectedProvider, editingId, {
         ...form,
@@ -73,16 +81,7 @@ export default function ProviderCustomModelList({
   };
 
   const handleEdit = (model: CustomProviderModel) => {
-    setForm({
-      modelId: model.modelId,
-      name: model.name || '',
-      modelType: model.modelType,
-      contextLength: model.contextLength ?? 128000,
-      promptPrice: model.promptPrice ?? 0,
-      completionPrice: model.completionPrice ?? 0,
-      imagePrice: model.imagePrice ?? 0,
-      streamSupport: model.streamSupport ?? true,
-    });
+    setForm({ ...model });
     setEditingId(model.modelId);
     setError('');
   };
@@ -94,6 +93,7 @@ export default function ProviderCustomModelList({
 
   const handleToggleFavorite = (model: CustomProviderModel) => {
     onToggleFavorite({
+      ...model,
       modelId: model.modelId,
       providerId: model.providerId,
       modelType: model.modelType,
@@ -197,6 +197,7 @@ export default function ProviderCustomModelList({
             <div>
               <label className={labelClass}>{t('custom.modelType', 'Model Type')}</label>
               <select
+                disabled={selectedProvider === 'lan'}
                 value={form.modelType}
                 onChange={(e) =>
                   setForm({ ...form, modelType: e.target.value as 'text' | 'image' })
@@ -238,6 +239,14 @@ export default function ProviderCustomModelList({
                 {t('custom.reasoning', 'Reasoning')}
               </label>
             </div>
+          </div>
+
+          <div className='grid grid-cols-3 gap-2'>
+            <label className={labelClass}>{t('lan.maxOutput', 'Maximum output tokens')}
+              <input type='number' min='1' className={inputClass} value={form.maxCompletionTokens ?? ''} onChange={e => setForm({ ...form, maxCompletionTokens: e.target.value ? Number(e.target.value) : undefined })} />
+            </label>
+            <label className={labelClass}><input type='checkbox' checked={form.supportsVision ?? false} onChange={e => setForm({ ...form, supportsVision: e.target.checked })} /> {t('lan.vision', 'Image input')}</label>
+            <label className={labelClass}><input type='checkbox' checked={form.supportsAudio ?? false} onChange={e => setForm({ ...form, supportsAudio: e.target.checked })} /> {t('lan.audio', 'Audio input')}</label>
           </div>
 
           <div className='grid grid-cols-3 gap-2'>

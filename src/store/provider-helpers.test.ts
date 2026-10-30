@@ -45,6 +45,11 @@ describe('provider-helpers', () => {
     expect(normalized.openai).toEqual(DEFAULT_PROVIDERS.openai);
   });
 
+  it('preserves unknown providers for forward-compatible sync', () => {
+    const future = { id: 'future', endpoint: 'https://example.test', modelsRequireAuth: false };
+    expect(normalizeProviderConfigs({ future } as never)).toHaveProperty('future', future);
+  });
+
   it('fills in missing fields when normalizing a single provider', () => {
     expect(
       normalizeProviderConfig('openrouter', {

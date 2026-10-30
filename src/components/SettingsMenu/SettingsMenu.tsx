@@ -183,6 +183,9 @@ const SettingsDialog = ({
 }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
+  const lanDirtyRef = useRef(false);
+  const onLanDirtyChange = useCallback((dirty: boolean) => { lanDirtyRef.current = dirty; }, []);
+  const confirmLanDiscard = () => !lanDirtyRef.current || window.confirm(t('model:lan.discardChanges') as string);
   const settingsChangedRef = useRef(false);
   const initialSnapshotRef = useRef(buildSettingsDialogSnapshot());
 
@@ -211,6 +214,7 @@ const SettingsDialog = ({
       cancelButton={false}
       maxWidth='max-w-4xl'
       handleClose={handleClose}
+      beforeClose={confirmLanDiscard}
     >
       <div className='flex flex-col md:flex-row h-[calc(90vh-8rem)] md:h-[calc(80vh-8rem)] w-[90vw] max-w-4xl'>
         {/* Sidebar - desktop: vertical, mobile: horizontal scroll */}
@@ -225,7 +229,7 @@ const SettingsDialog = ({
                     ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
                     : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
                 }`}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => { if (confirmLanDiscard()) setActiveTab(tab.id); }}
               >
                 {t(tab.labelKey)}
               </button>
@@ -241,7 +245,7 @@ const SettingsDialog = ({
                     ? 'bg-gray-200 dark:bg-gray-600 text-gray-900 dark:text-white'
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-200'
                 }`}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => { if (confirmLanDiscard()) setActiveTab(tab.id); }}
               >
                 {t(tab.labelKey)}
               </button>
@@ -253,7 +257,7 @@ const SettingsDialog = ({
         <div className={`flex-1 ${activeTab === 'providers' ? 'overflow-hidden' : 'overflow-y-auto p-6'}`}>
           {activeTab === 'general' && <GeneralTab />}
           {activeTab === 'chatConfig' && <ChatConfigInline onSettingsChanged={markSettingsChanged} />}
-          {activeTab === 'providers' && <ProvidersTab onSettingsChanged={markSettingsChanged} />}
+          {activeTab === 'providers' && <ProvidersTab onSettingsChanged={markSettingsChanged} onLanDirtyChange={onLanDirtyChange} />}
           {activeTab === 'proxy' && <ProxySettingsInline />}
           {activeTab === 'prompts' && <PromptLibraryInline onSettingsChanged={markSettingsChanged} />}
           {activeTab === 'data' && <DataTab />}
@@ -446,8 +450,8 @@ const GeneralTab = () => {
   );
 };
 
-const ProvidersTab = ({ onSettingsChanged }: { onSettingsChanged?: () => void }) => {
-  return <ProviderMenuInline onSettingsChanged={onSettingsChanged} />;
+const ProvidersTab = ({ onSettingsChanged, onLanDirtyChange }: { onSettingsChanged?: () => void; onLanDirtyChange?: (dirty: boolean) => void }) => {
+  return <ProviderMenuInline onSettingsChanged={onSettingsChanged} onLanDirtyChange={onLanDirtyChange} />;
 };
 
 const DataTab = () => {

@@ -1,3 +1,5 @@
+import { validateLanProvider } from '@utils/lanProvider';
+import type { ProviderId } from '@type/provider';
 import { applyOpenRouterControls, assertAuxiliaryEndpoint, hardOpenRouterConstraints } from '@utils/openrouterControls';
 import type { OpenRouterChatSettings } from '@type/chat';
 import i18next from 'i18next';
@@ -272,7 +274,8 @@ export async function runQualityEvaluation(
   language?: string,
   evaluationMode?: QualityEvaluationMode,
   openRouter?: OpenRouterChatSettings,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  providerId?: ProviderId
 ): Promise<QualityEvaluationResult> {
   if (!model) {
     throw new Error('[EVAL_MODEL_NOT_SELECTED]');
@@ -284,14 +287,18 @@ export async function runQualityEvaluation(
   const messages = evaluationMode === 'system'
     ? buildSystemJudgeMessages(userPrompt, assistantResponse, language)
     : buildJudgeMessages(userPrompt, assistantResponse, language);
-  const chatUrl = endpoint.includes('/chat/completions')
+  if (providerId === 'lan') {
+    endpoint = validateLanProvider({ id: 'lan', name: 'LAN', endpoint, modelsRequireAuth: !!apiKey, apiKey }).endpoint;
+    if (!endpoint) throw new Error('LAN generation URL is required');
+  }
+  const chatUrl = providerId === 'lan' ? endpoint : endpoint.includes('/chat/completions')
     ? endpoint
     : deriveBaseUrl(endpoint) + '/chat/completions';
 
   assertAuxiliaryEndpoint(openRouter, chatUrl);
   // Only include response_format for providers known to support JSON mode.
   // Sending it to unsupported providers can cause 4xx errors.
-  const supportsJsonMode = /openai\.com|openrouter\.ai|together\.xyz|fireworks\.ai|groq\.com|mistral\.ai|deepinfra\.com/i.test(chatUrl);
+  const supportsJsonMode = providerId !== 'lan' && /openai\.com|openrouter\.ai|together\.xyz|fireworks\.ai|groq\.com|mistral\.ai|deepinfra\.com/i.test(chatUrl);
   const body: Record<string, unknown> = {
     model,
     messages,
@@ -302,9 +309,9 @@ export async function runQualityEvaluation(
     body.response_format = { type: 'json_object' };
   }
 
-  const proxyConfig = getProxyConfig();
-  applyOpenRouterControls(chatUrl, { model, max_tokens: 0, temperature: 0, top_p: 1, presence_penalty: 0, frequency_penalty: 0, openRouter: { routing: hardOpenRouterConstraints(openRouter), responseCache: { mode: 'off' } } }, body, headers, { auxiliary: true, viaProxy: !!proxyConfig });
-  const response = await fetchViaProxy(proxyConfig, chatUrl, headers, body, signal).catch((e) => {
+  const proxyConfig = getProxyConfig(providerId);
+  applyOpenRouterControls(chatUrl, { providerId, model, max_tokens: 0, temperature: 0, top_p: 1, presence_penalty: 0, frequency_penalty: 0, openRouter: { routing: hardOpenRouterConstraints(openRouter), responseCache: { mode: 'off' } } }, body, headers, { auxiliary: true, viaProxy: !!proxyConfig });
+  const response = await (providerId === 'lan' ? fetch(chatUrl, { method: 'POST', headers, body: JSON.stringify(body), signal, credentials: 'omit', redirect: 'error' }) : fetchViaProxy(proxyConfig, chatUrl, headers, body, signal)).catch((e) => {
     throw new Error(`[EVAL_QUALITY_CONNECTION_FAILED] url=${chatUrl} detail=${e.message}`);
   });
 

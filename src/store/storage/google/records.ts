@@ -102,7 +102,9 @@ export async function toRecords(snapshot: Snapshot): Promise<Records> {
 
   // Arrays remain atomic (activePath, order, legacy messages); object fields and nodes are independent records.
   const flatten = (value: any, path: string[]) => {
-    if (value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length) {
+    if (path.length === 3 && path[0] === 'state' && path[1] === 'providers' && path[2] === 'lan') {
+      records[JSON.stringify(path)] = canonical(value);
+    } else if (value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length) {
       for (const [key, child] of Object.entries(value)) {
         if (forbidden.has(key)) throw new Error('Unsafe sync record key.');
         flatten(child, [...path, key]);

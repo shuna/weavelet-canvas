@@ -27,6 +27,7 @@ const AutoTitleToggle = () => {
   }, [_model, _providerId]);
 
   return (<>
+    <p className='text-xs text-gray-500 dark:text-gray-400'>{t('model:lan.auxiliaryPolicy')}</p>
     <Toggle
       label={t('autoTitle') as string}
       isChecked={isChecked}

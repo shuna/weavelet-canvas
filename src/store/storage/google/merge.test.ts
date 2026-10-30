@@ -177,3 +177,18 @@ it('remaps locally generated summary references when matching branches coalesce'
   expect(result.state.chats![0].summaries![0].sources.map(source => source.parentId)).toEqual(['a', 'r']);
   expect(result.state.chats![0].summaryTargets?.r).toBe(true);
 });
+
+
+it('keeps LAN connection fields together through sync and conflicting edits', async () => {
+  const base = snapshot();
+  const lan = { id: 'lan', name: 'LAN', endpoint: 'http://old/v1/chat', modelsRequireAuth: true, apiKey: 'old-key' };
+  base.state.providers = { lan } as never;
+  const local = structuredClone(base), cloud = structuredClone(base);
+  (local.state.providers as any).lan.endpoint = 'http://local/v1/chat';
+  (cloud.state.providers as any).lan.apiKey = 'cloud-key';
+  const records = await toRecords(base);
+  expect(JSON.parse(records[JSON.stringify(['state', 'providers', 'lan'])])).toEqual(lan);
+  expect((await fromRecords(records)).state.providers).toEqual({ lan });
+  const result = await merge(base, local, cloud);
+  expect((result.state.providers as any).lan).toEqual((local.state.providers as any).lan);
+});

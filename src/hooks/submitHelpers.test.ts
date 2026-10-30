@@ -64,6 +64,7 @@ describe('submitHelpers', () => {
     );
 
     expect(resolved).toEqual({
+      providerId: 'openai',
       endpoint: 'https://api.openai.com/v1/chat/completions',
       key: 'secret',
     });
@@ -85,6 +86,7 @@ describe('submitHelpers', () => {
     );
 
     expect(resolved).toEqual({
+      providerId: 'openrouter',
       endpoint: DEFAULT_PROVIDERS.openrouter.endpoint,
       key: 'router-key',
     });
@@ -226,4 +228,12 @@ describe('submitHelpers', () => {
     expect(sanitized[1].content[0]).toMatchObject({ type: 'tool_call', id: 'tc1' });
     expect(sanitized[2].content[0]).toMatchObject({ type: 'tool_result', tool_call_id: 'tc1' });
   });
+});
+
+
+it('validates LAN resolution and removes disabled authentication', () => {
+  const providers = { ...DEFAULT_PROVIDERS, lan: { ...DEFAULT_PROVIDERS.lan, endpoint: 'http://server/custom?x=1', apiKey: 'stale' } };
+  expect(resolveProviderForModel('o1-custom', [], providers, { endpoint: 'https://fallback' }, 'lan')).toEqual({ providerId: 'lan', endpoint: 'http://server/custom?x=1', key: undefined });
+  expect(() => resolveProviderForModel('model', [], DEFAULT_PROVIDERS, { endpoint: 'https://fallback' }, 'lan')).toThrow();
+  expect(() => resolveProviderForModel('model', [], providers, { endpoint: 'https://fallback' }, 'unknown' as never)).toThrow('Unsupported provider');
 });

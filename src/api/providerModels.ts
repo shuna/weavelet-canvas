@@ -1,3 +1,4 @@
+import { validateLanProvider } from '@utils/lanProvider';
 import { ProviderConfig, ProviderId, ProviderModel } from '@type/provider';
 import { isClaudeReasoningModel } from '@utils/reasoning';
 
@@ -123,9 +124,14 @@ const normalizeModelEntry = (
   const id = toStringValue(payload.id) ?? toStringValue(payload.name);
   const name = toStringValue(payload.name) ?? toStringValue(payload.id);
 
-  if (!id || !name || !isSupportedModelId(id)) {
+  if (!id || !name || (providerId !== 'lan' && !isSupportedModelId(id))) {
     return null;
   }
+
+  if (providerId === 'lan') return {
+    id, name, providerId, modelType: 'text', streamSupport: true,
+    supportsReasoning: false, supportsVision: false, supportsAudio: false,
+  };
 
   const pricing = asProviderPricingPayload(payload.pricing);
   const promptPrice = toMillionTokenPrice(pricing.prompt);
@@ -183,8 +189,29 @@ function normalizeModels(
 }
 
 export async function fetchProviderModels(
-  provider: ProviderConfig
+  provider: ProviderConfig,
+  signal?: AbortSignal
 ): Promise<ProviderModel[]> {
+  if (provider.id === 'lan') {
+    provider = validateLanProvider(provider);
+    if (!provider.endpoint) throw new Error('LAN generation URL is required');
+    if (!provider.modelsEndpoint) return [];
+    const headers: HeadersInit = {};
+    if (provider.apiKey) headers.Authorization = `Bearer ${provider.apiKey}`;
+    let response: Response;
+    try {
+      response = await fetch(provider.modelsEndpoint, { headers, signal, credentials: 'omit', redirect: 'error' });
+    } catch { throw new Error('Check LAN access, server URL, browser permission and CORS settings'); }
+    if (response.status === 401 || response.status === 403) throw new Error('LAN authentication failed');
+    if (response.status === 404 || response.status === 405) throw new Error('LAN model listing is not supported; register models manually');
+    if (!response.ok) throw new Error(`LAN model listing failed (${response.status})`);
+    let data: unknown;
+    try { data = await response.json(); } catch { throw new Error('Invalid LAN model listing JSON'); }
+    if (!isRecord(data) || !Array.isArray(data.data) || data.data.some(entry => !isRecord(entry) || typeof entry.id !== 'string' || !entry.id.trim())) {
+      throw new Error('Invalid LAN model listing format');
+    }
+    return normalizeModels('lan', data);
+  }
   if (!provider.modelsEndpoint) {
     return [];
   }

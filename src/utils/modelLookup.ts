@@ -60,6 +60,7 @@ function findCachedModel(
   modelId: string,
   providerId?: ProviderId
 ): ProviderModel | undefined {
+  if (providerId === 'lan') return cache.lan?.find((m) => m.id === modelId);
   if (providerId && cache[providerId]) {
     return cache[providerId]!.find((m) => m.id === modelId);
   }
@@ -172,6 +173,7 @@ export function getModelContextInfo(
   const state = useStore.getState();
 
   const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+  if (providerId === 'lan' && custom && !custom.contextLength) return { contextLength: UNKNOWN_MODEL_CONTEXT_LENGTH, isFallback: true };
   if (custom?.contextLength) return { contextLength: custom.contextLength, isFallback: false };
 
   const fav = findFavorite(state.favoriteModels, modelId, providerId);
@@ -227,9 +229,10 @@ export function getModelSupportsReasoning(
 ): boolean {
   if (modelSource === 'local') return false;
   const state = useStore.getState();
-  const inferred = isReasoningModel(modelId);
+  const inferred = providerId !== 'lan' && isReasoningModel(modelId);
 
   const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+  if (providerId === 'lan' && custom) return custom.supportsReasoning ?? false;
   if (custom?.supportsReasoning != null) return custom.supportsReasoning;
 
   const fav = findFavorite(state.favoriteModels, modelId, providerId);
@@ -248,8 +251,9 @@ export function useModelSupportsReasoning(
 ): boolean {
   if (modelSource === 'local') return false;
   return useStore((state) => {
-    const inferred = isReasoningModel(modelId);
+    const inferred = providerId !== 'lan' && isReasoningModel(modelId);
     const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+    if (providerId === 'lan' && custom) return custom.supportsReasoning ?? false;
     if (custom?.supportsReasoning != null) return custom.supportsReasoning;
 
     const fav = findFavorite(state.favoriteModels, modelId, providerId);
@@ -294,6 +298,7 @@ export function isModelStreamSupported(
   const state = useStore.getState();
 
   const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+  if (providerId === 'lan' && custom) return custom.streamSupport ?? true;
   if (custom?.streamSupport != null) return custom.streamSupport;
 
   const fav = findFavorite(state.favoriteModels, modelId, providerId);
@@ -314,6 +319,7 @@ export function getModelSupportsVision(
   const state = useStore.getState();
 
   const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+  if (providerId === 'lan' && custom) return custom.supportsVision ?? false;
   if (custom?.supportsVision != null) return custom.supportsVision;
 
   const fav = findFavorite(state.favoriteModels, modelId, providerId);
@@ -322,7 +328,7 @@ export function getModelSupportsVision(
   const cached = findCachedModel(state.providerModelCache, modelId, providerId);
   if (cached?.supportsVision != null) return cached.supportsVision;
 
-  return isVisionModel(modelId);
+  return providerId !== 'lan' && isVisionModel(modelId);
 }
 
 export function getModelSupportsAudio(
@@ -334,6 +340,7 @@ export function getModelSupportsAudio(
   const state = useStore.getState();
 
   const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+  if (providerId === 'lan' && custom) return custom.supportsAudio ?? false;
   if (custom?.supportsAudio != null) return custom.supportsAudio;
 
   const fav = findFavorite(state.favoriteModels, modelId, providerId);
@@ -342,7 +349,7 @@ export function getModelSupportsAudio(
   const cached = findCachedModel(state.providerModelCache, modelId, providerId);
   if (cached?.supportsAudio != null) return cached.supportsAudio;
 
-  return isAudioModel(modelId);
+  return providerId !== 'lan' && isAudioModel(modelId);
 }
 
 export interface ModelCapabilities {
@@ -380,8 +387,12 @@ export function useModelCapabilities(
     const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
     const fav = findFavorite(state.favoriteModels, modelId, providerId);
     const cached = findCachedModel(state.providerModelCache, modelId, providerId);
-    const inferredReasoning = isReasoningModel(modelId);
+    const inferredReasoning = providerId !== 'lan' && isReasoningModel(modelId);
 
+    if (providerId === 'lan' && custom) {
+      const model = custom;
+      return { reasoning: model?.supportsReasoning ?? false, vision: model?.supportsVision ?? false, audio: model?.supportsAudio ?? false, stream: model?.streamSupport ?? true };
+    }
     const reasoning =
       custom?.supportsReasoning ?? (
         fav?.supportsReasoning != null ? fav.supportsReasoning || inferredReasoning
@@ -424,7 +435,8 @@ export function getModelDefaultMaxTokens(
 ): number {
   const context = getModelContextInfo(modelId, providerId, modelSource);
   const state = useStore.getState();
-  const outputLimit = modelSource === 'local' ? undefined : [
+  const lanCustom = providerId === 'lan' ? findProviderCustomModel(state.providerCustomModels, modelId, providerId) : undefined;
+  const outputLimit = lanCustom ? lanCustom.maxCompletionTokens : modelSource === 'local' ? undefined : [
     findProviderCustomModel(state.providerCustomModels, modelId, providerId),
     findFavorite(state.favoriteModels, modelId, providerId),
     findCachedModel(state.providerModelCache, modelId, providerId),

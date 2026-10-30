@@ -597,3 +597,26 @@ it.each([false, true])('round-trips wireDelta=%s commits and packs through fresh
   globalThis.indexedDB = readerDb;
   expect(await toRecords(await reader.pull())).toEqual(await toRecords(latest));
 }, 15000);
+
+it('restores LAN credentials, models and chat references in a fresh encrypted-sync reader', async () => {
+  const { DEFAULT_PROVIDERS } = await import('@store/provider-config');
+  const transport = new MemoryTransport(), password = 'test-only LAN sync';
+  const { session, file } = await EncryptedSync.create(transport, password);
+  const original = smallSnapshot();
+  const { _defaultChatConfig } = await import('@constants/chat');
+  original.state.chats = [{ id: 'lan-chat', title: 'LAN', titleSet: true, imageDetail: 'auto', messages: [], config: { ..._defaultChatConfig } }];
+  original.state.providers = { ...DEFAULT_PROVIDERS, lan: { ...DEFAULT_PROVIDERS.lan, endpoint: 'http://lan/chat', modelsRequireAuth: true, apiKey: 'fictional-lan-key' } };
+  original.state.providerCustomModels = { lan: [{ modelId: 'custom', providerId: 'lan', name: 'My server', modelType: 'text', supportsReasoning: false, supportsVision: true, supportsAudio: false, streamSupport: false, maxCompletionTokens: 700 }] };
+  original.state.favoriteModels = [{ ...original.state.providerCustomModels.lan![0] }];
+  for (const chat of original.state.chats ?? []) chat.config = { ...chat.config, providerId: 'lan', model: 'custom', modelSource: 'remote' };
+  original.state.providerModelCache = { lan: [{ id: 'cache-only', name: 'temporary', providerId: 'lan' }] };
+  await session.push(original, true);
+  globalThis.indexedDB = new IDBFactory();
+  const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
+  const restored = await reader.pull();
+  expect(restored.state.providers).toEqual(original.state.providers);
+  expect(restored.state.providerCustomModels).toEqual(original.state.providerCustomModels);
+  expect(restored.state.favoriteModels).toEqual(original.state.favoriteModels);
+  expect(restored.state.chats?.[0].config).toMatchObject({ providerId: 'lan', model: 'custom', modelSource: 'remote' });
+  expect(restored.state.providerModelCache).toBeUndefined();
+});

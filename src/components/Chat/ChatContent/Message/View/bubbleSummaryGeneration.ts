@@ -28,7 +28,7 @@ export async function startBubbleSummary(chat: ChatInterface, indices: number[],
   let error = '';
   let warning = '';
   try {
-    const config = deps.summaryConfig ?? chat.config;
+    const config = chat.config.providerId === 'lan' ? chat.config : deps.summaryConfig ?? chat.config;
     summary.generation = { model: config.model, providerId: config.providerId, createdAt: Date.now(), settings: { ...pickModelSettings(config), stream: false, openRouter: { routing: hardOpenRouterConstraints(config.openRouter), responseCache: { mode: 'off' } } } };
     const text = await generateBubbleSummary(chat, indices, deps);
     const latest = useStore.getState();

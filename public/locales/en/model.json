@@ -213,5 +213,17 @@
     },
     "directCacheDisabled": "Disabled for direct connections because response-cache control headers are blocked. Saved values are retained but not sent. They become available again through the Proxy.",
     "zdrCacheDisabled": "Response caching is sent as off while ZDR is enabled."
+  },
+  "lan": {
+    "endpoint": "Generation API URL",
+    "modelsEndpoint": "Model list URL (optional)",
+    "authentication": "Authentication",
+    "noAuth": "None",
+    "invalidSettings": "Check the URLs and Bearer API key. Both URLs must use the same origin.",
+    "httpWarning": "HTTP does not encrypt messages or the API key.",
+    "connectionHelp": "Check LAN access, the server URL, browser LAN permission and server CORS settings. Leave the model list URL blank for manual registration.",
+    "discardChanges": "Discard unsaved LAN settings?",
+    "auxiliaryPolicy": "LAN conversations use their own LAN model for titles, summaries and quality evaluation.",
+    "safetyPolicy": "LAN conversations use only an explicitly selected local classifier for safety evaluation, with no remote fallback."
   }
 }

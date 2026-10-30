@@ -309,6 +309,7 @@ const EvaluationSettings = () => {
 
 
       <SettingsGroup label={t('evaluation.safetyTitle')}>
+        <p className='px-4 text-xs'>{t('model:lan.safetyPolicy')}</p>
         {settingRows.slice(0, 2).map((row) => (
           <SettingsRow key={row.key} label={t(row.labelKey)}>
             <ModeSelect

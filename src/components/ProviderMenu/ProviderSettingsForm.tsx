@@ -1,9 +1,11 @@
 import React from 'react';
+import LanProviderSettings from './LanProviderSettings';
 import { useTranslation } from 'react-i18next';
 
 import { ProviderConfig, ProviderId } from '@type/provider';
 
 export default function ProviderSettingsForm({
+  onLanDirtyChange,
   selectedProvider,
   providers,
   endpointInput,
@@ -13,6 +15,7 @@ export default function ProviderSettingsForm({
   onApiVersionChange,
   onApiKeyChange,
 }: {
+  onLanDirtyChange?: (dirty: boolean) => void;
   selectedProvider: ProviderId;
   providers: Record<ProviderId, ProviderConfig>;
   endpointInput: string;
@@ -23,6 +26,8 @@ export default function ProviderSettingsForm({
   onApiKeyChange: (value: string) => void;
 }) {
   const { t } = useTranslation('model');
+
+  if (selectedProvider === 'lan') return <LanProviderSettings onDirtyChange={onLanDirtyChange} />;
 
   return (
     <div className='p-3 border-t dark:border-gray-600 flex flex-col gap-2'>

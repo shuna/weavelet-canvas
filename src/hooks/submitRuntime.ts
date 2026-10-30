@@ -779,7 +779,7 @@ export const executeSubmitStream = async ({
   sessionChunkTargets.set(sessionId, { chatId, targetNodeId });
   useStreamEndStatusStore.getState().setStatus(targetNodeId, 'streaming', chatId);
   const isStreamSupported = getEffectiveStreamEnabled(config);
-  const proxyConfig = getProxyConfig();
+  const proxyConfig = getProxyConfig(config.providerId);
   let capturedGenerationId: string | undefined;
   let lastFinishReason: string | undefined;
   let receivedStreamText = '';
@@ -980,6 +980,7 @@ export const executeSubmitStream = async ({
         }, 500);
 
         swBridge.startStream({
+          providerId: config.providerId,
           signal: abortController.signal,
           requestId,
           chatId,
