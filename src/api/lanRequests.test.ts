@@ -36,3 +36,15 @@ it('rejects invalid or unconfigured LAN generation before fetching', async () =>
   }
   expect(fetcher).not.toHaveBeenCalled();
 });
+
+
+it('ignores a separate cloud title model for LAN conversations', async () => {
+  const { generateTitleForChat } = await import('@hooks/submitHelpers');
+  const { DEFAULT_PROVIDERS } = await import('@store/provider-config');
+  const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content: 'LAN title' } }] })));
+  vi.stubGlobal('fetch', fetcher);
+  const title = await generateTitleForChat(messages, config, { titleModel: 'cloud-title', titleProviderId: 'openai', providers: { ...DEFAULT_PROVIDERS, lan: { ...DEFAULT_PROVIDERS.lan, endpoint } }, favoriteModels: [], fallbackProvider: { endpoint: 'https://cloud.test' }, t: value => value });
+  expect(title).toBe('LAN title');
+  expect(fetcher.mock.calls[0][0]).toBe(endpoint);
+  expect(JSON.parse(fetcher.mock.calls[0][1].body).model).toBe('o1-private');
+});
